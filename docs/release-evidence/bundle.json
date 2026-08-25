@@ -1,0 +1,221 @@
+{
+  "entry": "index-BMnz-MfB.js",
+  "initialAssets": [
+    "data-vendor-B1jx2o0b.js",
+    "editor-vendor-BR0T-3cW.js",
+    "index-BMnz-MfB.js",
+    "react-CRkpZXV-.js",
+    "rolldown-runtime-CMxvf4Kt.js",
+    "vendor-C2Vqi7ha.js"
+  ],
+  "initialStylesheets": [
+    "editor-vendor-DJd8uQWE.css",
+    "index-B3rdDm0X.css"
+  ],
+  "initialJavaScriptGzipBytes": 400412,
+  "initialStylesheetGzipBytes": 17604,
+  "initialRouteGzipBytes": 418016,
+  "chunks": [
+    {
+      "name": "CookingDatabase-DJCLScrQ.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 8085,
+      "gzipBytes": 2751,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "index-BMnz-MfB.js",
+        "rolldown-runtime-CMxvf4Kt.js",
+        "virtual-vendor-DOAyIwNo.js"
+      ]
+    },
+    {
+      "name": "CookingHealth-BCKt3G8N.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 2996,
+      "gzipBytes": 823,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "RecipeEditor-PYHnaMu-.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 590,
+      "gzipBytes": 353,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "RecipeView-CMzeRkv5.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 7530,
+      "gzipBytes": 2920,
+      "imports": [
+        "RecipeEditor-PYHnaMu-.js",
+        "editor-vendor-BR0T-3cW.js",
+        "editor-vendor-DJd8uQWE.css",
+        "index-BMnz-MfB.js",
+        "recipe-renderer-DeIhG8Jp.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "WeeklyOrganiserBoard-CaRo13nd.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 75081,
+      "gzipBytes": 22401,
+      "imports": [
+        "data-vendor-B1jx2o0b.js",
+        "editor-vendor-BR0T-3cW.js",
+        "index-BMnz-MfB.js",
+        "organiser-vendor-CJy8Nbvy.js",
+        "rolldown-runtime-CMxvf4Kt.js",
+        "vendor-C2Vqi7ha.js"
+      ]
+    },
+    {
+      "name": "data-vendor-B1jx2o0b.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 60575,
+      "gzipBytes": 19443,
+      "imports": [
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "editor-vendor-BR0T-3cW.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 660477,
+      "gzipBytes": 204734,
+      "imports": [
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "editor-vendor-DJd8uQWE.css",
+      "type": "stylesheet",
+      "role": "initial-preload",
+      "bytes": 45363,
+      "gzipBytes": 9508,
+      "imports": []
+    },
+    {
+      "name": "index-B3rdDm0X.css",
+      "type": "stylesheet",
+      "role": "initial-preload",
+      "bytes": 42875,
+      "gzipBytes": 8096,
+      "imports": []
+    },
+    {
+      "name": "index-BMnz-MfB.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 162035,
+      "gzipBytes": 48339,
+      "imports": [
+        "CookingDatabase-DJCLScrQ.js",
+        "CookingHealth-BCKt3G8N.js",
+        "RecipeView-CMzeRkv5.js",
+        "WeeklyOrganiserBoard-CaRo13nd.js",
+        "data-vendor-B1jx2o0b.js",
+        "editor-vendor-BR0T-3cW.js",
+        "editor-vendor-DJd8uQWE.css",
+        "organiser-vendor-CJy8Nbvy.js",
+        "react-CRkpZXV-.js",
+        "recipe-renderer-DeIhG8Jp.js",
+        "rolldown-runtime-CMxvf4Kt.js",
+        "vendor-C2Vqi7ha.js",
+        "virtual-vendor-DOAyIwNo.js"
+      ]
+    },
+    {
+      "name": "organiser-vendor-CJy8Nbvy.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 16240,
+      "gzipBytes": 5756,
+      "imports": [
+        "data-vendor-B1jx2o0b.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "process-CC_RZBmt.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 102,
+      "gzipBytes": 106,
+      "imports": []
+    },
+    {
+      "name": "react-CRkpZXV-.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 178435,
+      "gzipBytes": 55567,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "recipe-renderer-DeIhG8Jp.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 69982,
+      "gzipBytes": 22646,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "rolldown-runtime-CMxvf4Kt.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 1216,
+      "gzipBytes": 672,
+      "imports": []
+    },
+    {
+      "name": "updater-kKw8ZKQh.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 50,
+      "gzipBytes": 70,
+      "imports": []
+    },
+    {
+      "name": "vendor-C2Vqi7ha.js",
+      "type": "javascript",
+      "role": "initial-preload",
+      "bytes": 327536,
+      "gzipBytes": 71657,
+      "imports": [
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    },
+    {
+      "name": "virtual-vendor-DOAyIwNo.js",
+      "type": "javascript",
+      "role": "lazy-or-route",
+      "bytes": 15408,
+      "gzipBytes": 5356,
+      "imports": [
+        "editor-vendor-BR0T-3cW.js",
+        "rolldown-runtime-CMxvf4Kt.js"
+      ]
+    }
+  ]
+}

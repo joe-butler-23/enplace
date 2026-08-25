@@ -1,0 +1,146 @@
+{
+  "contractVersion": "2026-07-11",
+  "config": {
+    "defaultLabel": "other",
+    "labels": [
+      "fruit & veg",
+      "meat & fish",
+      "dairy",
+      "bakery",
+      "oils & condiments",
+      "spices & seasonings",
+      "tins & jars",
+      "frozen",
+      "drinks",
+      "other"
+    ],
+    "ignore": ["salt", "water"],
+    "merge": {
+      "extra virgin olive oil": "olive oil"
+    }
+  },
+  "recipes": [
+    {
+      "path": "zulu.md",
+      "title": "Zulu Recipe",
+      "ingredients": [
+        "- 1kg | plain flour | bakery",
+        "- 1 tbsp | extra virgin olive oil | oils & condiments",
+        "- 2 | onions | fruit & veg",
+        "- 1 | salt | spices & seasonings"
+      ]
+    },
+    {
+      "path": "alpha.md",
+      "title": "Alpha Recipe",
+      "ingredients": [
+        "- 500g | plain flour | bakery",
+        "- 2 tbsp | olive oil | oils & condiments",
+        "- 1 | onion | fruit & veg",
+        "- 500ml | water | other"
+      ]
+    }
+  ],
+  "typescript": {
+    "shoppingItems": [
+      {
+        "content": "plain flour - 1.5kg - [zulu recipe, alpha recipe]",
+        "labels": ["baking"],
+        "sources": ["Zulu Recipe", "Alpha Recipe"]
+      },
+      {
+        "content": "extra virgin olive oil - 15ml - [zulu recipe]",
+        "labels": ["drinks"],
+        "sources": ["Zulu Recipe"]
+      },
+      {
+        "content": "onions - 3 - [zulu recipe, alpha recipe]",
+        "labels": ["fruit-and-veg"],
+        "sources": ["Zulu Recipe", "Alpha Recipe"]
+      },
+      {
+        "content": "olive oil - 30ml - [alpha recipe]",
+        "labels": ["tinned-jarred-dried"],
+        "sources": ["Alpha Recipe"]
+      }
+    ]
+  },
+  "rust": {
+    "shoppingItems": [
+      {
+        "content": "olive oil - 3 tbsp",
+        "labels": ["oils & condiments"],
+        "sources": ["Alpha Recipe", "Zulu Recipe"]
+      },
+      {
+        "content": "onion - 1",
+        "labels": ["fruit & veg"],
+        "sources": ["Alpha Recipe"]
+      },
+      {
+        "content": "onions - 2",
+        "labels": ["fruit & veg"],
+        "sources": ["Zulu Recipe"]
+      },
+      {
+        "content": "plain flour - 500 g, 1 kg",
+        "labels": ["bakery"],
+        "sources": ["Alpha Recipe", "Zulu Recipe"]
+      }
+    ]
+  },
+  "markdown": {
+    "path": "fixtures/cooking-domain/recipe.md",
+    "ingredientLines": [
+      "- 1kg | plain flour | bakery",
+      "- 1 tbsp | extra virgin olive oil | oils & condiments",
+      "- 2 | onions | fruit & veg"
+    ]
+  },
+  "sidecar": {
+    "schema_version": "1.0.0",
+    "recipe_id": "contract-soup",
+    "markdown_path": "contract-soup.md",
+    "generated_at": "2026-07-11T00:00:00Z",
+    "sync": {
+      "renderer": "RecipeWriter",
+      "source_job": {
+        "type": "url",
+        "source": "https://example.test/contract-soup"
+      }
+    },
+    "recipe": {
+      "title": "Contract Soup",
+      "source": "https://example.test/contract-soup",
+      "cover": null,
+      "added": "2026-07-11",
+      "ingredients": [
+        {
+          "text": "1kg | plain flour | bakery",
+          "normalized_text": "plain flour",
+          "resolved_ingredient_id": null,
+          "resolved_display_name": "plain flour",
+          "resolution_status": "resolved",
+          "confidence": 1.0,
+          "review_required": false,
+          "resolution_reason": null
+        }
+      ],
+      "method": ["Mix", "Serve"],
+      "prep_time": "",
+      "cook_time": "",
+      "servings": ""
+    }
+  },
+  "tauriResolution": {
+    "raw": "1kg | plain flour | bakery",
+    "normalized": "plain flour",
+    "resolvedIngredientId": null,
+    "resolvedDisplayName": "plain flour",
+    "resolutionStatus": "resolved",
+    "confidence": 1.0,
+    "resolutionPath": "pipe",
+    "resolutionReason": null,
+    "reviewRequired": false
+  }
+}

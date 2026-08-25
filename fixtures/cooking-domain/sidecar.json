@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "recipe_id": "contract-soup",
+  "markdown_path": "contract-soup.md",
+  "generated_at": "2026-07-11T00:00:00Z",
+  "sync": {
+    "renderer": "RecipeWriter",
+    "source_job": {
+      "type": "url",
+      "source": "https://example.test/contract-soup"
+    }
+  },
+  "recipe": {
+    "title": "Contract Soup",
+    "source": "https://example.test/contract-soup",
+    "cover": null,
+    "added": "2026-07-11",
+    "ingredients": [
+      {
+        "text": "1kg | plain flour | bakery",
+        "normalized_text": "plain flour",
+        "resolved_ingredient_id": null,
+        "resolved_display_name": "plain flour",
+        "resolution_status": "resolved",
+        "confidence": 1.0,
+        "review_required": false,
+        "resolution_reason": null
+      }
+    ],
+    "method": ["Mix", "Serve"],
+    "prep_time": "",
+    "cook_time": "",
+    "servings": ""
+  }
+}
