@@ -1,4 +1,3 @@
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 export type Recipe = {
   path: string;
@@ -27,16 +26,44 @@ export type ShoppingLine = {
   heading: string | null;
 };
 
+/**
+ * Recipe frontmatter is flat: `key: value`, quoted strings, `[a, b]` lists, or `- item` block
+ * lists. That is all Enplace writes and all it reads, so a full YAML parser is not carried.
+ */
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2 && ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+    const inner = trimmed.slice(1, -1);
+    return trimmed.startsWith('"') ? inner.replace(/\\(["\\nt])/g, (_, char: string) => ({ n: "\n", t: "\t" }[char] ?? char)) : inner.replace(/''/g, "'");
+  }
+  return trimmed;
+}
+
+function parseFrontmatter(text: string): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  let listKey: string | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const item = /^\s*-\s+(.*)$/.exec(raw);
+    if (item && listKey) { (values[listKey] as string[]).push(unquote(item[1])); continue; }
+    const pair = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(raw);
+    if (!pair) continue;
+    const [, key, rest] = pair;
+    listKey = null;
+    if (rest === "") { values[key] = []; listKey = key; continue; }
+    if (rest.startsWith("[") && rest.endsWith("]")) { values[key] = rest.slice(1, -1).split(",").map(unquote).filter(Boolean); continue; }
+    values[key] = unquote(rest);
+  }
+  return values;
+}
+
 function frontmatter(raw: string): { values: Record<string, unknown>; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(raw);
   if (!match) return { values: {}, body: raw };
-  const parsed = parseYaml(match[1]) as unknown;
-  return {
-    values: parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {},
-    body: raw.slice(match[0].length),
-  };
+  return { values: parseFrontmatter(match[1]), body: raw.slice(match[0].length) };
+}
+
+function frontmatterScalar(value: string): string {
+  return /^[\w./:@%?&=+-]+$/.test(value) && !/^[-?:,\[\]{}#&*!|>'"%@`]/.test(value) ? value : JSON.stringify(value);
 }
 
 function sectionItems(body: string, name: string, numbered: boolean): string[] | null {
@@ -422,7 +449,7 @@ export function renderImportedRecipe(input: {
   const values: Record<string, string> = { title: input.title.trim() };
   if (input.source?.trim()) values.source = input.source.trim();
   if (input.cover?.trim()) values.cover = input.cover.trim();
-  const yaml = stringifyYaml(values, { lineWidth: 0 }).trimEnd();
+  const yaml = Object.entries(values).map(([key, value]) => `${key}: ${frontmatterScalar(value)}`).join("\n");
   const ingredients = input.ingredients.map((line) => `- ${line.trim()}`).join("\n");
   const method = input.method.map((line, index) => `${index + 1}. ${line.trim().replace(/^\d+[.)]\s*/, "")}`).join("\n");
   return `---\n${yaml}\n---\n\n# ${input.title.trim()}\n\n## Ingredients\n\n${ingredients}\n\n## Method\n\n${method}\n`;

@@ -1,5 +1,5 @@
 ---
-cover: images/beef-pepper-noodles.webp
+cover: /samples/beef-pepper-noodles.webp
 title: Beef and pepper noodles
 tags: [weeknight, stir-fry]
 ---

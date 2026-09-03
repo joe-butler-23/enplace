@@ -1,6 +1,4 @@
 import * as React from "react";
-import { unzipSync, zipSync } from "fflate";
-import QRCode from "qrcode";
 import { type KitchenStatus } from "@/host-client/kitchen-storage";
 import { currentKitchenConnection } from "./current";
 import {
@@ -75,7 +73,7 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
   React.useEffect(() => {
     if (!showQr || !link) return;
     let current = true;
-    void QRCode.toDataURL(link, { margin: 1, width: 180 }).then((url) => {
+    void import("qrcode").then((qr) => qr.toDataURL(link, { margin: 1, width: 180 })).then((url) => {
       if (current) setQrUrl(url);
     }).catch(() => {
       if (current) setQrUrl("");
@@ -149,7 +147,7 @@ export function KitchenPanel(): React.JSX.Element | null {
       const files = await connection.adapter.walkFiles();
       const entries: Record<string, Uint8Array> = {};
       for (const { path, file } of files) entries[path] = new Uint8Array(await file.arrayBuffer());
-      const bytes = zipSync(entries, { level: 6 });
+      const bytes = (await import("fflate")).zipSync(entries, { level: 6 });
       const url = URL.createObjectURL(new Blob([blobPart(bytes)], { type: "application/zip" }));
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -183,7 +181,7 @@ export function KitchenPanel(): React.JSX.Element | null {
           const countBeforeArchive = fileCount;
           const bytesBeforeArchive = expandedBytes;
           const bytes = new Uint8Array(await file.arrayBuffer());
-          const archive = unzipSync(bytes, { filter: (entry) => {
+          const archive = (await import("fflate")).unzipSync(bytes, { filter: (entry) => {
             if (entry.name.endsWith("/")) return false;
             accept(entry.originalSize);
             return true;

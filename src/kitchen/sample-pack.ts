@@ -18,7 +18,7 @@ function unpackSample(bytes: Uint8Array): Array<readonly [string, Uint8Array]> {
   });
 }
 
-/** Every file installed by seedSamplePack, including recipe covers. */
+/** Every file installed by seedSamplePack. Covers are URLs under public/samples, not kitchen files. */
 export const SAMPLE_PATHS = [
   "banana-oat-loaf.md",
   "beef-pepper-noodles.md",
@@ -31,17 +31,6 @@ export const SAMPLE_PATHS = [
   "smoky-lentil-soup.md",
   "spinach-feta-omelette.md",
   "white-bean-tomato-stew.md",
-  "images/banana-oat-loaf.webp",
-  "images/beef-pepper-noodles.webp",
-  "images/chicken-mushroom-risotto.webp",
-  "images/chickpea-coconut-curry.webp",
-  "images/lemon-chicken-traybake.webp",
-  "images/mustard-salmon-potatoes.webp",
-  "images/roast-vegetable-couscous-salad.webp",
-  "images/sausage-apple-bake.webp",
-  "images/smoky-lentil-soup.webp",
-  "images/spinach-feta-omelette.webp",
-  "images/white-bean-tomato-stew.webp",
 ] as const;
 
 export async function seedSamplePack(doc: Y.Doc): Promise<void> {

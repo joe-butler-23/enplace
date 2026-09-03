@@ -6,7 +6,6 @@ test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cann
 import { unzipSync } from "fflate";
 
 const SAMPLE_RECIPE_PATHS = readdirSync("sample/recipes").filter((name) => name.endsWith(".md")).sort();
-const SAMPLE_IMAGE_PATHS = readdirSync("sample/images").map((name) => `images/${name}`).sort();
 
 async function ensureServiceWorkerControl(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -90,7 +89,6 @@ test("a used kitchen remains useful and exportable after both origins disappear"
   expect(downloadPath).not.toBeNull();
   const entries = unzipSync(await readFile(downloadPath!));
   expect(Object.keys(entries).sort()).toEqual([
-    ...SAMPLE_IMAGE_PATHS,
     "Plan.md",
     ...SAMPLE_RECIPE_PATHS,
     "Shopping.md",

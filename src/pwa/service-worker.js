@@ -43,14 +43,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Assets: cache-first, and anything fetched on demand (lazy chunks, sample files) is
-  // cached for next time, so the precache can stay small.
+  // Static files: cache-first. Anything fetched on demand is cached for next time,
+  // so the precache can stay small.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(request);
     if (cached) return cached;
     const response = await fetch(request);
-    if (response.ok && url.pathname.startsWith("/assets/")) event.waitUntil(cache.put(request, response.clone()));
+    if (response.ok && /^\/(?:assets|fonts|samples)\//.test(url.pathname)) event.waitUntil(cache.put(request, response.clone()));
     return response;
   })());
 });

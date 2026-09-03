@@ -1,5 +1,5 @@
 ---
-cover: images/lemon-chicken-traybake.webp
+cover: /samples/lemon-chicken-traybake.webp
 title: Lemon chicken traybake
 tags: [weeknight, one-tray]
 ---

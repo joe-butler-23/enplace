@@ -26,20 +26,19 @@ describe("sample kitchen pack", () => {
     expect(paths).toEqual([...SAMPLE_PATHS].sort());
     expect(transactions).toEqual([[...SAMPLE_PATHS].sort()]);
     const recipes = paths.filter((entry) => entry.endsWith(".md"));
-    const covers = paths.filter((entry) => entry.startsWith("images/") && entry.endsWith(".webp"));
     expect(recipes).toHaveLength(11);
-    expect(covers).toHaveLength(11);
+    expect(paths.some((entry) => entry.startsWith("images/"))).toBe(false);
     for (const entryPath of SAMPLE_PATHS) {
-      const sourcePath = entryPath.startsWith("images/")
-        ? path.resolve("sample", entryPath)
-        : path.resolve("sample/recipes", entryPath);
-      expect(readKitchenBytes(doc, entryPath)).toEqual(new Uint8Array(await readFile(sourcePath)));
+      const bytes = readKitchenBytes(doc, entryPath);
+      expect(bytes).toEqual(new Uint8Array(await readFile(path.resolve("sample/recipes", entryPath))));
+      // Covers are stable URLs under public/samples, so the pack carries no image bytes.
+      expect(new TextDecoder().decode(bytes ?? new Uint8Array())).toMatch(/^cover: \/samples\/[a-z-]+\.webp$/m);
     }
   });
 
   it("keeps the generated pack manifest aligned with canonical sample files", async () => {
     const recipes = (await readdir(path.resolve("sample/recipes"))).sort();
-    const images = (await readdir(path.resolve("sample/images"))).sort().map((name) => `images/${name}`);
-    expect(SAMPLE_PATHS).toEqual([...recipes, ...images]);
+    expect(SAMPLE_PATHS).toEqual(recipes);
+    expect((await readdir(path.resolve("public/samples"))).sort()).toEqual(recipes.map((name) => name.replace(/\.md$/, ".webp")));
   });
 });

@@ -16,12 +16,14 @@ export function PwaLifecycle({ children }: React.PropsWithChildren): React.JSX.E
     };
     const onControllerChange = () => { if (reloadRequested.current) window.location.reload(); };
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-    void navigator.serviceWorker.register("/sw.js").then((value) => {
+    // Registering triggers the precache download; keep it off the first paint's bandwidth.
+    const idle = (window as Window & { requestIdleCallback?: (callback: () => void) => number }).requestIdleCallback ?? ((callback: () => void) => window.setTimeout(callback, 1));
+    idle(() => void navigator.serviceWorker.register("/sw.js").then((value) => {
       registration = value;
       if (value.waiting) setWaitingWorker(value.waiting);
       value.addEventListener("updatefound", watchInstallingWorker);
       watchInstallingWorker();
-    }).catch((error) => console.error("Service worker registration failed", error));
+    }).catch((error) => console.error("Service worker registration failed", error)));
     return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
   }, []);
 

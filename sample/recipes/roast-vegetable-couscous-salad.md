@@ -1,5 +1,5 @@
 ---
-cover: images/roast-vegetable-couscous-salad.webp
+cover: /samples/roast-vegetable-couscous-salad.webp
 title: Roast vegetable couscous salad
 tags: [salad, vegetarian]
 ---

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sourceDirectories = ["recipes", "images"];
+const sourceDirectories = ["recipes"];
 const entries = [];
 for (const directory of sourceDirectories) {
   const names = (await readdir(path.join(root, "sample", directory))).sort();

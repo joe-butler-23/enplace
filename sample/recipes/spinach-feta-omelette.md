@@ -1,5 +1,5 @@
 ---
-cover: images/spinach-feta-omelette.webp
+cover: /samples/spinach-feta-omelette.webp
 title: Spinach and feta omelette
 tags: [breakfast, vegetarian]
 ---

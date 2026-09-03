@@ -69,12 +69,12 @@ function useKitchenImages(): {
       resolveLinkpath: () => null,
     })
   ), [paths]);
-  const resolveCover = React.useCallback((path: string | null, source: string): string | null => (
-    path ? imageUrls.get(resolvePath(path, source) ?? "") ?? null : null
-  ), [imageUrls, resolvePath]);
   const resolveImage = React.useCallback((path: string, source: string): string | null => (
-    imageUrls.get(resolvePath(path, source) ?? "") ?? null
+    path.startsWith("/") || /^https?:/i.test(path) ? path : imageUrls.get(resolvePath(path, source) ?? "") ?? null
   ), [imageUrls, resolvePath]);
+  const resolveCover = React.useCallback((path: string | null, source: string): string | null => (
+    path ? resolveImage(path, source) : null
+  ), [resolveImage]);
   return { resolveCover, resolveImage };
 }
 
