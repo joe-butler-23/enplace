@@ -12,7 +12,11 @@ When a mirror folder is a symlink, the CLI resolves it once, logs the physical d
 
 With no relay configured, a kitchen lives only on the device that made it. The app says so in the Settings panel.
 
-## Running one
+## The hosted relay
+
+Production runs `relay/`: a Cloudflare Worker with one Durable Object per kitchen (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<kitchen-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each kitchen is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. Deploy with `npm run deploy` inside `relay/` (needs a logged-in `wrangler`); the free plan covers it.
+
+## Running one yourself
 
 The repository includes the reference y-websocket relay:
 
