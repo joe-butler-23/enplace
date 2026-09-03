@@ -9,4 +9,5 @@ if [[ ! -x "${ROOT_DIR}/scripts/lint-provider-residue.sh" ]]; then
   exit 1
 fi
 "${ROOT_DIR}/scripts/lint-provider-residue.sh"
+"${ROOT_DIR}/scripts/lint-motion.sh"
 echo "Pre-commit checks passed."

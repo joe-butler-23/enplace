@@ -7,7 +7,6 @@ import { resolveDatabaseCoverPath } from "@/modules/cooking/utils/databaseCover"
 import { DatabasePanel } from "@/views/components/DatabasePanel";
 import { buildDatabaseView, type DatabaseView } from "@/views/components/database-query";
 import { RecipeView, type RecipeViewHandle } from "@/views/components/RecipeView";
-import { startRecipeViewTransition } from "@/views/components/recipe-view-transition";
 import { ShoppingListView, type ShoppingListPlan } from "@/views/components/ShoppingListView";
 import { AppSidebar } from "./standalone/AppSidebar";
 import { DEFAULT_STANDALONE_SETTINGS, type StandaloneSettings } from "./standalone/settings";
@@ -269,7 +268,7 @@ function App(): React.JSX.Element | null {
     const file = getKitchenSnapshot().files.find((candidate) => candidate.path === path); if (!file) return;
     if (split) { await openPreview(file, true); return; }
     if (!await closePreview()) return;
-    startRecipeViewTransition(() => { setActiveFile(file); void setActiveView("recipe"); });
+    setActiveFile(file); void setActiveView("recipe");
   }, [closePreview, openPreview, setActiveView]);
   const prepareRecipe = React.useCallback((_path: string, cardUrl?: string) => {
     if (cardUrl) { const image = new Image(); image.src = cardUrl; void image.decode().catch(() => undefined); }

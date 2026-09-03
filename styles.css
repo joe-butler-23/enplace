@@ -126,7 +126,7 @@
 .kanban-container {
 /* Create separate compositor layers for columns */ display: grid !important;
 /* Avoid expensive horizontal repaints caused by forced compositor promotion */ transform: none; }
-/* Reduce paint areas during animations */
+
 .kanban-item,
 .organiser-card {
 /* Clip to bounds to reduce paint area */ overflow: hidden; }
@@ -144,7 +144,7 @@
 .kanban-board .kanban-drag:hover::-webkit-scrollbar-thumb { background-color: var(--line-strong); }
 .kanban-item.kanban-group-header { background: transparent; border: none; box-shadow: none; padding: 2px 6px; font-size: 0.65em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: default; pointer-events: none; }
 .kanban-item,
-.organiser-card { background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: grab; user-select: none; flex-shrink: 0; transition: none; contain: layout style paint; }
+.organiser-card { background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: grab; user-select: none; flex-shrink: 0; contain: layout style paint; }
 .kanban-item:active,
 .organiser-card:active { cursor: grabbing; transform: scale(0.985); }
 .kanban-item.is-drag-overlay { opacity: 1; box-shadow: none; cursor: grabbing; contain: layout style paint; }
@@ -156,7 +156,7 @@
 .gu-transit .card-cover img { visibility: hidden; }
 .organiser-card-content { padding: 6px 8px; position: relative; }
 .card-cover { margin-bottom: 6px; border-radius: 6px; overflow: hidden; aspect-ratio: 1 / 1; background-color: var(--paper); }
-.card-remove-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: var(--surface); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease; display: flex; align-items: center; justify-content: center; z-index: 5; }
+.card-remove-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: var(--surface); color: var(--muted); cursor: pointer; opacity: 0; display: flex; align-items: center; justify-content: center; z-index: 5; }
 .card-remove-btn:hover { background: var(--hover); color: var(--ink); }
 .kanban-item:hover .card-remove-btn { opacity: 1; }
 .kanban-board:not([data-id='marked']).kanban-board--multi-recipe
@@ -228,7 +228,7 @@
 .cooking-db__onboarding pre { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--hover); overflow-x: auto; }
 .cooking-db__error { color: var(--danger); background: var(--hover); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 button.organiser-column-note,
-.organiser-column-note { all: unset; margin-top: 0; font-size: 0.75em; color: var(--muted); cursor: pointer; padding: 0 !important; border-radius: 4px; transition: all 0.2s ease; line-height: 1; text-transform: none; letter-spacing: normal; border: none !important; background: transparent !important; box-shadow: none !important; appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; min-width: 0; min-height: 0; }
+.organiser-column-note { all: unset; margin-top: 0; font-size: 0.75em; color: var(--muted); cursor: pointer; padding: 0 !important; border-radius: 4px; line-height: 1; text-transform: none; letter-spacing: normal; border: none !important; background: transparent !important; box-shadow: none !important; appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; min-width: 0; min-height: 0; }
 .organiser-column-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .organiser-column-note:hover { background-color: var(--hover); color: var(--ink); }
 .organiser-column-note.has-note { color: var(--ink); background-color: var(--surface); border: 1px solid var(--line); }
@@ -237,7 +237,7 @@ button.organiser-column-note,
 .marked-col-resizer { position: absolute; left: calc(max(var(--col-min-width, 200px), (100% - 48px) / 5) - 12px); top: 0; bottom: 0; width: 24px;
 /* Generous hit target */ cursor: col-resize; z-index: 100; display: flex; justify-content: center; align-items: center; touch-action: none; }
 .marked-col-resizer::after { content: ''; width: 2px;
-/* Thin subtle line */ height: 100%; background-color: var(--accent); opacity: 0; transition: opacity 0.2s ease; }
+/* Thin subtle line */ height: 100%; background-color: var(--accent); opacity: 0; }
 .marked-col-resizer:hover::after,
 .marked-col-resizer.is-resizing::after { opacity: 1; }
 .cooking-db__paste-import { display: grid; gap: 0.75rem; margin: 1rem auto; max-width: 36rem; text-align: left; }

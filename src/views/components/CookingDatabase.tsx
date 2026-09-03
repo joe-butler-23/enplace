@@ -1,7 +1,6 @@
 import * as React from "react";
 import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import { importPastedRecipe, PasteRecipeInput } from "../../recipe-import/paste-import";
-import { recipeViewTransitionName } from "./recipe-view-transition";
 
 export type MarkedFilter = "all" | "marked" | "unmarked";
 export type ScheduledFilter = "all" | "scheduled" | "unscheduled";
@@ -120,7 +119,6 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   onPointerDownRecipe,
 }: CookingDatabaseProps): React.JSX.Element {
   const [search, setSearch] = React.useState(state.search);
-  const [transitionSourcePath, setTransitionSourcePath] = React.useState<string | null>(null);
   const [showImport, setShowImport] = React.useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("share-target"));
   const [importPending, setImportPending] = React.useState(false);
   const [coverFile, setCoverFile] = React.useState<File | null>(null);
@@ -556,12 +554,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
                 recipe={recipe}
                 coverPath={coverPath}
                 onOpenRecipe={onOpenRecipe}
-                isTransitionSource={transitionSourcePath === recipe.path}
-                onPointerDownRecipe={(path, url) => {
-                  setTransitionSourcePath(path);
-                  onPointerDownRecipe?.(path, url);
-                }}
-                onPointerLeaveRecipe={() => setTransitionSourcePath(null)}
+                onPointerDownRecipe={onPointerDownRecipe}
                 onImageSettled={index < INITIAL_CARD_PREFIX ? settlePrefixImage : undefined}
                 onToggleMarked={onToggleMarked}
               />
@@ -579,12 +572,10 @@ type RecipeCardProps = {
   onOpenRecipe: (path: string, split: boolean) => void;
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
   onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
-  onPointerLeaveRecipe: () => void;
-  isTransitionSource: boolean;
   onImageSettled?: (path: string) => void;
 };
 
-const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onPointerLeaveRecipe, isTransitionSource, onImageSettled, onToggleMarked }) => {
+const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onImageSettled, onToggleMarked }) => {
   const [toggleDisabled, setToggleDisabled] = React.useState(false);
   const [optimisticMarked, setOptimisticMarked] = React.useState(recipe.marked);
 
@@ -617,8 +608,6 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
         className="cooking-db__card-open"
         aria-label={`Open recipe ${recipe.title}`}
         onPointerDown={() => onPointerDownRecipe?.(recipe.path, coverPath ?? undefined)}
-        onPointerLeave={onPointerLeaveRecipe}
-        onPointerCancel={onPointerLeaveRecipe}
         onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
       >
         <div className={`cooking-db__cover ${coverPath ? "" : "cooking-db__cover--empty"}`}>
@@ -630,7 +619,6 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
                 decoding: "async",
                 elementtiming: recipe.path,
                 "data-path": recipe.path,
-                style: isTransitionSource ? { viewTransitionName: recipeViewTransitionName(recipe.path) } : undefined,
                 onLoad: () => onImageSettled?.(recipe.path),
                 onError: () => onImageSettled?.(recipe.path),
               } as React.ImgHTMLAttributes<HTMLImageElement>)}
@@ -675,8 +663,6 @@ function areRecipeCardsEqual(prev: RecipeCardProps, next: RecipeCardProps): bool
     prev.coverPath === next.coverPath &&
     prev.onOpenRecipe === next.onOpenRecipe &&
     prev.onPointerDownRecipe === next.onPointerDownRecipe &&
-    prev.onPointerLeaveRecipe === next.onPointerLeaveRecipe &&
-    prev.isTransitionSource === next.isTransitionSource &&
     prev.onImageSettled === next.onImageSettled &&
     prev.onToggleMarked === next.onToggleMarked
   );

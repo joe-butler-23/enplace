@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { parsePlan, parseShopping, scanRecipes, type Plan, type Recipe } from "../core";
-import { listKitchenPaths, observeKitchen, readKitchenText } from "./doc";
+import { listKitchenPaths, observeKitchen, readKitchenBytes, readKitchenText } from "./doc";
 import { currentKitchenConnection, onCurrentKitchenConnection } from "./current";
 
 export type KitchenFile = { path: string };
@@ -15,7 +15,6 @@ let bound = currentKitchenConnection();
 let unobserve: (() => void) | null = null;
 const listeners = new Set<() => void>();
 const urls = new Map<string, string>();
-const pendingUrls = new Map<string, symbol>();
 const images = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const emit = (): void => listeners.forEach((listener) => listener());
 const shoppingList = (text: string): ShoppingList => ({ items: parseShopping(text).map((item) => ({
@@ -33,29 +32,28 @@ function rebuild(changed?: ReadonlySet<string>): void {
   if (changed) for (const path of changed) {
     const url = urls.get(path);
     if (url) URL.revokeObjectURL(url);
-    urls.delete(path); pendingUrls.delete(path);
+    urls.delete(path);
   }
   for (const [path, url] of urls) if (!paths.includes(path)) { URL.revokeObjectURL(url); urls.delete(path); }
+  // Cover URLs are made here, synchronously, so the first render already has every image.
+  for (const path of paths) {
+    if (!images.test(path) || urls.has(path)) continue;
+    const bytes = readKitchenBytes(bound.doc, path);
+    if (bytes) urls.set(path, URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer])));
+  }
   snapshot = {
     recipes: scanRecipes([...texts].filter(([path]) => /\.md$/i.test(path)).map(([path, text]) => ({ path, text }))),
     plan: parsePlan(texts.get("Plan.md") ?? ""), shopping: shoppingList(texts.get("Shopping.md") ?? ""),
     files: paths.map((path) => ({ path })), texts, imageUrls: new Map(urls), revision: snapshot.revision + 1,
   };
   emit();
-  for (const path of paths.filter((path) => images.test(path) && !urls.has(path) && !pendingUrls.has(path))) {
-    const connection = bound; const token = Symbol(path); pendingUrls.set(path, token);
-    void connection.adapter.fileUrl(path).then((url) => {
-      if (bound !== connection || pendingUrls.get(path) !== token || !listKitchenPaths(connection.doc).includes(path)) { URL.revokeObjectURL(url); return; }
-      pendingUrls.delete(path); urls.set(path, url); snapshot = { ...snapshot, imageUrls: new Map(urls) }; emit();
-    }).catch(() => { if (pendingUrls.get(path) === token) pendingUrls.delete(path); });
-  }
 }
 function bind(): void {
   const next = currentKitchenConnection();
   if (next === bound && unobserve) return;
   unobserve?.();
   for (const url of urls.values()) URL.revokeObjectURL(url);
-  urls.clear(); pendingUrls.clear(); bound = next;
+  urls.clear(); bound = next;
   unobserve = bound ? observeKitchen(bound.doc, (paths) => rebuild(paths)) : null;
   rebuild();
 }

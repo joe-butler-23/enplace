@@ -13,7 +13,6 @@ import {
   stripWrappedQuotes
 } from "../utils/recipe-frontmatter";
 import type { RecipeImageResources } from "./RecipeMarkdown";
-import { recipeViewTransitionName } from "./recipe-view-transition";
 
 type RecipeViewProps = RecipeImageResources & {
   path: string;
@@ -57,7 +56,7 @@ export function recipeHeroTimingIdentifier(selectionGeneration: number, path: st
 }
 
 /** Masthead image. Kept out of the lazy markdown chunk so a warm cover paints with the first frame. */
-function RecipeHero({ url, alt, timingIdentifier, path }: { url: string; alt: string; timingIdentifier: string; path: string }): React.ReactElement {
+function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; timingIdentifier: string }): React.ReactElement {
   return (
     <div className="recipe-view__hero">
       <img
@@ -67,7 +66,6 @@ function RecipeHero({ url, alt, timingIdentifier, path }: { url: string; alt: st
           fetchPriority: "high",
           decoding: "async",
           elementtiming: timingIdentifier,
-          style: { viewTransitionName: recipeViewTransitionName(path) },
         } as React.ImgHTMLAttributes<HTMLImageElement>)}
       />
     </div>
@@ -344,7 +342,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
               {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
             </div>
           </div>
-          {hero && heroUrl && heroIdentifier ? <RecipeHero url={heroUrl} alt={hero.alt} timingIdentifier={heroIdentifier} path={path} /> : null}
+          {hero && heroUrl && heroIdentifier ? <RecipeHero url={heroUrl} alt={hero.alt} timingIdentifier={heroIdentifier} /> : null}
         </header>
 
         {isEditing ? <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div> : (
