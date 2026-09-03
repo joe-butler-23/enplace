@@ -37,6 +37,6 @@ echo "and confirm reload, offline launch, direct Markdown writes, /, and /shoppi
 echo "==> Public snapshot"
 echo "After certification, publish this commit to the public repository with:"
 echo "  scripts/publish-public.sh"
-echo "and redeploy the static site from dist-static."
+echo "and redeploy the static site with scripts/deploy-site.sh."
 
 echo "Automated preflight release checks passed; manual installed-PWA certification remains required."

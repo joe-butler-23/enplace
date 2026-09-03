@@ -4,7 +4,7 @@ A kitchen syncs between devices through a y-websocket relay: a small server that
 
 ## Configuration
 
-- Build-time default: `VITE_ENPLACE_RELAY_URL=wss://relay.example.org` in the environment when running `npm run build:static`.
+- Build-time default: `.env.static` carries the production relay URL, so `npm run build:static` always bakes it in; a `VITE_ENPLACE_RELAY_URL` in the environment overrides it, which the browser suite uses for its local relay.
 - Per-device override: Settings → Kitchen → Relay. Stored in the browser only.
 - CLI: `mep mirror --relay wss://…` or `ENPLACE_RELAY_URL`.
 
@@ -14,7 +14,7 @@ With no relay configured, a kitchen lives only on the device that made it. The a
 
 ## The hosted relay
 
-Production runs `relay/`: a Cloudflare Worker with one Durable Object per kitchen (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<kitchen-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each kitchen is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. Deploy with `npm run deploy` inside `relay/` (needs a logged-in `wrangler`); the free plan covers it.
+Production runs `relay/`: a Cloudflare Worker with one Durable Object per kitchen (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<kitchen-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each kitchen is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. Deploy the relay with `npm run deploy` inside `relay/`, and the site with `scripts/deploy-site.sh`, which builds against `.env.static` and uploads `dist-static` (both need a logged-in `wrangler`); the free plan covers it.
 
 ## Running one yourself
 
