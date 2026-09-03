@@ -5,7 +5,7 @@ import { ReadDocument } from "./RecipeMarkdown";
 import { PreparedRecipeDocument, RecipeView, StepText, parsedListsMatch } from "./RecipeView";
 
 describe("recipe read/edit boundary", () => {
-  it("hands complex GFM markdown through the maintained renderer with the shared image resource getter", () => {
+  it("renders GFM through the allowlisted renderer and resolves recipe images", () => {
     const markdown = [
       "## Ingredients",
       "",
@@ -16,16 +16,34 @@ describe("recipe read/edit boundary", () => {
       "| --- | --- |",
       "| 2 | 30m |",
       "",
-      "![Soup](images/soup.png \"hero\")"
+      "![Soup](images/soup.png \"hero\")",
+      "",
+      "[https](https://example.com) [http](http://example.com) [mail](mailto:cook@example.com)",
+      "[phone](tel:+441234) [relative](../guide.md) [unsafe](javascript:alert(1))",
+      "[data](data:text/html,unsafe) [protocol-relative](//example.com/unsafe)",
+      "",
+      "<img src=x onerror=alert(1)>"
     ].join("\n");
     const resolveImage = vi.fn(() => "blob:soup");
-    const document = ReadDocument({ markdown, path: "recipes/soup.md", resolveImage });
-    const markdownElement = (document.props.children as React.ReactElement);
-    expect(markdownElement.props.children).toBe(markdown);
-    expect(markdownElement.props.remarkPlugins).toHaveLength(1);
-    const image = markdownElement.props.components.img({ src: "images/soup.png", alt: "Soup", title: "hero" });
-    expect((image as React.ReactElement).props.src).toBe("images/soup.png");
-    expect((image as React.ReactElement).props.resolveImage("images/soup.png", "recipes/soup.md")).toBe("blob:soup");
+    const markup = renderToStaticMarkup(
+      <ReadDocument markdown={markdown} path="recipes/soup.md" resolveImage={resolveImage} />
+    );
+
+    expect(resolveImage).toHaveBeenCalledWith("images/soup.png", "recipes/soup.md");
+    expect(markup).toContain("<table>");
+    expect(markup).toContain('type="checkbox"');
+    expect(markup).toContain('src="blob:soup"');
+    expect(markup).toContain('title="hero"');
+    expect(markup).toContain('<a href="https://example.com">https</a>');
+    expect(markup).toContain('<a href="http://example.com">http</a>');
+    expect(markup).toContain('<a href="mailto:cook@example.com">mail</a>');
+    expect(markup).toContain('<a href="tel:+441234">phone</a>');
+    expect(markup).toContain('<a href="../guide.md">relative</a>');
+    expect(markup).not.toContain('href="javascript:');
+    expect(markup).not.toContain('href="data:');
+    expect(markup).not.toContain('href="//');
+    expect(markup).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(markup).not.toContain("<script");
   });
 
   it("renders a cached detail image immediately without an alt-text banner", () => {
@@ -39,6 +57,21 @@ describe("recipe read/edit boundary", () => {
 
     expect(markup).toContain('src="blob:soup"');
     expect(markup).not.toContain("<figcaption");
+  });
+
+  it("renders the existing unavailable-image fallback when resolution fails", () => {
+    const markup = renderToStaticMarkup(
+      <ReadDocument
+        markdown="![Missing image](images/missing.png)"
+        path="recipes/soup.md"
+        resolveImage={() => null}
+      />
+    );
+
+    expect(markup).toContain('class="recipe-view__image-error"');
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('aria-label="Missing image unavailable"');
+    expect(markup).toContain("Image unavailable");
   });
 
   it("renders a full recipe title once", () => {
@@ -192,7 +225,7 @@ describe("recipe read/edit boundary", () => {
     // renderToStaticMarkup is a single-shot render with no DOM and no event dispatch, so it
     // cannot itself drive a checkbox toggle and count reparses. What IS directly verifiable
     // without a renderer is the actual fix the constraint calls for: StepText is wrapped in
-    // React.memo (props-equal renders bail before react-markdown ever runs). This fails before
+    // React.memo (props-equal renders bail before the Markdown renderer ever runs). This fails before
     // the fix (StepText did not exist) and passes after.
     expect(StepText.$$typeof).toBe(Symbol.for("react.memo"));
   });
@@ -212,9 +245,9 @@ describe("recipe read/edit boundary", () => {
 
   it("memoises the notes renderer so a checkbox toggle does not reparse the notes body (defect 3)", () => {
     // Same renderer-less limitation as defect 2: no DOM means no way to toggle a checkbox and
-    // observe whether react-markdown ran again. The mechanism that prevents it is verifiable
+    // observe whether the Markdown renderer ran again. The mechanism that prevents it is verifiable
     // directly: PreparedRecipeDocument is wrapped in React.memo, so a re-render with the same
-    // markdown/path/image-resource props bails before ReadDocument (and react-markdown) runs.
+    // markdown/path/image-resource props bails before ReadDocument (and Marked) runs.
     // Fails before the fix (the component was a plain, unmemoised function).
     expect(PreparedRecipeDocument.$$typeof).toBe(Symbol.for("react.memo"));
   });

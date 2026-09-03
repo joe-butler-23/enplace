@@ -37,7 +37,28 @@ interface CookingDatabaseProps {
 
 const MIN_CARD_WIDTH_FLOOR = 160;
 const DEFAULT_CARD_MIN_WIDTH = 220;
-const INITIAL_CARD_PREFIX = 21;
+const SAMPLE_COVER_WIDTHS = [224, 672, 1288] as const;
+const CARD_COVER_SIZES = [
+  "(max-width: 516px) calc(100vw - 67px)",
+  "(max-width: 720px) calc((100vw - 81px) / 2)",
+  "(max-width: 796px) calc((100vw - 129px) / 2)",
+  "(max-width: 1028px) calc((100vw - 143px) / 3)",
+  "(max-width: 1260px) calc((100vw - 157px) / 4)",
+  "(max-width: 1492px) calc((100vw - 171px) / 5)",
+  "calc((100vw - 185px) / 6)",
+].join(", ");
+
+type ResponsiveSampleCover = { avifSrcSet: string; webpSrcSet: string };
+
+function responsiveSampleCover(url: string): ResponsiveSampleCover | null {
+  const match = /^(.*\/samples\/)([^/?#]+)\.webp([?#].*)?$/.exec(url);
+  if (!match) return null;
+  const [, directory, stem, suffix = ""] = match;
+  const srcSet = (extension: "avif" | "webp") => SAMPLE_COVER_WIDTHS
+    .map((width) => `${directory}${stem}-${width}.${extension}${suffix} ${width}w`)
+    .join(", ");
+  return { avifSrcSet: srcSet("avif"), webpSrcSet: srcSet("webp") };
+}
 
 function formatVisibleCount(recipes: RecipeIndexItem[], totalCount: number): string {
   if (recipes.length < totalCount) {
@@ -127,20 +148,10 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     const shared = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
     return { title: shared?.get("title") ?? "", source: shared?.get("url") ?? "", ingredients: shared?.get("text") ?? "", method: "", prepTime: "", cookTime: "", servings: "" };
   });
-  const [prefixSettled, setPrefixSettled] = React.useState(false);
-  const settledPrefixPaths = React.useRef(new Set<string>());
-  const renderedRecipes = (prefixSettled ? recipes : recipes.slice(0, INITIAL_CARD_PREFIX)).map((recipe) => ({
+  const renderedRecipes = recipes.map((recipe) => ({
     recipe, coverPath: resolveCover(recipe.coverPath, recipe.path)
   }));
-  const initialCovers = renderedRecipes.slice(0, INITIAL_CARD_PREFIX).filter(({ coverPath }) => Boolean(coverPath));
-  const prefixCoverCount = initialCovers.length;
-  const settlePrefixImage = (path: string) => {
-    settledPrefixPaths.current.add(path);
-    if (settledPrefixPaths.current.size === prefixCoverCount) React.startTransition(() => setPrefixSettled(true));
-  };
-  React.useEffect(() => {
-    if (!isPending && prefixCoverCount === 0) React.startTransition(() => setPrefixSettled(true));
-  }, [isPending, prefixCoverCount]);
+  const initialCovers = renderedRecipes.slice(0, 6).filter(({ coverPath }) => Boolean(coverPath));
   const submitPasteImport = async (event: React.FormEvent) => {
     event.preventDefault();
     setImportPending(true);
@@ -548,14 +559,13 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             className="cooking-db__grid"
             style={{ "--cooking-db-card-size": `${cardMinWidth}px` } as React.CSSProperties}
           >
-            {renderedRecipes.map(({ recipe, coverPath }, index) => (
+            {renderedRecipes.map(({ recipe, coverPath }) => (
               <RecipeCard
                 key={recipe.path}
                 recipe={recipe}
                 coverPath={coverPath}
                 onOpenRecipe={onOpenRecipe}
                 onPointerDownRecipe={onPointerDownRecipe}
-                onImageSettled={index < INITIAL_CARD_PREFIX ? settlePrefixImage : undefined}
                 onToggleMarked={onToggleMarked}
               />
             ))}
@@ -572,10 +582,9 @@ type RecipeCardProps = {
   onOpenRecipe: (path: string, split: boolean) => void;
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
   onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
-  onImageSettled?: (path: string) => void;
 };
 
-const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onImageSettled, onToggleMarked }) => {
+const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onToggleMarked }) => {
   const [toggleDisabled, setToggleDisabled] = React.useState(false);
   const [optimisticMarked, setOptimisticMarked] = React.useState(recipe.marked);
 
@@ -597,6 +606,21 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
     }
   };
 
+  const responsiveCover = coverPath ? responsiveSampleCover(coverPath) : null;
+  const coverImage = coverPath ? (
+    <img
+      {...({
+        src: coverPath,
+        alt: "",
+        decoding: "async",
+        srcSet: responsiveCover?.webpSrcSet,
+        sizes: responsiveCover ? CARD_COVER_SIZES : undefined,
+        elementtiming: recipe.path,
+        "data-path": recipe.path,
+      } as React.ImgHTMLAttributes<HTMLImageElement>)}
+    />
+  ) : null;
+
   return (
     <article
       className="cooking-db__card"
@@ -611,19 +635,12 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
         onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
       >
         <div className={`cooking-db__cover ${coverPath ? "" : "cooking-db__cover--empty"}`}>
-          {coverPath && (
-            <img
-              {...({
-                src: coverPath,
-                alt: "",
-                decoding: "async",
-                elementtiming: recipe.path,
-                "data-path": recipe.path,
-                onLoad: () => onImageSettled?.(recipe.path),
-                onError: () => onImageSettled?.(recipe.path),
-              } as React.ImgHTMLAttributes<HTMLImageElement>)}
-            />
-          )}
+          {responsiveCover ? (
+            <picture style={{ display: "contents" }}>
+              <source type="image/avif" srcSet={responsiveCover.avifSrcSet} sizes={CARD_COVER_SIZES} />
+              {coverImage}
+            </picture>
+          ) : coverImage}
         </div>
         <div className="cooking-db__body">
           <div
@@ -663,7 +680,6 @@ function areRecipeCardsEqual(prev: RecipeCardProps, next: RecipeCardProps): bool
     prev.coverPath === next.coverPath &&
     prev.onOpenRecipe === next.onOpenRecipe &&
     prev.onPointerDownRecipe === next.onPointerDownRecipe &&
-    prev.onImageSettled === next.onImageSettled &&
     prev.onToggleMarked === next.onToggleMarked
   );
 }

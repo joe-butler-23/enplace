@@ -4,20 +4,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecipeView } from "./RecipeView";
 
-// Swaps the real react-markdown renderer for a spy so a test can COUNT how many times the
-// underlying markdown pipeline actually runs, instead of only asserting the memo boundary
-// exists structurally. remarkPlugins/components props are accepted and ignored: this file
-// only needs to know how many times the wrapped renderer was invoked, not what it produced.
-// vi.mock calls are hoisted above the imports above by vitest's transform, so this still
-// intercepts react-markdown before RecipeMarkdown.tsx (imported transitively via RecipeView)
-// ever imports it.
+// Count actual Marked parses so the test proves the memo boundary avoids renderer work.
+// The mock delegates to Marked unchanged after recording both document and inline parses.
 const { markdownRenderSpy } = vi.hoisted(() => ({ markdownRenderSpy: vi.fn() }));
-vi.mock("react-markdown", () => ({
-  default: ({ children }: { children?: React.ReactNode }) => {
-    markdownRenderSpy(children);
-    return children;
-  }
-}));
+vi.mock("marked", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("marked")>();
+  return {
+    ...actual,
+    parse: (...args: Parameters<typeof actual.parse>) => {
+      markdownRenderSpy(args[0]);
+      return actual.parse(...args);
+    },
+    parseInline: (...args: Parameters<typeof actual.parseInline>) => {
+      markdownRenderSpy(args[0]);
+      return actual.parseInline(...args);
+    },
+  };
+});
 
 function renderInto(root: Root, element: Parameters<Root["render"]>[0]) {
   act(() => {

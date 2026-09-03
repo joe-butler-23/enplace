@@ -1,53 +1,144 @@
 import * as React from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { parse, parseInline, Renderer, type Tokens } from "marked";
+
 export type RecipeImageResources = { resolveImage: (src: string, path: string) => string | null };
 
-// Stable across renders and across the two renderers below: react-markdown builds a
-// fresh unified processor per render, so a fresh array here would defeat memoisation
-// even where a memo boundary compares props by reference.
-const remarkPlugins = [remarkGfm];
+const UNSAFE_LINK_STYLE = "color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);";
 
-function ReadImage({ src, alt, imageTitle, path, resolveImage }: RecipeImageResources & { src: string; alt?: string; imageTitle?: string; path: string }): React.ReactElement {
-  const url = resolveImage(src, path);
-  return <figure className="recipe-view__image">{url
-    ? <img src={url} alt={alt ?? ""} title={imageTitle} loading="eager" decoding="async" />
-    : <div className="recipe-view__image-error" role="img" aria-label={`${alt || "Image"} unavailable`}>Image unavailable</div>}
-  </figure>;
+const allowedAttributes: Readonly<Record<string, ReadonlySet<string>>> = {
+  a: new Set(["href", "title"]),
+  code: new Set(["class"]),
+  div: new Set(["aria-label", "class", "role"]),
+  figure: new Set(["class"]),
+  img: new Set(["alt", "decoding", "loading", "src", "title"]),
+  input: new Set(["checked", "disabled", "type"]),
+  li: new Set(["class"]),
+  ol: new Set(["start"]),
+  span: new Set(["style"]),
+  table: new Set([]),
+  td: new Set(["align"]),
+  th: new Set(["align"]),
+  thead: new Set([]),
+  tbody: new Set([]),
+  tr: new Set([]),
+  blockquote: new Set([]),
+  br: new Set([]),
+  del: new Set([]),
+  em: new Set([]),
+  h1: new Set([]),
+  h2: new Set([]),
+  h3: new Set([]),
+  h4: new Set([]),
+  h5: new Set([]),
+  h6: new Set([]),
+  hr: new Set([]),
+  p: new Set([]),
+  pre: new Set([]),
+  strong: new Set([]),
+  ul: new Set(["class"]),
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isAllowedTarget(target: string): boolean {
+  const normalized = target.trim().replace(/[\u0000-\u0020\u007f]+/g, "");
+  if (!normalized || normalized.startsWith("//") || normalized.startsWith("\\")) return false;
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(normalized)?.[1]?.toLowerCase();
+  return scheme === undefined || scheme === "http" || scheme === "https" || scheme === "mailto" || scheme === "tel";
+}
+
+function isAllowedAttribute(tag: string, name: string, value: string): boolean {
+  if (!allowedAttributes[tag]?.has(name)) return false;
+  if (name === "href") return isAllowedTarget(value);
+  if (name === "class") {
+    return /^(?:contains-task-list|task-list-item|language-[a-z0-9_-]+|recipe-view__image|recipe-view__image-error)$/i.test(value);
+  }
+  if (name === "style") return tag === "span" && value === UNSAFE_LINK_STYLE;
+  if (name === "role") return tag === "div" && value === "img";
+  if (name === "loading") return value === "eager";
+  if (name === "decoding") return value === "async";
+  if (name === "type") return tag === "input" && value === "checkbox";
+  if (name === "checked" || name === "disabled") return tag === "input" && value === "";
+  if (name === "start") return /^-?\d+$/.test(value);
+  if (name === "align") return value === "left" || value === "center" || value === "right";
+  if (name === "src") return !/^\s*(?:javascript|vbscript):/i.test(value);
+  return true;
+}
+
+/**
+ * Marked emits only the tags below, but this final pass makes that boundary explicit: any
+ * unexpected tag or attribute is discarded before React gives the string to the browser.
+ * User-authored HTML has already been escaped by the renderer's `html` hook.
+ */
+function sanitizeRenderedHtml(html: string): string {
+  return html.replace(/<(\/?)([a-z][a-z0-9-]*)([^<>]*)>/gi, (_tag, slash: string, rawName: string, rawAttributes: string) => {
+    const name = rawName.toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(allowedAttributes, name)) return "";
+    if (slash) return `</${name}>`;
+
+    const attributes: string[] = [];
+    const attributePattern = /([a-z][a-z0-9-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/gi;
+    for (const match of rawAttributes.matchAll(attributePattern)) {
+      const attributeName = match[1].toLowerCase();
+      const value = match[2] ?? match[3] ?? match[4] ?? "";
+      if (isAllowedAttribute(name, attributeName, value)) {
+        attributes.push(`${attributeName}="${value}"`);
+      }
+    }
+    return `<${name}${attributes.length ? ` ${attributes.join(" ")}` : ""}>`;
+  });
+}
+
+function rendererFor(path: string, resolveImage: RecipeImageResources["resolveImage"]): Renderer {
+  const renderer = new Renderer();
+  renderer.html = ({ text }: Tokens.HTML | Tokens.Tag) => escapeHtml(text);
+  renderer.image = ({ href, title, text }: Tokens.Image) => {
+    const url = resolveImage(href, path);
+    const alt = text || "";
+    if (!url) {
+      return `<figure class="recipe-view__image"><div class="recipe-view__image-error" role="img" aria-label="${escapeHtml(`${alt || "Image"} unavailable`)}">Image unavailable</div></figure>`;
+    }
+    const imageTitle = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<figure class="recipe-view__image"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}"${imageTitle} loading="eager" decoding="async"></figure>`;
+  };
+  renderer.link = function ({ href, title, text, tokens }: Tokens.Link) {
+    if (!isAllowedTarget(href)) {
+      // Keep the old link colour while removing all link semantics and interaction.
+      return `<span style="${UNSAFE_LINK_STYLE}">${escapeHtml(text)}</span>`;
+    }
+    const linkTitle = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<a href="${escapeHtml(href)}"${linkTitle}>${this.parser.parseInline(tokens)}</a>`;
+  };
+  return renderer;
+}
+
+function renderMarkdown(markdown: string, path = "", resolveImage: RecipeImageResources["resolveImage"] = () => null, inline = false): string {
+  const renderer = rendererFor(path, resolveImage);
+  const html = inline
+    ? parseInline(markdown, { async: false, gfm: true, renderer })
+    : parse(markdown, { async: false, gfm: true, renderer });
+  return sanitizeRenderedHtml(html);
 }
 
 export function ReadDocument({
   markdown, path, resolveImage
 }: RecipeImageResources & { markdown: string; path: string }): React.ReactElement {
-  // Not wrapped in useMemo: ReadDocument is called directly (outside a component render) by
-  // an existing test, so it must stay a hook-free plain function. The toggle-driven reparse
-  // this defect describes is instead prevented one level up, at the PreparedRecipeDocument
-  // memo boundary in RecipeView.tsx, which stops this function from being invoked at all when
-  // its props are unchanged.
   return (
-    <div className="recipe-view__read-document">
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        components={{
-          img: ({ src, alt, title }) => (
-            <ReadImage src={src ?? ""} alt={alt} imageTitle={title} path={path} resolveImage={resolveImage} />
-          )
-        }}
-      >
-        {markdown}
-      </ReactMarkdown>
-    </div>
+    <div
+      className="recipe-view__read-document"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown, path, resolveImage) }}
+    />
   );
 }
 
-/** Renders children as inline, not wrapped in `<p>` — a method step is a list row, not a block. */
-const inlineComponents: Components = { p: ({ children }) => <>{children}</> };
-
-/** A single step's markdown, rendered inline (bold/italic/links/code) with no block wrapper. */
+/** A single step's Markdown, rendered inline with no block wrapper. */
 export function ReadInline({ text }: { text: string }): React.ReactElement {
-  return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={inlineComponents}>
-      {text}
-    </ReactMarkdown>
-  );
+  return <span dangerouslySetInnerHTML={{ __html: renderMarkdown(text, "", () => null, true) }} />;
 }

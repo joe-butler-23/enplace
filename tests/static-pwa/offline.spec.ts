@@ -55,6 +55,28 @@ async function expectConnected(page: Page): Promise<void> {
   await expect(page.getByRole("dialog", { name: "Share kitchen" })).toHaveCount(0);
 }
 
+test("an offline tick survives an immediate reload after IndexedDB persists it", async ({ page, context }) => {
+  const id = await openFreshKitchen(page);
+  await openShopping(page);
+  await addShoppingItem(page, "offline parsley");
+  await ensureServiceWorkerControl(page);
+
+  await context.setOffline(true);
+  try {
+    const beforeTick = await persistedUpdateCount(page, id);
+    const item = page.getByRole("checkbox", { name: "offline parsley" });
+    await page.getByText("offline parsley", { exact: true }).click();
+    await expect(item).toBeChecked();
+    await expect.poll(() => persistedUpdateCount(page, id)).toBeGreaterThan(beforeTick);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("checkbox", { name: "offline parsley" })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "offline parsley" })).toBeChecked();
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
 test("two shoppers edit offline, reload, reconnect in either order, and retain the merge", async ({ page, context, browser }) => {
   const id = await openFreshKitchen(page);
   await openShopping(page);

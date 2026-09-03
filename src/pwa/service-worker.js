@@ -24,21 +24,13 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    // Cache-first: a warm launch must paint from the cached shell without waiting on the
-    // network. The shell is refreshed in the background; a new version activates through
-    // the normal update path.
+    // Cache-first: only an installed worker updates the shell, so HTML and its hashed
+    // assets always come from the same release.
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cached = (await cache.match("/")) || (await cache.match("/index.html"));
-      const refresh = fetch(request).then(async (response) => {
-        if (response.ok) await cache.put("/", response.clone());
-        return response;
-      });
-      if (cached) {
-        event.waitUntil(refresh.catch(() => undefined));
-        return cached;
-      }
-      try { return await refresh; } catch { return Response.error(); }
+      const cached = await cache.match("/index.html", { ignoreVary: true });
+      if (cached) return cached;
+      try { return await fetch(request); } catch { return Response.error(); }
     })());
     return;
   }
@@ -47,7 +39,7 @@ self.addEventListener("fetch", (event) => {
   // so the precache can stay small.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(request);
+    const cached = await cache.match(request, { ignoreVary: true });
     if (cached) return cached;
     const response = await fetch(request);
     if (response.ok && /^\/(?:assets|fonts|samples)\//.test(url.pathname)) event.waitUntil(cache.put(request, response.clone()));

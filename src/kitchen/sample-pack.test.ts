@@ -39,6 +39,17 @@ describe("sample kitchen pack", () => {
   it("keeps the generated pack manifest aligned with canonical sample files", async () => {
     const recipes = (await readdir(path.resolve("sample/recipes"))).sort();
     expect(SAMPLE_PATHS).toEqual(recipes);
-    expect((await readdir(path.resolve("public/samples"))).sort()).toEqual(recipes.map((name) => name.replace(/\.md$/, ".webp")));
+    const canonicalCovers = recipes.map((name) => name.replace(/\.md$/, ".webp"));
+    const expectedVariants = recipes.flatMap((name) => {
+      const stem = name.replace(/\.md$/, "");
+      return [224, 672, 1288].flatMap((width) => [
+        `${stem}-${width}.avif`,
+        `${stem}-${width}.webp`,
+      ]);
+    });
+    const covers = (await readdir(path.resolve("public/samples"))).sort();
+    expect(covers.filter((name) => /^[a-z-]+\.webp$/.test(name))).toEqual(canonicalCovers);
+    expect(covers.filter((name) => /-\d+\.(?:avif|webp)$/.test(name))).toEqual(expectedVariants.sort());
+    expect(covers).toEqual([...canonicalCovers, ...expectedVariants, "cover-manifest.json"].sort());
   });
 });

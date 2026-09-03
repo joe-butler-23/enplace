@@ -13,7 +13,11 @@
   Cache-Control: public, max-age=31536000, immutable
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+/enplace-mark.png
+  Cache-Control: public, max-age=31536000, immutable
 
 # Sample covers may be refreshed without changing their paths.
 /samples/*
   Cache-Control: public, max-age=86400
+
+# Build-time navigation Link headers are appended to dist-static/_headers by Vite.

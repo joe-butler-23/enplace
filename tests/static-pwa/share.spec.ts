@@ -64,7 +64,6 @@ test("a javascript Markdown link renders inert", async ({ page }) => {
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
   await page.getByTitle("Close settings").click();
   await page.getByText("Unsafe link", { exact: true }).click();
-  const link = page.getByRole("link", { name: "Do not run" });
-  await expect(link).toBeVisible();
-  expect((await link.getAttribute("href")) ?? "").not.toContain("javascript:");
+  await expect(page.getByText("Do not run", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Do not run" })).toHaveCount(0);
 });

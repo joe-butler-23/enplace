@@ -89,13 +89,12 @@ describe("PWA route", () => {
     }
   });
 
-  it("prefers the non-redirected cached root for offline navigation", async () => {
+  it("serves only the installed index shell for offline navigation", async () => {
     const worker = await readFile(new URL("../pwa/service-worker.js", import.meta.url), "utf8");
-    const rootFallback = worker.indexOf('cache.match("/")');
-    const indexFallback = worker.indexOf('cache.match("/index.html")');
 
-    expect(rootFallback).toBeGreaterThan(-1);
-    expect(indexFallback).toBeGreaterThan(rootFallback);
+    expect(worker).toContain('cache.match("/index.html", { ignoreVary: true })');
+    expect(worker).not.toContain('cache.match("/")');
+    expect(worker).not.toContain('cache.put("/"');
   });
 
   it("releases the compact desktop sidebar width for the mobile shopping header", async () => {

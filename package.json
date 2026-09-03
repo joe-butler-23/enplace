@@ -29,18 +29,18 @@
     "prepack": "npm run build:cli",
     "test:latency-derivation": "node --test scripts/benchmark-perceived-latency.node-test.mjs",
     "benchmark:latency": "node scripts/benchmark-perceived-latency.mjs",
-    "build:sample-pack": "node scripts/build-sample-pack.mjs"
+    "build:sample-covers": "node scripts/build-sample-covers.mjs",
+    "build:sample-pack": "npm run build:sample-covers && node scripts/build-sample-pack.mjs"
   },
   "license": "MIT",
   "dependencies": {
     "dragula": "^3.7.3",
     "fflate": "^0.8.3",
+    "marked": "^18.0.11",
     "pikaday": "^1.8.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
     "y-indexeddb": "^9.0.12",
     "y-websocket": "^3.1.0",
     "yjs": "^13.6.32"

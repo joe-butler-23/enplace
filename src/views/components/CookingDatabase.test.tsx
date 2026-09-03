@@ -88,16 +88,6 @@ describe("recipe database empty collection", () => {
   });
 });
 
-describe("database initial card commit", () => {
-  it("commits only the viewport prefix until its covers settle", () => {
-    const recipes = Array.from({ length: 30 }, (_, index) => ({
-      path: `recipes/${index}.md`, title: `Recipe ${index}`, marked: false
-    }));
-    const markup = renderDatabase({ recipes, totalCount: recipes.length });
-    expect(markup.match(/class="cooking-db__card"/g)).toHaveLength(21);
-  });
-});
-
 describe("recipe card styling", () => {
   it("resets the clickable card wrapper so it never falls back to browser button styling", () => {
     const recipe = [{ path: "recipes/test.md", title: "Test recipe", marked: false }];

@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `3d0744d3110b`, 2026-09-03.
+> Published snapshot of a private repository, refreshed at each release. Source commit `4e7b5497957d`, 2026-09-03.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">

@@ -15,6 +15,7 @@ Success means the kitchen document remains the sole authority; recipe provenance
 - **Evidence-led performance:** Set budgets and measure realistic workloads before optimizing. Fix algorithms, I/O, contention, and lifecycle design before micro-optimizing.
 - **Risk-proportionate verification:** Define success before editing. Run the cheapest sufficient checks first and escalate according to risk. Bugs require regression coverage, and completion requires evidence at the surface the user cares about.
 - **Instant, never animated:** every interaction paints its final state in the same frame. No CSS transitions or animations, no View Transitions, no loading screens, spinners, skeletons, or fades; if something is slow enough to want one, make it fast instead. `scripts/lint-motion.sh` enforces this at commit time.
+- **Fundamentals before tricks:** make the code and the bytes right first; caching, prewarming, prioritisation, and lazy loading come only after the measured floor is reached, because each of them can disguise an inefficiency elsewhere.
 - **Timing and state:** Use time to model time, not to infer state. When work involves polling, debounce, readiness, timeouts, TTLs, cooldowns, throttling, retries, scheduling, animation timing, or event delivery, load the `timer-inference` skill.
 <!-- clai:instructions:coding:end -->
 

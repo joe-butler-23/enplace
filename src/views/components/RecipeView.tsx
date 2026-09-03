@@ -51,19 +51,46 @@ export function recipeHeroTimingIdentifier(selectionGeneration: number, path: st
   return `mep:recipe-hero:${selectionGeneration}:${path}`;
 }
 
+const SAMPLE_COVER_WIDTHS = [224, 672, 1288] as const;
+const HERO_COVER_SIZES = [
+  "(max-width: 720px) calc(100vw - 64px)",
+  "(max-width: 1212px) calc((100vw - 176px) / 1.618)",
+  "640.3px",
+].join(", ");
+
+function responsiveSampleCover(url: string): { avifSrcSet: string; webpSrcSet: string } | null {
+  const match = /^(.*\/samples\/)([^/?#]+)\.webp([?#].*)?$/.exec(url);
+  if (!match) return null;
+  const [, directory, stem, suffix = ""] = match;
+  const srcSet = (extension: "avif" | "webp") => SAMPLE_COVER_WIDTHS
+    .map((width) => `${directory}${stem}-${width}.${extension}${suffix} ${width}w`)
+    .join(", ");
+  return { avifSrcSet: srcSet("avif"), webpSrcSet: srcSet("webp") };
+}
+
 /** Masthead image. Kept separate from body rendering so a warm cover paints with the first frame. */
 function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; timingIdentifier: string }): React.ReactElement {
+  const responsiveCover = responsiveSampleCover(url);
+  const image = (
+    <img
+      {...({
+        src: url,
+        alt,
+        decoding: "async",
+        srcSet: responsiveCover?.webpSrcSet,
+        sizes: responsiveCover ? HERO_COVER_SIZES : undefined,
+        elementtiming: timingIdentifier,
+      } as React.ImgHTMLAttributes<HTMLImageElement>)}
+    />
+  );
   return (
     <div className="recipe-view__hero">
-      <img
-        {...({
-          src: url,
-          alt,
-          fetchPriority: "high",
-          decoding: "async",
-          elementtiming: timingIdentifier,
-        } as React.ImgHTMLAttributes<HTMLImageElement>)}
-      />
+      {responsiveCover ? (
+        <picture style={{ display: "contents" }}>
+          <source type="image/avif" srcSet={responsiveCover.avifSrcSet} sizes={HERO_COVER_SIZES} />
+          {image}
+        </picture>
+      ) : image}
     </div>
   );
 }
@@ -72,7 +99,7 @@ type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
 /**
  * Memoised on its own props so an unrelated RecipeView re-render (a checkbox toggle) does not
- * re-invoke react-markdown, which builds a fresh unified processor and fully reparses every call.
+ * re-invoke the Markdown renderer and fully reparse the document on every call.
  */
 export const PreparedRecipeDocument = React.memo(ReadDocument);
 
