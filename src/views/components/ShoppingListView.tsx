@@ -154,35 +154,8 @@ function subscribeRelayState(listener: () => void): () => void {
 
 function useShoppingSyncMessage(): string | null {
   const relayState = React.useSyncExternalStore(subscribeRelayState, currentRelayState, () => "none");
-  const separator = relayState.lastIndexOf(":");
-  const connectionId = separator < 0 ? relayState : relayState.slice(0, separator);
-  const status = separator < 0 ? relayState : relayState.slice(separator + 1);
-  const previousConnection = React.useRef(connectionId);
-  const wasOffline = React.useRef(status === "offline");
-  const [upToDate, setUpToDate] = React.useState(false);
-
-  React.useEffect(() => {
-    if (previousConnection.current !== connectionId) {
-      previousConnection.current = connectionId;
-      wasOffline.current = status === "offline";
-      setUpToDate(false);
-      return;
-    }
-    if (status === "offline") {
-      wasOffline.current = true;
-      setUpToDate(false);
-      return;
-    }
-    if (status === "connected" && wasOffline.current) {
-      wasOffline.current = false;
-      setUpToDate(true);
-      return;
-    }
-    setUpToDate(false);
-  }, [connectionId, status]);
-
-  if (status === "offline") return "Offline. Your ticks are saved on this phone.";
-  return upToDate && status === "connected" ? "Up to date" : null;
+  const status = relayState.slice(relayState.lastIndexOf(":") + 1);
+  return status === "offline" ? "Offline. Your ticks are saved on this phone." : null;
 }
 
 export function ShoppingListView({

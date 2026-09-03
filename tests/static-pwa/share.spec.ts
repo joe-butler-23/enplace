@@ -39,33 +39,7 @@ test("share dialog states the access contract and keeps the active route", async
   await expect(dialog.getByRole("img", { name: "QR code for this kitchen link" })).toBeVisible();
 });
 
-test("resetting the link preserves every recipe under a new kitchen id", async ({ page }) => {
-  const oldId = await openFreshKitchen(page);
-  await page.getByRole("button", { name: "Share kitchen" }).click();
-  await confirmNextDialog(page);
-  await page.getByRole("button", { name: "Reset this kitchen's link" }).click();
 
-  await expect.poll(() => new URL(page.url()).hash).not.toBe(`#k=${oldId}`);
-  const newId = kitchenIdFromPage(page);
-  await expect(page.getByRole("dialog", { name: "Share kitchen" })).toBeVisible();
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-  await expect(page.getByText("Banana oat loaf", { exact: true })).toBeVisible();
-  await expect(page.getByText("White bean and tomato stew", { exact: true })).toBeVisible();
-});
-
-test("a previous kitchen is listed by recipe title and can be reopened", async ({ page }) => {
-  const oldId = await openFreshKitchen(page);
-  await openSettings(page);
-  await confirmNextDialog(page);
-  await page.getByRole("button", { name: "Start a new kitchen" }).click();
-  await expect.poll(() => new URL(page.url()).hash).toMatch(/^#k=[a-z2-7]{26}$/);
-  await expect.poll(() => new URL(page.url()).hash).not.toBe(`#k=${oldId}`);
-  kitchenIdFromPage(page);
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  await page.getByRole("button", { name: "Banana oat loaf", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`#k=${oldId}$`));
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-});
 
 test("sample removal empties the kitchen", async ({ page }) => {
   await openFreshKitchen(page);

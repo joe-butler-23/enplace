@@ -1,16 +1,15 @@
 import * as React from "react";
 import { unzipSync, zipSync } from "fflate";
 import QRCode from "qrcode";
-import { openKitchen, type KitchenConnection, type KitchenStatus } from "@/host-client/kitchen-storage";
+import { type KitchenStatus } from "@/host-client/kitchen-storage";
 import { currentKitchenConnection } from "./current";
 import {
   isKitchenId,
   kitchenIdFromUrl,
   kitchenLink,
-  newKitchenId,
   withKitchenHash,
 } from "./doc";
-import { clearCurrentKitchenId, recentKitchens, rememberKitchen, setCurrentKitchenId, type RecentKitchen } from "./registry";
+import { clearCurrentKitchenId, setCurrentKitchenId } from "./registry";
 import { SAMPLE_PATHS } from "./sample-pack";
 
 const MAX_IMPORT_FILES = 500;
@@ -23,7 +22,6 @@ function openKitchenLink(id: string): void {
 }
 
 const blobPart = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
-const decoder = new TextDecoder();
 
 function notify(message: string): void {
   window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } }));
@@ -36,27 +34,8 @@ function statusMessage(status: KitchenStatus): string {
   return "Offline. Changes will sync when the relay reconnects.";
 }
 
-function cleanTitle(value: string): string {
-  return value.trim().replace(/^(["'])(.*)\1$/, "$2");
-}
 
-async function kitchenLabel(connection: KitchenConnection): Promise<string> {
-  const files = await connection.adapter.walkFiles();
-  const recipe = files.find(({ path }) => {
-    const name = path.split("/").pop()?.toLocaleLowerCase();
-    return path.toLocaleLowerCase().endsWith(".md") && name !== "plan.md" && name !== "shopping.md";
-  });
-  if (!recipe) return "Empty kitchen";
-  const markdown = decoder.decode(await recipe.file.arrayBuffer());
-  const title = /^(?:title:\s*|#\s+)(.+)$/im.exec(markdown)?.[1];
-  return title ? cleanTitle(title) : recipe.path.split("/").pop()?.replace(/\.md$/i, "") || "Empty kitchen";
-}
 
-async function rememberCurrentKitchen(connection: KitchenConnection): Promise<string> {
-  const label = await kitchenLabel(connection);
-  rememberKitchen(connection.id, label);
-  return label;
-}
 
 async function copyLink(link: string): Promise<void> {
   try {
@@ -79,7 +58,7 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
   const [status, setStatus] = React.useState<KitchenStatus>(() => connection?.status() ?? "offline");
   const [showQr, setShowQr] = React.useState(false);
   const [qrUrl, setQrUrl] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
+  const busy = false;
   const link = connection ? kitchenLink(window.location.origin, connection.id, window.location.pathname) : "";
 
   React.useEffect(() => {
@@ -120,29 +99,6 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
     await copyLink(link);
   };
 
-  const resetLink = async (): Promise<void> => {
-    if (!window.confirm("Reset this kitchen's link? People with the old link will lose access to future changes in this kitchen.")) return;
-    setBusy(true);
-    let created: KitchenConnection | null = null;
-    try {
-      const files = await connection.adapter.walkFiles();
-      const label = await rememberCurrentKitchen(connection);
-      const id = newKitchenId();
-      created = await openKitchen({ id, relayUrl: connection.relayUrl });
-      for (const { path, file } of files) {
-        await created.adapter.writeNewBytes(path, new Uint8Array(await file.arrayBuffer()));
-      }
-      rememberKitchen(id, label);
-      setCurrentKitchenId(id);
-      sessionStorage.setItem(REOPEN_SHARE_KEY, "1");
-      await created.close();
-      openKitchenLink(id);
-    } catch (error) {
-      await created?.close();
-      notify(error instanceof Error ? error.message : "Could not reset the kitchen link.");
-      setBusy(false);
-    }
-  };
 
   return <dialog
     ref={ref}
@@ -166,12 +122,6 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
       </div>
       {showQr && qrUrl ? <img className="mep-kitchen-panel__qr" src={qrUrl} alt="QR code for this kitchen link" /> : null}
       <p className="mep-kitchen-panel__status">{statusMessage(status)}</p>
-      <div className="mep-kitchen-panel__section">
-        <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={() => void resetLink()}>
-          Reset this kitchen's link
-        </button>
-        <p className="mep-kitchen-panel__status">People with the old link will lose access to future changes in this kitchen.</p>
-      </div>
     </div>
   </dialog>;
 }
@@ -179,20 +129,15 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
 export function KitchenPanel(): React.JSX.Element | null {
   const connection = currentKitchenConnection();
   const [busy, setBusy] = React.useState(false);
-  const [recent, setRecent] = React.useState<RecentKitchen[]>([]);
   const [hasSamples, setHasSamples] = React.useState(false);
 
   React.useEffect(() => {
     if (!connection) return;
     let current = true;
-    void Promise.all([
-      rememberCurrentKitchen(connection),
-      connection.adapter.walkFiles(),
-    ]).then(([, files]) => {
+    void connection.adapter.walkFiles().then((files) => {
       if (!current) return;
       const paths = new Set(files.map(({ path }) => path));
       setHasSamples(SAMPLE_PATHS.some((path) => paths.has(path)));
-      setRecent(recentKitchens().filter((kitchen) => kitchen.id !== connection.id));
     }).catch(() => undefined);
     return () => { current = false; };
   }, [connection]);
@@ -273,10 +218,9 @@ export function KitchenPanel(): React.JSX.Element | null {
   };
 
   const startKitchen = async (): Promise<void> => {
-    if (!window.confirm("Start a new kitchen? Your current kitchen will remain available under Open another kitchen.")) return;
+    if (!window.confirm("Start a new kitchen? Keep this kitchen's link if you want to come back to it.")) return;
     setBusy(true);
     try {
-      await rememberCurrentKitchen(connection);
       clearCurrentKitchenId();
       window.location.assign(`${window.location.pathname}${window.location.search}`);
     } catch (error) {
@@ -285,8 +229,7 @@ export function KitchenPanel(): React.JSX.Element | null {
     }
   };
 
-  const openKitchenId = (id: string, label?: string): void => {
-    if (label) rememberKitchen(id, label);
+  const openKitchenId = (id: string): void => {
     setCurrentKitchenId(id);
     openKitchenLink(id);
   };
@@ -311,7 +254,6 @@ export function KitchenPanel(): React.JSX.Element | null {
       const paths = new Set((await connection.adapter.walkFiles()).map(({ path }) => path));
       for (const path of SAMPLE_PATHS) if (paths.has(path)) await connection.adapter.remove(path);
       setHasSamples(false);
-      rememberKitchen(connection.id, await kitchenLabel(connection));
       notify("Removed sample recipes.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not remove the sample recipes.");
@@ -351,16 +293,6 @@ export function KitchenPanel(): React.JSX.Element | null {
         <button className="mep-button" type="button" disabled={busy} onClick={() => void startKitchen()}>
           Start a new kitchen
         </button>
-        <h4>Open another kitchen</h4>
-        {recent.length ? <div className="mep-kitchen-panel__actions">
-          {recent.map((kitchen) => <button
-            className="mep-button mep-button--ghost"
-            type="button"
-            disabled={busy}
-            key={kitchen.id}
-            onClick={() => openKitchenId(kitchen.id, kitchen.label)}
-          >{kitchen.label}</button>)}
-        </div> : <p className="mep-kitchen-panel__status">No recent kitchens.</p>}
         <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={pasteKitchenLink}>
           Paste a link
         </button>

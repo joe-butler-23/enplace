@@ -63,18 +63,15 @@ test("shopping reports offline work and one caught-up state", async ({ page, con
   await openShopping(page);
   await addShoppingItem(page, "relay test item");
   await expect(page.getByText("Offline. Your ticks are saved on this phone.", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Up to date", { exact: true })).toHaveCount(0);
 
   await context.setOffline(true);
   await expect(page.getByText("Offline. Your ticks are saved on this phone.", { exact: true })).toBeVisible();
 
   await context.setOffline(false);
-  await expect(page.getByText("Up to date", { exact: true })).toBeVisible();
   await expect(page.getByText("Offline. Your ticks are saved on this phone.", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Recipe Database" }).click();
   await openShopping(page);
-  await expect(page.getByText("Up to date", { exact: true })).toHaveCount(0);
 });
 
 test("duplicate shopping items keep independent line identity", async ({ page }) => {

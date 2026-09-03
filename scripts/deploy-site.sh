@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 PROJECT="${ENPLACE_PAGES_PROJECT:-enplace-trial}"
 echo "==> Building dist-static with .env.static"
 npm run build:static >/dev/null
-RELAY="$(grep -o 'wss://[^"'"'"' ]*' dist-static/assets/index-*.js | head -1 || true)"
+RELAY="$(grep -o -E "wss://[^\"'\` ]+" dist-static/assets/index-*.js | head -1 || true)"
 [[ -n "$RELAY" ]] || { echo "deploy-site: the build has no relay URL; check .env.static" >&2; exit 1; }
 echo "==> Relay in build: $RELAY"
 echo "==> Deploying to Pages project $PROJECT"
