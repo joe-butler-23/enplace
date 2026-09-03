@@ -27,6 +27,14 @@ function memoryAdapter(initial: Record<string, string> = {}): VaultStorageAdapte
       files.set(path, bytes.slice());
       writes.push(path);
     },
+    async writeNewBytesBatch(entries) {
+      let imported = 0;
+      for (const [path, bytes] of entries) {
+        if (files.has(path)) continue;
+        files.set(path, bytes.slice()); writes.push(path); imported += 1;
+      }
+      return imported;
+    },
     async updateText(path, update) {
       const current = decoder.decode(files.get(path) ?? new Uint8Array());
       const next = update(current);

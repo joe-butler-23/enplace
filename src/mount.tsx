@@ -3,6 +3,8 @@ import App from "./App";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import { PwaLifecycle } from "./pwa/PwaLifecycle";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <PwaLifecycle><AppErrorBoundary><App /></AppErrorBoundary></PwaLifecycle>
-);
+export function mountApp(): void {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <PwaLifecycle><AppErrorBoundary><App /></AppErrorBoundary></PwaLifecycle>
+  );
+}

@@ -9,6 +9,7 @@ function adapterWithText(initial: string) {
     readBytes: async () => new TextEncoder().encode(text),
     writeBytes: async () => undefined,
     writeNewBytes: async () => undefined,
+    writeNewBytesBatch: async (entries) => entries.length,
     updateText: async (_path: string, update: (current: string) => string) => {
       text = update(text);
       return text;

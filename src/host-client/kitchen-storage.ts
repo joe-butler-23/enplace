@@ -71,6 +71,22 @@ export async function openKitchen(options: OpenKitchenOptions): Promise<KitchenC
       if (kitchenFiles(doc).has(path) || hasKitchenDirectory(doc, path)) throw new Error(`A file already exists at ${rawPath}.`);
       write(path, bytes);
     },
+    async writeNewBytesBatch(entries) {
+      const normalized = entries.map(([rawPath, bytes]) => {
+        const path = normalizeKitchenPath(rawPath);
+        if (!path) throw new Error("Cannot write the folder root.");
+        return [path, bytes] as const;
+      });
+      let imported = 0;
+      doc.transact(() => {
+        for (const [path, bytes] of normalized) {
+          if (kitchenFiles(doc).has(path) || hasKitchenDirectory(doc, path)) continue;
+          write(path, bytes);
+          imported += 1;
+        }
+      }, LOCAL_ORIGIN);
+      return imported;
+    },
     async remove(path, recursive = false) { deleteKitchenPath(doc, path, recursive, LOCAL_ORIGIN); },
     async pathExists(rawPath) {
       const path = normalizeKitchenPath(rawPath);

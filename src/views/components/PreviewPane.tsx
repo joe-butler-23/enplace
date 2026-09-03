@@ -10,13 +10,13 @@ class PreviewErrorBoundary extends React.Component<{ fallback: React.ReactNode; 
 }
 const basename = (path: string): string => path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
 export type PreviewPaneProps = {
-  path: string | null; content: string; isRecipe: boolean; width: number; revision: number;
+  path: string | null; content: string; isRecipe: boolean; width: number;
   recipeRef: React.RefObject<RecipeViewHandle | null>;
   onClose: () => void; onWidth: (width: number) => void;
   onSave: (baseContent: string, nextContent: string) => Promise<MergeResult>; resolveImage: (path: string, source: string) => string | null;
 };
 export function PreviewPane(props: PreviewPaneProps): React.JSX.Element {
-  const { path, content, isRecipe, width, revision, recipeRef, onClose, onWidth, onSave, resolveImage } = props;
+  const { path, content, isRecipe, width, recipeRef, onClose, onWidth, onSave, resolveImage } = props;
   const drag = React.useRef<{ x: number; width: number } | null>(null);
   React.useEffect(() => {
     const move = (event: MouseEvent) => { if (drag.current) onWidth(Math.max(320, Math.min(760, drag.current.width + drag.current.x - event.clientX))); };
@@ -31,7 +31,7 @@ export function PreviewPane(props: PreviewPaneProps): React.JSX.Element {
       onKeyDown={(event) => { const delta = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0; if (delta) { event.preventDefault(); onWidth(Math.max(320, Math.min(760, width + delta))); } }} />
     <div className="mep-preview__header-row"><button type="button" className="mep-preview__close" onClick={onClose}>x</button></div>
     {!path ? <div className="mep-preview__empty">Open a card to see the note.</div> : content === "Failed to load file." ? <div className="mep-preview__empty">Failed to load file.</div> : !isRecipe ? raw :
-      <PreviewErrorBoundary key={`${path}:${revision}`} fallback={<div className="mep-preview__content"><div className="mep-preview__empty">Could not render this note preview. Showing raw markdown.</div>{raw}</div>}>
+      <PreviewErrorBoundary key={`${path}:${content}`} fallback={<div className="mep-preview__content"><div className="mep-preview__empty">Could not render this note preview. Showing raw markdown.</div>{raw}</div>}>
         <div className="mep-preview__content"><RecipeView key={path} ref={recipeRef} path={path} title={basename(path)} content={content} mode="rendered" onSave={onSave} resolveImage={resolveImage} /></div>
       </PreviewErrorBoundary>}
   </aside>;

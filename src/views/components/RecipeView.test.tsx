@@ -1,9 +1,8 @@
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { RecipeEditor } from "./RecipeEditor";
 import { ReadDocument } from "./RecipeMarkdown";
-import { PreparedRecipeDocument, RecipeView, StepText, parsedListsMatch, prepareRecipeMarkdown } from "./RecipeView";
+import { PreparedRecipeDocument, RecipeView, StepText, parsedListsMatch } from "./RecipeView";
 
 describe("recipe read/edit boundary", () => {
   it("hands complex GFM markdown through the maintained renderer with the shared image resource getter", () => {
@@ -166,31 +165,7 @@ describe("recipe read/edit boundary", () => {
     expect(markup).not.toContain("recipe-view__hero");
   });
 
-  it("passes editor changes back as raw local image targets", () => {
-    const onChange = vi.fn();
-    const onClose = vi.fn();
-    const editor = RecipeEditor({
-      path: "recipes/soup.md",
-      markdown: "![Soup](images/soup.png)",
-      onChange,
-      onClose
-    });
-    const [actions, mdxEditor] = editor.props.children as React.ReactElement[];
-    expect(mdxEditor.type).toBeDefined();
-    expect(mdxEditor.props.className).toBe("recipe-view__mdx-editor");
-    expect(mdxEditor.props.markdown).toBe("![Soup](images/soup.png)");
-    expect(mdxEditor.props.plugins).toHaveLength(9);
-
-    const doneButton = actions.props.children as React.ReactElement;
-    doneButton.props.onClick();
-    expect(onClose).toHaveBeenCalledOnce();
-
-    mdxEditor.props.onChange("![Soup](images/soup.png)");
-    expect(onChange).toHaveBeenCalledWith("![Soup](images/soup.png)");
-  });
-
-  it("renders inline markdown within a method step instead of literal syntax (defect 1)", async () => {
-    await prepareRecipeMarkdown();
+  it("renders inline markdown within a method step instead of literal syntax (defect 1)", () => {
     const markup = renderToStaticMarkup(
       <RecipeView
         path="recipes/soup.md"

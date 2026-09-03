@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { WebSocket } from "ws";
 import { startRelay } from "../../scripts/kitchen-relay.mjs";
 import { openKitchen, type KitchenConnection, type KitchenStatus } from "./kitchen-storage";
-import { readKitchenText, writeKitchenText, newKitchenId } from "../kitchen/doc";
+import { observeKitchen, readKitchenBytes, readKitchenText, writeKitchenText, newKitchenId } from "../kitchen/doc";
 
 const WebSocketPolyfill = WebSocket as unknown as typeof globalThis.WebSocket;
 
@@ -80,6 +80,36 @@ describe("kitchen storage adapter", () => {
     await expect(adapter.remove("recipes")).rejects.toThrow("Directory is not empty: recipes");
     await adapter.remove("recipes", true);
     await expect(adapter.pathExists("recipes/a.md")).resolves.toBe(false);
+  });
+
+  it("writes a multi-file import in one transaction and skips existing paths", async () => {
+    const connection = await open();
+    await connection.adapter.writeBytes("recipes/existing.md", new TextEncoder().encode("# Existing"));
+    const changes: string[][] = [];
+    const stop = observeKitchen(connection.doc, (paths) => changes.push([...paths].sort()));
+
+    const imported = await connection.adapter.writeNewBytesBatch([
+      ["recipes/existing.md", new TextEncoder().encode("overwrite")],
+      ["recipes/a.md", new TextEncoder().encode("# A")],
+      ["images/a.webp", new Uint8Array([1, 2, 3])],
+      ["recipes/a.md", new TextEncoder().encode("duplicate")],
+    ]);
+    stop();
+
+    expect(imported).toBe(2);
+    expect(changes).toEqual([["images/a.webp", "recipes/a.md"]]);
+    expect(readKitchenText(connection.doc, "recipes/existing.md")).toBe("# Existing");
+    expect(readKitchenText(connection.doc, "recipes/a.md")).toBe("# A");
+    expect(readKitchenBytes(connection.doc, "images/a.webp")).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("rejects an invalid batch before writing any entry", async () => {
+    const connection = await open();
+    await expect(connection.adapter.writeNewBytesBatch([
+      ["recipes/a.md", new TextEncoder().encode("# A")],
+      ["../escape.md", new TextEncoder().encode("escape")],
+    ])).rejects.toThrow("Invalid folder path");
+    await expect(connection.adapter.pathExists("recipes/a.md")).resolves.toBe(false);
   });
 
   it("creates file URLs without adapter-level cache state", async () => {

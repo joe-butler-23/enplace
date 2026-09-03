@@ -1,5 +1,4 @@
-import "@fontsource-variable/fraunces/opsz.css";
-import "@fontsource-variable/space-grotesk";
+import "./fonts.css";
 import "../styles.css";
 import "./standalone.css";
 import { useVaultStorage } from "./host-client/browser-storage";
@@ -114,9 +113,8 @@ async function openSharedKitchen(): Promise<boolean> {
 async function start(): Promise<void> {
   // Ask the browser to keep this site's storage; no prompt, no setting, just less eviction risk.
   if (navigator.storage?.persist) void navigator.storage.persist();
-  if (!await openSharedKitchen()) return;
-  await import("./standalone/direct-database-bootstrap");
-  await import("./mount");
+  const [{ mountApp }, opened] = await Promise.all([import("./mount"), openSharedKitchen()]);
+  if (opened) mountApp();
 }
 
 function showStartupFailure(reason: unknown): void {

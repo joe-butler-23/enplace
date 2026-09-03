@@ -3,6 +3,7 @@ export type VaultStorageAdapter = {
   readBytes(path: string): Promise<Uint8Array>;
   writeBytes(path: string, bytes: Uint8Array): Promise<void>;
   writeNewBytes(path: string, bytes: Uint8Array): Promise<void>;
+  writeNewBytesBatch(entries: ReadonlyArray<readonly [path: string, bytes: Uint8Array]>): Promise<number>;
   updateText(path: string, update: (current: string) => string): Promise<string>;
   remove(path: string, recursive?: boolean): Promise<void>;
   pathExists(path: string): Promise<boolean>;

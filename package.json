@@ -8,8 +8,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --mode static",
-    "build:static": "vite build --mode static",
+    "build": "npm run build:sample-pack && vite build --mode static",
+    "build:static": "npm run build:sample-pack && vite build --mode static",
     "build:cli": "tsc -p tsconfig.cli.json",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "relay": "node scripts/kitchen-relay.mjs",
@@ -28,13 +28,13 @@
     "test:watch": "vitest watch",
     "prepack": "npm run build:cli",
     "test:latency-derivation": "node --test scripts/benchmark-perceived-latency.node-test.mjs",
-    "benchmark:latency": "node scripts/benchmark-perceived-latency.mjs"
+    "benchmark:latency": "node scripts/benchmark-perceived-latency.mjs",
+    "build:sample-pack": "node scripts/build-sample-pack.mjs"
   },
   "license": "MIT",
   "dependencies": {
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/space-grotesk": "^5.3.0",
-    "@mdxeditor/editor": "^4.2.3",
     "dragula": "^3.7.3",
     "fflate": "^0.8.3",
     "pikaday": "^1.8.2",

@@ -32,6 +32,11 @@ function textAdapter(): VaultStorageAdapter {
     },
     async writeBytes(path, bytes) { files.set(path, bytes); },
     async writeNewBytes(path, bytes) { files.set(path, bytes); },
+    async writeNewBytesBatch(entries) {
+      let imported = 0;
+      for (const [path, bytes] of entries) if (!files.has(path)) { files.set(path, bytes); imported += 1; }
+      return imported;
+    },
     async updateText(path, update) {
       const next = update(decoder.decode(files.get(path) ?? new Uint8Array()));
       files.set(path, encoder.encode(next));

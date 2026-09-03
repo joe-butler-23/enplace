@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RecipeView, prepareRecipeMarkdown } from "./RecipeView";
+import { RecipeView } from "./RecipeView";
 
 // Swaps the real react-markdown renderer for a spy so a test can COUNT how many times the
 // underlying markdown pipeline actually runs, instead of only asserting the memo boundary
@@ -29,8 +29,7 @@ describe("RecipeView interactive behaviour (bd mise-en-place-fuy)", () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(async () => {
-    await prepareRecipeMarkdown();
+  beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -118,6 +117,19 @@ describe("RecipeView interactive behaviour (bd mise-en-place-fuy)", () => {
 
     expect(ingredientCheckbox().checked).toBe(false);
     expect(stepToggle().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens the plain-text editor immediately and keeps raw Markdown", () => {
+    const content = "# Soup\n\n![Soup](images/soup.png)\n";
+    renderInto(root, <RecipeView path="recipes/soup.md" title="Soup" mode="full" content={content} onSave={vi.fn()} resolveImage={() => "blob:soup"} />);
+
+    act(() => {
+      container.querySelector<HTMLButtonElement>("button.recipe-view__edit-action")!.click();
+    });
+
+    const editor = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Recipe markdown"]');
+    expect(editor).not.toBeNull();
+    expect(editor!.value).toContain("![Soup](images/soup.png)");
   });
 
   it("confirms before deleting a recipe", async () => {

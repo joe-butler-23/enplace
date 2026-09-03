@@ -46,23 +46,15 @@ async function openEditor(page: Page): Promise<Locator> {
   await page.getByRole("button", { name: "Open recipe Merge Soup" }).dispatchEvent("click");
   await expect(page.getByRole("heading", { name: "Merge Soup" })).toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).dispatchEvent("click");
-  const editor = page.getByRole("textbox").first();
+  const editor = page.getByRole("textbox", { name: /Recipe markdown/ });
   await expect(editor).toBeVisible();
   return editor;
 }
 
-async function replaceParagraph(page: Page, editor: Locator, from: string, to: string | null): Promise<void> {
-  const paragraph = editor.getByText(from, { exact: true });
-  await expect(paragraph).toBeVisible();
-  await paragraph.evaluate((node) => {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  });
-  if (to === null) await page.keyboard.press("Backspace");
-  else await page.keyboard.insertText(to);
+async function replaceParagraph(_page: Page, editor: Locator, from: string, to: string | null): Promise<void> {
+  const current = await editor.inputValue();
+  expect(current).toContain(from);
+  await editor.fill(current.replace(from, to ?? ""));
 }
 
 async function editTogether(

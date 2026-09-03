@@ -13,7 +13,7 @@ import {
   stripStructuredSections,
   stripWrappedQuotes
 } from "../utils/recipe-frontmatter";
-import type { RecipeImageResources } from "./RecipeMarkdown";
+import { ReadDocument, ReadInline, type RecipeImageResources } from "./RecipeMarkdown";
 
 type RecipeViewProps = RecipeImageResources & {
   path: string;
@@ -51,7 +51,7 @@ export function recipeHeroTimingIdentifier(selectionGeneration: number, path: st
   return `mep:recipe-hero:${selectionGeneration}:${path}`;
 }
 
-/** Masthead image. Kept out of the lazy markdown chunk so a warm cover paints with the first frame. */
+/** Masthead image. Kept separate from body rendering so a warm cover paints with the first frame. */
 function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; timingIdentifier: string }): React.ReactElement {
   return (
     <div className="recipe-view__hero">
@@ -70,50 +70,14 @@ function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; 
 
 type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
-const LazyRecipeEditor = React.lazy(() => import("./RecipeEditor").then((module) => ({ default: module.RecipeEditor })));
-let recipeMarkdownModule: Promise<typeof import("./RecipeMarkdown")> | null = null;
-let PreparedReadDocument: typeof import("./RecipeMarkdown").ReadDocument | null = null;
-let PreparedReadInline: typeof import("./RecipeMarkdown").ReadInline | null = null;
-export function prepareRecipeMarkdown() {
-  recipeMarkdownModule ??= import("./RecipeMarkdown").then((module) => {
-    PreparedReadDocument = module.ReadDocument;
-    PreparedReadInline = module.ReadInline;
-    return module;
-  });
-  return recipeMarkdownModule;
-}
-
-/** Resolves to the lazily-loaded component once `prepareRecipeMarkdown` has settled. */
-function useLazyMarkdownComponent<C>(read: () => C | null): C | null {
-  const [Component, setComponent] = React.useState(read);
-  React.useEffect(() => {
-    if (Component) return;
-    void prepareRecipeMarkdown().then(() => setComponent(() => read()));
-  }, [Component]);
-  return Component;
-}
-
 /**
  * Memoised on its own props so an unrelated RecipeView re-render (a checkbox toggle) does not
  * re-invoke react-markdown, which builds a fresh unified processor and fully reparses every call.
  */
-export const PreparedRecipeDocument = React.memo(function PreparedRecipeDocument(
-  props: RecipeImageResources & { markdown: string; path: string }
-) {
-  const Component = useLazyMarkdownComponent(() => PreparedReadDocument);
-  return Component ? <Component {...props} /> : null;
-});
+export const PreparedRecipeDocument = React.memo(ReadDocument);
 
-/**
- * One method step, memoised on its step text alone: toggling that step's own checkbox (or any
- * other step's) changes the wrapping `<span>` class but not this prop, so it bails without
- * re-parsing — the fix for N-parses-per-toggle. Falls back to literal text until the markdown
- * chunk loads, matching the notes renderer below.
- */
-export const StepText = React.memo(function StepText({ text }: { text: string }) {
-  const Component = useLazyMarkdownComponent(() => PreparedReadInline);
-  return Component ? <Component text={text} /> : <>{text}</>;
-});
+/** One method step, memoised on its text so checkbox state never reparses it. */
+export const StepText = React.memo(ReadInline);
 
 export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(function RecipeView({
   path,
@@ -131,7 +95,6 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const [saveState, setSaveState] = React.useState<RecipeSaveState>("clean");
   const [mergeConflict, setMergeConflict] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState(false);
-  const [editorResetRevision, setEditorResetRevision] = React.useState(0);
   const [selectionGeneration] = React.useState(() => ++nextRecipeSelectionGeneration);
   const isMountedRef = React.useRef(false);
   const autosaveTimerRef = React.useRef<number | null>(null);
@@ -159,7 +122,6 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
           draftRef.current = rebased.text;
           if (isMountedRef.current) {
             setDraft(rebased.text);
-            if (rebased.text !== pendingDraft) setEditorResetRevision((revision) => revision + 1);
           }
         } catch (error) {
           if (isMountedRef.current) setSaveState("error");
@@ -208,10 +170,8 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       }
       return;
     }
-    const previousDraft = draftRef.current;
     setDraft(content);
     draftRef.current = content;
-    if (isEditing && previousDraft !== content) setEditorResetRevision((revision) => revision + 1);
     // Ticks are keyed by index: only reset when the incoming content genuinely adds, removes,
     // or reorders ingredients/steps. An edit (e.g. a typo fix, or the autosave echo of one)
     // that leaves both lists element-wise identical must not wipe what the cook already ticked.
@@ -304,26 +264,16 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const hasConflictMarkers = draft.includes("<<<<<<< this device\n")
     && draft.includes("\n=======\n")
     && draft.includes("\n>>>>>>>>");
-  const editor = isEditing ? hasConflictMarkers ? (
+  const editor = isEditing ? (
     <div className="recipe-view__editor">
       <div className="recipe-view__editor-actions"><button type="button" onClick={() => setIsEditing(false)}>Done</button></div>
       <textarea
-        className="recipe-view__conflict-editor"
-        aria-label="Recipe markdown with merge conflicts"
+        className="recipe-view__text-editor"
+        aria-label={hasConflictMarkers ? "Recipe markdown with merge conflicts" : "Recipe markdown"}
         value={editorMarkdown}
         onChange={(event) => updateDraft(event.currentTarget.value)}
       />
     </div>
-  ) : (
-    <React.Suspense fallback={null}>
-      <LazyRecipeEditor
-        key={`${path}:${editorResetRevision}`}
-        path={path}
-        markdown={editorMarkdown}
-        onChange={updateDraft}
-        onClose={() => setIsEditing(false)}
-      />
-    </React.Suspense>
   ) : readDocument;
   const saveIndicator = onSave && saveState !== "clean" ? (
     <div className="recipe-view__save-state" role="status" data-save-state={saveState}>

@@ -9,13 +9,10 @@ function appShellServiceWorker(): Plugin {
     name: "enplace-app-shell-service-worker",
     apply: "build",
     generateBundle(_options, bundle) {
-      // Precache only what a launch and offline reading need. The editor, the sample pack,
-      // non-Latin font subsets, and the large icon are cached on first use instead.
+      // Precache only what launch and offline reading need. The sample pack and large icon
+      // are cached on first use instead.
       const files = new Set(["/", "/index.html", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png"]);
-      // Only chunks that nothing but the editor imports are deferred; a chunk shared with the
-      // entry graph must be precached, because first-visit loads happen before the worker
-      // controls the page and so are never runtime-cached.
-      const deferred = /(?:^|\/)(?:editor-vendor~RecipeEditor|RecipeEditor)-[^/]+\.(?:js|css)$|\.(?:md|webp)$|vietnamese|latin-ext/;
+      const deferred = /(?:^|\/)sample-pack-[^/]+\.pack$|vietnamese|latin-ext/;
       for (const output of Object.values(bundle)) if (!deferred.test(output.fileName)) files.add(`/${output.fileName}`);
       const precache = [...files].sort();
       const version = createHash("sha256").update(precache.join("\n")).digest("hex").slice(0, 12);
@@ -60,18 +57,6 @@ export default defineConfig(({ mode }) => {
       outDir: "dist-static",
       emptyOutDir: true,
       manifest: true,
-      rolldownOptions: {
-        output: {
-          codeSplitting: {
-            includeDependenciesRecursively: true,
-            groups: [{
-              name: "editor-vendor",
-              test: /\/node_modules\/(?:@mdxeditor|@lexical|lexical|prismjs)\//,
-              entriesAware: true,
-            }],
-          },
-        },
-      },
     },
   };
 });

@@ -1,34 +1,54 @@
 import type * as Y from "yjs";
+import samplePackUrl from "../../sample/sample-pack.pack?url&no-inline";
 import { writeKitchenBytes } from "./doc";
 
-const sampleAssets = (import.meta as ImportMeta & {
-  glob: (pattern: string, options: { eager: boolean; query: string; import: string }) => Record<string, string>;
-}).glob("../../sample/{recipes,images}/*", {
-  eager: true,
-  query: "?url&no-inline",
-  import: "default",
-});
+const decoder = new TextDecoder();
+type PackedEntry = readonly [path: string, length: number];
 
-function logicalSamplePath(sourcePath: string): string | null {
-  const match = /sample\/(recipes|images)\/([^/]+)$/.exec(sourcePath);
-  if (!match) return null;
-  return match[1] === "recipes" ? match[2] : `images/${match[2]}`;
+function unpackSample(bytes: Uint8Array): Array<readonly [string, Uint8Array]> {
+  if (decoder.decode(bytes.subarray(0, 4)) !== "MEP1") throw new Error("Invalid sample pack.");
+  const manifestLength = new DataView(bytes.buffer, bytes.byteOffset + 4, 4).getUint32(0, true);
+  const dataOffset = 8 + manifestLength;
+  const manifest = JSON.parse(decoder.decode(bytes.subarray(8, dataOffset))) as PackedEntry[];
+  let offset = dataOffset;
+  return manifest.map(([path, length]) => {
+    const value = bytes.slice(offset, offset + length);
+    offset += length;
+    return [path, value] as const;
+  });
 }
 
 /** Every file installed by seedSamplePack, including recipe covers. */
-export const SAMPLE_PATHS = Object.keys(sampleAssets).map((sourcePath) => {
-  const path = logicalSamplePath(sourcePath);
-  if (!path) throw new Error(`Unexpected sample asset: ${sourcePath}`);
-  return path;
-}).sort();
+export const SAMPLE_PATHS = [
+  "banana-oat-loaf.md",
+  "beef-pepper-noodles.md",
+  "chicken-mushroom-risotto.md",
+  "chickpea-coconut-curry.md",
+  "lemon-chicken-traybake.md",
+  "mustard-salmon-potatoes.md",
+  "roast-vegetable-couscous-salad.md",
+  "sausage-apple-bake.md",
+  "smoky-lentil-soup.md",
+  "spinach-feta-omelette.md",
+  "white-bean-tomato-stew.md",
+  "images/banana-oat-loaf.webp",
+  "images/beef-pepper-noodles.webp",
+  "images/chicken-mushroom-risotto.webp",
+  "images/chickpea-coconut-curry.webp",
+  "images/lemon-chicken-traybake.webp",
+  "images/mustard-salmon-potatoes.webp",
+  "images/roast-vegetable-couscous-salad.webp",
+  "images/sausage-apple-bake.webp",
+  "images/smoky-lentil-soup.webp",
+  "images/spinach-feta-omelette.webp",
+  "images/white-bean-tomato-stew.webp",
+] as const;
 
 export async function seedSamplePack(doc: Y.Doc): Promise<void> {
-  const loaded = await Promise.all(Object.entries(sampleAssets).map(async ([sourcePath, url]) => {
-    const path = logicalSamplePath(sourcePath);
-    if (!path) throw new Error(`Unexpected sample asset: ${sourcePath}`);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Could not load sample asset: ${path}`);
-    return [path, new Uint8Array(await response.arrayBuffer())] as const;
-  }));
-  for (const [path, bytes] of loaded) writeKitchenBytes(doc, path, bytes);
+  const response = await fetch(samplePackUrl);
+  if (!response.ok) throw new Error("Could not load the sample kitchen.");
+  const entries = unpackSample(new Uint8Array(await response.arrayBuffer()));
+  doc.transact(() => {
+    for (const [path, bytes] of entries) writeKitchenBytes(doc, path, bytes);
+  });
 }

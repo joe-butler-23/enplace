@@ -199,16 +199,8 @@ export function KitchenPanel(): React.JSX.Element | null {
         }
       }
 
-      let imported = 0;
-      let skipped = 0;
-      for (const [path, bytes] of entries) {
-        if (await connection.adapter.pathExists(path)) {
-          skipped += 1;
-          continue;
-        }
-        await connection.adapter.writeNewBytes(path, bytes);
-        imported += 1;
-      }
+      const imported = await connection.adapter.writeNewBytesBatch(entries);
+      const skipped = entries.length - imported;
       notify(`Imported ${imported} file${imported === 1 ? "" : "s"}; skipped ${skipped} existing file${skipped === 1 ? "" : "s"}.`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not import these files.");
