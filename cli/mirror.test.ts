@@ -239,6 +239,31 @@ describe("mep mirror", () => {
     expect(logs).toContain("merged local changes with kitchen for notes.md\n");
   });
 
+  it("keeps both overlapping text edits in the disk file and kitchen", async () => {
+    const root = await folder();
+    const kitchen = newKitchenId();
+    const client = await syncedClient(kitchen);
+    const logs: string[] = [];
+    startMirror(root, kitchen, { log: (line) => logs.push(line) });
+    const target = path.join(root, "notes.md");
+    const base = "first: base\nsecond: base\n";
+    writeKitchenText(client.doc, "notes.md", base);
+    await waitFor(async () => expect(await readFile(target, "utf8")).toBe(base));
+
+    await writeFile(target, "first: disk\nsecond: base\n");
+    writeKitchenText(client.doc, "notes.md", "first: kitchen\nsecond: base\n");
+    const merged = "<<<<<<< this device\nfirst: disk\n=======\nfirst: kitchen\n>>>>>>>>\nsecond: base\n";
+
+    await waitFor(async () => {
+      expect(await readFile(target, "utf8")).toBe(merged);
+      expect(readKitchenText(client.doc, "notes.md")).toBe(merged);
+    });
+    expect(logs.filter((line) => line.includes("conflict"))).toEqual([
+      "merged local changes with kitchen for notes.md; kept 1 conflict\n",
+    ]);
+    expect((await readdir(root)).filter((name) => name.includes(".local-"))).toEqual([]);
+  });
+
   it("preserves a local edit when a remote delete wins the path", async () => {
     const root = await folder();
     const kitchen = newKitchenId();

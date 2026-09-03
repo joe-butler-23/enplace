@@ -9,6 +9,5 @@ export const DEFAULT_STANDALONE_SETTINGS: StandaloneSettings = {
   databaseSort: "added-desc",
   databaseMarkedFilter: "all",
   databaseScheduledFilter: "all",
-  dayNotes: {},
   weeklyOrganiserMarkedWidth: 240
 };

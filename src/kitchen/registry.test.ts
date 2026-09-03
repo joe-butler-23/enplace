@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearCurrentKitchenId,
   currentKitchenId,
+  recentKitchens,
+  rememberKitchen,
   setCurrentKitchenId,
 } from "./registry";
 
@@ -28,4 +30,25 @@ describe("kitchen registry", () => {
     clearCurrentKitchenId();
     expect(currentKitchenId()).toBeNull();
   });
+  it("keeps recent kitchens labelled and ordered by last-opened time", () => {
+    const second = "zyxwvutsrqponmlkjihgfedcba";
+    rememberKitchen(id, "Soup", 10);
+    rememberKitchen(second, "", 20);
+
+    expect(recentKitchens()).toEqual([
+      { id: second, label: "Empty kitchen", lastOpened: 20 },
+      { id, label: "Soup", lastOpened: 10 },
+    ]);
+  });
+
+  it("bounds the recent kitchen list", () => {
+    for (let index = 0; index < 9; index += 1) {
+      rememberKitchen(`${String.fromCharCode(97 + index)}${"a".repeat(25)}`, `Kitchen ${index}`, index);
+    }
+
+    expect(recentKitchens()).toHaveLength(8);
+    expect(recentKitchens()[0].label).toBe("Kitchen 8");
+    expect(recentKitchens().some((kitchen) => kitchen.label === "Kitchen 0")).toBe(false);
+  });
+
 });

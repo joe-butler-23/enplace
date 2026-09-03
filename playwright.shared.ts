@@ -75,6 +75,15 @@ export function browserSuiteConfig(options: BrowserSuiteOptions): PlaywrightTest
       },
       appServer,
     ] : appServer,
+    // Chromium always; Firefox and WebKit when ENPLACE_ENGINES=all, since the push hook and
+    // most machines have only Chromium installed (see CONTRIBUTING.md for the other two).
+    projects: options.relay ? [
+      { name: "chromium", use: { browserName: "chromium" } },
+      ...(process.env.ENPLACE_ENGINES === "all" ? [
+        { name: "webkit", use: { browserName: "webkit" } },
+        { name: "firefox", use: { browserName: "firefox" } },
+      ] : []),
+    ] : undefined,
     use: {
       baseURL: resolvePlaywrightBaseURL(port),
       trace: options.trace ?? "on-first-retry"

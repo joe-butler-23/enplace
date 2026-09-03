@@ -28,7 +28,6 @@ export function ReadDocument({
     <div className="recipe-view__read-document">
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        urlTransform={(url) => url}
         components={{
           img: ({ src, alt, title }) => (
             <ReadImage src={src ?? ""} alt={alt} imageTitle={title} path={path} resolveImage={resolveImage} />

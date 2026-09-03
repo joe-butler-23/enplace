@@ -15,10 +15,12 @@ agent-developed, so the engineering contract lives in agent-readable form.
 Contributor tooling and tracked verification scripts are written for Bash. On
 Windows, use Git Bash or WSL for contributing.
 
-Install the tracked hooks once after cloning. This composes Enplace checks with
-the repository's Beads lifecycle hooks when `bd` is available:
+Install the browser engines and tracked hooks once after cloning. The hooks compose
+Enplace checks with the repository's Beads lifecycle hooks when `bd` is available:
 
 ```bash
+npx playwright install chromium
+npx playwright install webkit firefox
 npm run setup:hooks
 ```
 

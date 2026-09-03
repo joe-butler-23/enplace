@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
+import { readText, useVaultStorage, type VaultStorageAdapter } from "../host-client/browser-storage";
 import { DEFAULT_STANDALONE_SETTINGS } from "./settings";
-import { loadSettings, saveSettings } from "./storage";
+import { loadSettings, prepareStandaloneStartup, saveSettings } from "./storage";
 
 const values = new Map<string, string>();
 const storage: Storage = {
@@ -16,7 +17,32 @@ const storage: Storage = {
 beforeEach(() => {
   values.clear();
   Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
+  useVaultStorage(null);
 });
+
+function textAdapter(): VaultStorageAdapter {
+  const files = new Map<string, Uint8Array>();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  return {
+    async readBytes(path) {
+      const value = files.get(path);
+      if (!value) throw new Error(`File not found: ${path}`);
+      return value;
+    },
+    async writeBytes(path, bytes) { files.set(path, bytes); },
+    async writeNewBytes(path, bytes) { files.set(path, bytes); },
+    async updateText(path, update) {
+      const next = update(decoder.decode(files.get(path) ?? new Uint8Array()));
+      files.set(path, encoder.encode(next));
+      return next;
+    },
+    async remove(path) { files.delete(path); },
+    async pathExists(path) { return files.has(path); },
+    async walkFiles() { return []; },
+    async fileUrl() { return ""; },
+  };
+}
 
 describe("browser-local preferences", () => {
   it("loads defaults without writing to the selected folder or browser storage", async () => {
@@ -39,6 +65,21 @@ describe("browser-local preferences", () => {
       databaseSort: "title-asc",
       databaseMarkedFilter: "marked"
     });
+  });
+
+  it("moves legacy day notes into Plan.md once and removes them from preferences", async () => {
+    useVaultStorage(textAdapter());
+    window.localStorage.setItem("enplace.preferences", JSON.stringify({
+      ...DEFAULT_STANDALONE_SETTINGS,
+      dayNotes: { "2026-09-04": "Grandma visiting, cook early" },
+    }));
+
+    const settings = await loadSettings();
+    expect(settings).not.toHaveProperty("dayNotes");
+    await prepareStandaloneStartup(settings);
+
+    await expect(readText("Plan.md")).resolves.toContain("## 2026-09-04\n> Grandma visiting, cook early\n");
+    expect(JSON.parse(window.localStorage.getItem("enplace.preferences") ?? "{}")).not.toHaveProperty("dayNotes");
   });
 
   it("drops stale keys when preferences are saved", async () => {

@@ -17,6 +17,7 @@ export type Recipe = {
 export type Plan = {
   marked: string[];
   days: Map<string, string[]>;
+  notes: Map<string, string>;
 };
 
 export type ShoppingLine = {
@@ -181,39 +182,47 @@ function unique(values: readonly string[]): string[] {
 }
 
 export function parsePlan(markdown: string): Plan {
-  const plan: Plan = { marked: [], days: new Map() };
+  const plan: Plan = { marked: [], days: new Map(), notes: new Map() };
   let destination: string[] | null = null;
+  let date: string | null = null;
   for (const raw of markdown.split(/\r?\n/)) {
     const heading = /^##\s+(.+?)\s*$/.exec(raw);
     if (heading) {
+      date = null;
       if (heading[1].toLocaleLowerCase() === "marked") destination = plan.marked;
       else if (/^\d{4}-\d{2}-\d{2}$/.test(heading[1])) {
         // A merged plan can carry the same date twice when two devices added it at once;
         // both sections belong to that day, and the next save writes one section.
-        destination = plan.days.get(heading[1]) ?? [];
-        plan.days.set(heading[1], destination);
+        date = heading[1];
+        destination = plan.days.get(date) ?? [];
+        plan.days.set(date, destination);
       } else destination = null;
       continue;
     }
+    const note = date ? /^\s*>\s?(.*?)\s*$/.exec(raw)?.[1]?.trim() : undefined;
+    if (date && note) plan.notes.set(date, note);
     const item = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/.exec(raw);
     if (destination && item) destination.push(item[1].trim());
   }
   plan.marked = unique(plan.marked);
-  for (const [date, entries] of plan.days) {
+  for (const [day, entries] of plan.days) {
     const deduplicated = unique(entries);
-    if (deduplicated.length) plan.days.set(date, deduplicated);
-    else plan.days.delete(date);
+    if (deduplicated.length) plan.days.set(day, deduplicated);
+    else plan.days.delete(day);
   }
   return plan;
 }
 
 export function serializePlan(plan: Plan): string {
   const lines = ["## Marked", ...unique(plan.marked).map((entry) => `- [[${entry}]]`)];
-  const days = [...plan.days.entries()]
-    .filter(([, entries]) => entries.length > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-  for (const [date, entries] of days) {
-    lines.push("", `## ${date}`, ...unique(entries).map((entry) => `- [[${entry}]]`));
+  const dates = unique([...plan.days.keys(), ...plan.notes.keys()]).sort((left, right) => left.localeCompare(right));
+  for (const date of dates) {
+    const entries = unique(plan.days.get(date) ?? []);
+    const note = plan.notes.get(date)?.replace(/\s*\r?\n\s*/g, " ").trim() ?? "";
+    if (!entries.length && !note) continue;
+    lines.push("", `## ${date}`);
+    if (note) lines.push(`> ${note}`);
+    lines.push(...entries.map((entry) => `- [[${entry}]]`));
   }
   return `${lines.join("\n")}\n`;
 }
@@ -222,6 +231,7 @@ export function withMarked(plan: Plan, link: string, marked: boolean): Plan {
   return {
     marked: marked ? unique([...plan.marked, link]) : plan.marked.filter((entry) => entry !== link),
     days: new Map(plan.days),
+    notes: new Map(plan.notes),
   };
 }
 
@@ -230,7 +240,7 @@ export function withScheduled(plan: Plan, link: string, date: string, scheduled:
   const entries = days.get(date) ?? [];
   const next = scheduled ? unique([...entries, link]) : entries.filter((entry) => entry !== link);
   if (next.length) days.set(date, next); else days.delete(date);
-  return { marked: [...plan.marked], days };
+  return { marked: [...plan.marked], days, notes: new Map(plan.notes) };
 }
 
 export type RecipePlanning = { marked: boolean; scheduledDates: string[] };
@@ -264,7 +274,7 @@ export function withRecipePlanning(plan: Plan, link: string, planning: RecipePla
   for (const date of [...targetDates].sort()) {
     days.set(date, unique([...(days.get(date) ?? []), link]));
   }
-  return { marked, days };
+  return { marked, days, notes: new Map(plan.notes) };
 }
 
 export function resolveRecipeReference(recipes: readonly Recipe[], reference: string): Recipe | null {
@@ -340,9 +350,17 @@ export function buildShoppingMarkdown(
   return generated.length ? `${prefix}${prefix && !prefix.endsWith("\n\n") ? "\n" : ""}${generated.join("\n\n")}\n` : prefix;
 }
 
-export function toggleShoppingItem(markdown: string, itemText: string, checked: boolean): string {
-  const item = parseShopping(markdown).find((candidate) => candidate.text === itemText);
-  if (!item) throw new Error("Shopping item no longer exists.");
+function resolveShoppingItem(markdown: string, itemLine: number, itemText: string): ShoppingLine {
+  const items = parseShopping(markdown);
+  const exact = items.find((candidate) => candidate.line === itemLine && candidate.text === itemText);
+  if (exact) return exact;
+  const matchingText = items.filter((candidate) => candidate.text === itemText);
+  if (matchingText.length === 1) return matchingText[0];
+  throw new Error("Shopping item no longer exists");
+}
+
+export function toggleShoppingItem(markdown: string, itemLine: number, itemText: string, checked: boolean): string {
+  const item = resolveShoppingItem(markdown, itemLine, itemText);
   const trailingNewline = markdown.endsWith("\n");
   const lines = markdown.split(/\r?\n/);
   if (trailingNewline) lines.pop();
@@ -366,9 +384,8 @@ export function appendShoppingItem(markdown: string, text: string): string {
   return `${prefix}## Other\n- [ ] ${content}\n`;
 }
 
-export function removeShoppingItem(markdown: string, itemText: string): string {
-  const item = parseShopping(markdown).find((candidate) => candidate.text === itemText);
-  if (!item) throw new Error("Shopping item no longer exists.");
+export function removeShoppingItem(markdown: string, itemLine: number, itemText: string): string {
+  const item = resolveShoppingItem(markdown, itemLine, itemText);
   const trailingNewline = markdown.endsWith("\n");
   const lines = markdown.split(/\r?\n/);
   if (trailingNewline) lines.pop();

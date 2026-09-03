@@ -9,8 +9,14 @@ function appShellServiceWorker(): Plugin {
     name: "enplace-app-shell-service-worker",
     apply: "build",
     generateBundle(_options, bundle) {
-      const files = new Set(["/", "/index.html", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png", "/icons/icon-512.png"]);
-      for (const output of Object.values(bundle)) files.add(`/${output.fileName}`);
+      // Precache only what a launch and offline reading need. The editor, the sample pack,
+      // non-Latin font subsets, and the large icon are cached on first use instead.
+      const files = new Set(["/", "/index.html", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png"]);
+      // Only chunks that nothing but the editor imports are deferred; a chunk shared with the
+      // entry graph must be precached, because first-visit loads happen before the worker
+      // controls the page and so are never runtime-cached.
+      const deferred = /(?:^|\/)(?:editor-vendor~RecipeEditor|RecipeEditor)-[^/]+\.(?:js|css)$|\.(?:md|webp)$|vietnamese|latin-ext/;
+      for (const output of Object.values(bundle)) if (!deferred.test(output.fileName)) files.add(`/${output.fileName}`);
       const precache = [...files].sort();
       const version = createHash("sha256").update(precache.join("\n")).digest("hex").slice(0, 12);
       const template = readFileSync(path.resolve(__dirname, "src/pwa/service-worker.js"), "utf8");

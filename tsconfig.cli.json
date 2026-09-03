@@ -9,7 +9,15 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["cli/index.ts", "cli/mirror.ts", "src/core.ts", "src/kitchen/doc.ts"]
+  "include": [
+    "cli/index.ts",
+    "cli/mirror.ts",
+    "src/core.ts",
+    "src/kitchen/doc.ts",
+    "src/kitchen/merge.ts"
+  ]
 }

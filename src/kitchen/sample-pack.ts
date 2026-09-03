@@ -15,6 +15,13 @@ function logicalSamplePath(sourcePath: string): string | null {
   return match[1] === "recipes" ? match[2] : `images/${match[2]}`;
 }
 
+/** Every file installed by seedSamplePack, including recipe covers. */
+export const SAMPLE_PATHS = Object.keys(sampleAssets).map((sourcePath) => {
+  const path = logicalSamplePath(sourcePath);
+  if (!path) throw new Error(`Unexpected sample asset: ${sourcePath}`);
+  return path;
+}).sort();
+
 export async function seedSamplePack(doc: Y.Doc): Promise<void> {
   const loaded = await Promise.all(Object.entries(sampleAssets).map(async ([sourcePath, url]) => {
     const path = logicalSamplePath(sourcePath);

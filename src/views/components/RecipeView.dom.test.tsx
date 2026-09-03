@@ -120,6 +120,21 @@ describe("RecipeView interactive behaviour (bd mise-en-place-fuy)", () => {
     expect(stepToggle().getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("confirms before deleting a recipe", async () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn(() => true);
+    Object.defineProperty(window, "confirm", { configurable: true, value: confirm });
+    renderInto(root, <RecipeView path="recipes/soup.md" title="Soup" mode="full" content={"# Soup\n"} onDelete={onDelete} />);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("button.recipe-view__edit-action:last-child")!.click();
+      await Promise.resolve();
+    });
+
+    expect(confirm).toHaveBeenCalledWith("Delete Soup?");
+    expect(onDelete).toHaveBeenCalledOnce();
+  });
+
   it("does not re-invoke the markdown renderer for other steps or the notes body when a single step is toggled", () => {
     const content = [
       "# Soup",

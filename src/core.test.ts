@@ -66,6 +66,16 @@ describe("Plan.md", () => {
     expect(serializePlan(parsePlan(serializePlan(parsed)))).toBe(serializePlan(parsed));
   });
 
+  it("round-trips day notes and keeps a noted day with no recipes", () => {
+    const parsed = parsePlan("## Marked\n\n## 2026-09-04\n> Grandma visiting, cook early\n- [[recipes/lasagne]]\n\n## 2026-09-05\n> Eat out\n");
+    expect(parsed.notes).toEqual(new Map([
+      ["2026-09-04", "Grandma visiting, cook early"],
+      ["2026-09-05", "Eat out"],
+    ]));
+    expect(serializePlan(parsed)).toBe("## Marked\n\n## 2026-09-04\n> Grandma visiting, cook early\n- [[recipes/lasagne]]\n\n## 2026-09-05\n> Eat out\n");
+    expect(parsePlan(serializePlan(parsed)).notes).toEqual(parsed.notes);
+  });
+
   it("replaces one recipe's marked and multi-date planning without changing other recipes", () => {
     const current = parsePlan("## Marked\n- [[soup]]\n\n## 2026-09-07\n- [[soup]]\n- [[pie]]\n");
     const next = withRecipePlanning(current, "soup", {
@@ -111,8 +121,8 @@ describe("Shopping.md", () => {
     expect(added).toBe("## Soup\n- [ ] onion\n\n## Other\n- [ ] hand soap\n");
     const reused = appendShoppingItem("## Other\n- [ ] hand soap\n\n## Soup\n- [ ] onion\n", "foil");
     expect(reused).toContain("## Other\n- [ ] hand soap\n- [ ] foil\n\n## Soup");
-    expect(removeShoppingItem(reused, "hand soap")).not.toContain("hand soap");
-    expect(removeShoppingItem(reused, "hand soap")).toContain("- [ ] foil");
+    expect(removeShoppingItem(reused, 1, "hand soap")).not.toContain("hand soap");
+    expect(removeShoppingItem(reused, 1, "hand soap")).toContain("- [ ] foil");
   });
 
   it("merges a date heading that a concurrent edit duplicated", () => {
@@ -123,7 +133,7 @@ describe("Shopping.md", () => {
 
   it("toggles exactly one source line and copies without checkbox markers", () => {
     const markdown = "## Soup\n- [ ] onion\n- [x] stock\n";
-    const toggled = toggleShoppingItem(markdown, "onion", true);
+    const toggled = toggleShoppingItem(markdown, 1, "onion", true);
     expect(parseShopping(toggled)).toEqual([
       { line: 1, heading: "Soup", text: "onion", checked: true },
       { line: 2, heading: "Soup", text: "stock", checked: true },
@@ -132,8 +142,17 @@ describe("Shopping.md", () => {
   });
   it("targets shopping mutations by item text after unrelated lines move", () => {
     const moved = "# note\n\n## Soup\n- [ ] onion\n- [ ] stock\n";
-    expect(toggleShoppingItem(moved, "stock", true)).toContain("- [ ] onion\n- [x] stock");
-    expect(removeShoppingItem(moved, "onion")).toContain("- [ ] stock");
+    expect(toggleShoppingItem(moved, 2, "stock", true)).toContain("- [ ] onion\n- [x] stock");
+    expect(removeShoppingItem(moved, 1, "onion")).toContain("- [ ] stock");
+  });
+
+  it("uses the selected line when shopping items have identical text", () => {
+    const duplicate = "## Other\n- [ ] milk\n- [ ] milk\n";
+    const secondTicked = toggleShoppingItem(duplicate, 2, "milk", true);
+    expect(secondTicked).toBe("## Other\n- [ ] milk\n- [x] milk\n");
+    expect(toggleShoppingItem(secondTicked, 1, "milk", true)).toBe("## Other\n- [x] milk\n- [x] milk\n");
+    expect(removeShoppingItem(duplicate, 2, "milk")).toBe("## Other\n- [ ] milk\n");
+    expect(() => toggleShoppingItem(duplicate, 9, "milk", true)).toThrow("Shopping item no longer exists");
   });
 
 });
@@ -150,7 +169,7 @@ describe("paste import", () => {
       { line: 1, heading: "Soup", text: "onion", checked: true },
       { line: 2, heading: "Soup", text: "stock", checked: false },
     ]);
-    expect(toggleShoppingItem(merged, "onion", false)).toBe("## Soup\n- [ ] onion\n- [  ] stock\n");
-    expect(toggleShoppingItem(merged, "stock", true)).toBe("## Soup\n- [xx] onion\n- [x] stock\n");
+    expect(toggleShoppingItem(merged, 1, "onion", false)).toBe("## Soup\n- [ ] onion\n- [  ] stock\n");
+    expect(toggleShoppingItem(merged, 2, "stock", true)).toBe("## Soup\n- [xx] onion\n- [x] stock\n");
   });
 });

@@ -4,6 +4,5 @@ export interface CookingAssistantSettings {
   databaseSort: RecipeIndexSort;
   databaseMarkedFilter: "all" | "marked" | "unmarked";
   databaseScheduledFilter: "all" | "scheduled" | "unscheduled";
-  dayNotes: Record<string, string>;
   weeklyOrganiserMarkedWidth: number;
 }

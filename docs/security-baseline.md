@@ -12,7 +12,10 @@ Enplace code and the app treats it as untrusted transport.
   The relay does: the id is the room name in the WebSocket path, so relay
   access logs hold it, and a relay operator can open any kitchen it hosts until
   end-to-end encryption lands. Anyone holding the link holds the kitchen;
-  sharing the link is the sharing model, and the Settings panel says so.
+  sharing the link is the sharing model. The share dialog states, “Anyone with
+  this private link can view and change this kitchen.” Its reset-link action
+  copies the current document to a new kitchen id, leaving the old room as-is
+  while people with the old link lose access to future changes.
 - The kitchen document is the sole authority for user content and state. Every
   device keeps its own full copy in IndexedDB; the relay keeps a copy for
   fan-out. Clearing browser storage removes this device's copy only.

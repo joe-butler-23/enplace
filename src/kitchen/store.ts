@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { parsePlan, parseShopping, scanRecipes, type Plan, type Recipe } from "../core";
-import { listKitchenPaths, observeKitchen, readKitchenBytes, readKitchenText } from "./doc";
+import { isTextPath, listKitchenPaths, observeKitchen, readKitchenBytes, readKitchenText } from "./doc";
 import { currentKitchenConnection, onCurrentKitchenConnection } from "./current";
 
 export type KitchenFile = { path: string };
@@ -9,7 +9,7 @@ export type KitchenSnapshot = {
   recipes: Recipe[]; plan: Plan; shopping: ShoppingList; files: KitchenFile[];
   texts: ReadonlyMap<string, string>; imageUrls: ReadonlyMap<string, string>; revision: number;
 };
-const empty: KitchenSnapshot = { recipes: [], plan: { marked: [], days: new Map() }, shopping: { items: [] }, files: [], texts: new Map(), imageUrls: new Map(), revision: 0 };
+const empty: KitchenSnapshot = { recipes: [], plan: { marked: [], days: new Map(), notes: new Map() }, shopping: { items: [] }, files: [], texts: new Map(), imageUrls: new Map(), revision: 0 };
 let snapshot = empty;
 let bound = currentKitchenConnection();
 let unobserve: (() => void) | null = null;
@@ -26,6 +26,7 @@ function rebuild(changed?: ReadonlySet<string>): void {
   const paths = listKitchenPaths(bound.doc);
   const texts = new Map<string, string>();
   for (const path of paths) {
+    if (!isTextPath(path)) continue;
     const text = readKitchenText(bound.doc, path);
     if (text !== null) texts.set(path, text);
   }

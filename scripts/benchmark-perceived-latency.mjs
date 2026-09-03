@@ -365,20 +365,17 @@ async function bootSeededKitchen(page, baseUrl) {
   await page.getByText("11 recipes", { exact: true }).waitFor();
   return serviceWorker;
 }
-async function bootFolderFixture(page, baseUrl, files) {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: () => navigator.storage.getDirectory() });
-  });
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-  await page.evaluate(async (fixtureFiles) => {
-    const root = await navigator.storage.getDirectory();
-    for (const [filename, text] of Object.entries(fixtureFiles)) {
-      const writable = await (await root.getFileHandle(filename, { create: true })).createWritable();
-      await writable.write(text); await writable.close();
-    }
-  }, files);
-  const choose = page.getByRole("button", { name: "Choose folder" });
-  await choose.evaluate((element) => element.click());
+async function bootKitchenWithFiles(page, baseUrl, files) {
+  // Seed the sample kitchen, then add fixture files through the Settings import, which is
+  // the same path a person uses; every click here is programmatic so the measured gesture
+  // stays the page's first trusted input.
+  await bootSeededKitchen(page, baseUrl);
+  await page.getByRole("button", { name: "Settings", exact: true }).evaluate((element) => element.click());
+  const input = page.locator('input[type="file"][multiple]').first();
+  await input.waitFor({ state: "attached" });
+  await input.setInputFiles(Object.entries(files).map(([name, text]) => ({ name, mimeType: "text/markdown", buffer: Buffer.from(text) })));
+  await page.getByText(/^Imported \d+ file/).waitFor();
+  await page.locator(".mep-dialog__close").first().evaluate((element) => element.click());
   await page.getByRole("button", { name: "Shopping List", exact: true }).waitFor();
   const serviceWorker = await ensureResidentServiceWorker(page);
   await page.getByRole("button", { name: "Shopping List", exact: true }).waitFor();
@@ -459,7 +456,7 @@ async function collectInteraction(browser, baseUrl, interaction, budget) {
       wait = arm(page, interaction, expected); await drag(page, source, lane.locator(".kanban-drag"), expected.gestureTarget, expected.activationTarget); await wait;
       correctness = { passed: await lane.getByText("Banana oat loaf", { exact: true }).isVisible(), reason: "moved card is absent from exact target lane" };
     } else if (interaction === "shopping-check") {
-      residentPrecondition = await bootFolderFixture(page, baseUrl, { "Shopping.md": "## Fruit\n- [ ] 3 ripe bananas\n" });
+      residentPrecondition = await bootKitchenWithFiles(page, baseUrl, { "Shopping.md": "## Fruit\n- [ ] 3 ripe bananas\n" });
       const shopping = page.getByRole("button", { name: "Shopping List", exact: true });
       await shopping.evaluate((element) => element.click());
       const checkbox = page.getByRole("checkbox", { name: "3 ripe bananas" }); await checkbox.waitFor();
@@ -489,11 +486,14 @@ async function collectInteraction(browser, baseUrl, interaction, budget) {
         const cacheHits = entries.filter((entry) => entry.transferSize === 0 && entry.decodedBodySize > 0);
         const sampleHits = cacheHits.filter((entry) => /banana-oat-loaf|\.(md|webp)(?:$|\?)/.test(entry.name));
         const transferred = entries.filter((entry) => entry.transferSize > 0);
-        const passed = expectedState !== "warm" || (entries.length > 0 && cacheHits.length === entries.length && sampleHits.length > 0);
+        // Warm means nothing crossed the network: every app asset came from the service
+        // worker or HTTP cache. The sample pack lives in the kitchen's IndexedDB after the
+        // first visit, so no sample asset is requested at all on a warm visit.
+        const passed = expectedState !== "warm" || (entries.length > 0 && transferred.length === 0);
         return {
           expectedState,
           passed,
-          reason: passed ? null : `warm cache unproved: ${cacheHits.length}/${entries.length} assets were cache hits; ${sampleHits.length} sample hits; ${transferred.length} network transfers`,
+          reason: passed ? null : `warm cache unproved: ${cacheHits.length}/${entries.length} assets were cache hits; ${sampleHits.length} sample hits; ${transferred.length} network transfers (${transferred.map((entry) => entry.name.split("/").pop()).join(", ")})`,
           assetCount: entries.length,
           cacheHitCount: cacheHits.length,
           sampleCacheHitCount: sampleHits.length,

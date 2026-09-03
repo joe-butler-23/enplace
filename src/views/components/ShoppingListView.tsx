@@ -1,4 +1,6 @@
 import * as React from "react";
+import { currentKitchenConnection, onCurrentKitchenConnection } from "../../kitchen/current";
+
 export type ShoppingListItem = {
   id: string;
   content: string;
@@ -125,6 +127,63 @@ function ShoppingItemRow({
 }
 
 
+function currentRelayState(): string {
+  const connection = currentKitchenConnection();
+  if (!connection?.relayUrl) return "none";
+  const status = typeof navigator !== "undefined" && !navigator.onLine ? "offline" : connection.status();
+  return `${connection.id}:${status}`;
+}
+
+function subscribeRelayState(listener: () => void): () => void {
+  let unsubscribeStatus: () => void = () => undefined;
+  const bind = () => {
+    unsubscribeStatus();
+    unsubscribeStatus = currentKitchenConnection()?.onStatus(listener) ?? (() => undefined);
+  };
+  const unsubscribeConnection = onCurrentKitchenConnection(() => { bind(); listener(); });
+  window.addEventListener("online", listener);
+  window.addEventListener("offline", listener);
+  bind();
+  return () => {
+    unsubscribeConnection();
+    unsubscribeStatus();
+    window.removeEventListener("online", listener);
+    window.removeEventListener("offline", listener);
+  };
+}
+
+function useShoppingSyncMessage(): string | null {
+  const relayState = React.useSyncExternalStore(subscribeRelayState, currentRelayState, () => "none");
+  const separator = relayState.lastIndexOf(":");
+  const connectionId = separator < 0 ? relayState : relayState.slice(0, separator);
+  const status = separator < 0 ? relayState : relayState.slice(separator + 1);
+  const previousConnection = React.useRef(connectionId);
+  const wasOffline = React.useRef(status === "offline");
+  const [upToDate, setUpToDate] = React.useState(false);
+
+  React.useEffect(() => {
+    if (previousConnection.current !== connectionId) {
+      previousConnection.current = connectionId;
+      wasOffline.current = status === "offline";
+      setUpToDate(false);
+      return;
+    }
+    if (status === "offline") {
+      wasOffline.current = true;
+      setUpToDate(false);
+      return;
+    }
+    if (status === "connected" && wasOffline.current) {
+      wasOffline.current = false;
+      setUpToDate(true);
+      return;
+    }
+    setUpToDate(false);
+  }, [connectionId, status]);
+
+  if (status === "offline") return "Offline. Your ticks are saved on this phone.";
+  return upToDate && status === "connected" ? "Up to date" : null;
+}
 
 export function ShoppingListView({
   list, plan, busy, error, onApply, onCheck, onRefresh, onAdd, onRemove, onCopyLink
@@ -132,6 +191,7 @@ export function ShoppingListView({
   const [hideDone, setHideDone] = React.useState(false);
   const [draft, setDraft] = React.useState("");
   const [composerOpen, setComposerOpen] = React.useState(false);
+  const syncMessage = useShoppingSyncMessage();
   const draftRef = React.useRef<HTMLInputElement | null>(null);
   React.useEffect(() => { if (composerOpen) draftRef.current?.focus(); }, [composerOpen]);
 
@@ -166,6 +226,7 @@ export function ShoppingListView({
         {onCopyLink ? <button type="button" onClick={onCopyLink}>Copy list</button> : null}
       </div></details>
     </header>
+    {syncMessage ? <p className="shopping-list-view__sync-status" role="status">{syncMessage}</p> : null}
     {error ? <div className="shopping-list-view__error" role="alert" aria-live="assertive"><span>{shoppingErrorText(error)}</span><button type="button" onClick={onRefresh} disabled={busy}>Retry</button></div> : null}
     {plan ? <section className="shopping-list-view__preview" aria-label="Shopping list preview"><h3>Build list for {plan.weekLabel}</h3><p>{plan.items.length} items</p><button type="button" className="shopping-button" onClick={onApply} disabled={busy}>Build list</button></section> : null}
     {list !== null && items.length === 0 && !plan ? <p {...({ className: "shopping-list-view__empty", elementtiming: "mep:shopping:empty-state" } as React.HTMLAttributes<HTMLParagraphElement>)}>Your list is empty — add an item below.</p> : null}

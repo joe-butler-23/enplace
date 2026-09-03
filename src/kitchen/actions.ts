@@ -3,7 +3,8 @@ import {
   serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
   type Recipe, type RecipePlanning,
 } from "../core";
-import { readText, updateText, writeText } from "../host-client/browser-storage";
+import { readText, remove, updateText } from "../host-client/browser-storage";
+import { mergeText, type MergeResult } from "./merge";
 import { getKitchenSnapshot } from "./store";
 
 type ShoppingPlan = { items: { content: string; sources?: string[] }[] };
@@ -35,9 +36,16 @@ export async function applyShoppingPlan(plan: ShoppingPlan): Promise<void> {
   await updateText("Shopping.md", (text) => buildShoppingMarkdown(text, plannedRecipes(plan, recipes), recipes));
 }
 export const addShoppingItem = (content: string): Promise<string> => updateText("Shopping.md", (text) => appendShoppingItem(text, content));
-export const removeShopping = (itemText: string): Promise<string> => updateText("Shopping.md", (text) => removeShoppingItem(text, itemText));
+const shoppingLine = (itemId: string): number => {
+  const match = /^line:(\d+)$/.exec(itemId);
+  if (!match) throw new Error("Shopping item no longer exists");
+  return Number(match[1]);
+};
+export const removeShopping = (itemText: string, itemId: string): Promise<string> => updateText(
+  "Shopping.md", (text) => removeShoppingItem(text, shoppingLine(itemId), itemText),
+);
 export async function toggleShopping(itemText: string, itemId: string, checked: boolean): Promise<void> {
-  await updateText("Shopping.md", (text) => toggleShoppingItem(text, itemText, checked));
+  await updateText("Shopping.md", (text) => toggleShoppingItem(text, shoppingLine(itemId), itemText, checked));
   performance.mark("mep:shopping:check-settled", { detail: {
     generation: ++checkGeneration, itemId, checked,
     presentationIdentifier: `mep:shopping-check:${itemId}:${checked ? "checked" : "unchecked"}`,
@@ -46,4 +54,13 @@ export async function toggleShopping(itemText: string, itemId: string, checked: 
 export async function copyShoppingList(): Promise<void> {
   await navigator.clipboard.writeText(shoppingPlainText(await readText("Shopping.md")));
 }
-export const saveRecipe = (path: string, text: string): Promise<void> => writeText(path, text);
+export async function saveRecipe(path: string, base: string, draft: string): Promise<MergeResult> {
+  let merged: MergeResult | null = null;
+  await updateText(path, (current) => {
+    merged = mergeText(base, draft, current);
+    return merged.text;
+  });
+  if (!merged) throw new Error("Recipe update did not run.");
+  return merged;
+}
+export const deleteRecipe = (path: string): Promise<void> => remove(path);

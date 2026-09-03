@@ -1,4 +1,5 @@
 import * as React from "react";
+import { mergeText, type MergeResult } from "@/kitchen/merge";
 import { parseIngredientsSection } from "@/modules/cooking/services/recipe-section-parsing";
 import { formatCookLogDate, parseCookLog } from "@/modules/cooking/services/RecipeLogService";
 import {
@@ -19,18 +20,13 @@ type RecipeViewProps = RecipeImageResources & {
   title: string;
   content: string;
   mode?: "full" | "rendered";
-  onSave?: (nextContent: string) => Promise<void>;
+  onSave?: (baseContent: string, nextContent: string) => Promise<MergeResult>;
+  onDelete?: () => Promise<void>;
 };
 
 export type RecipeViewHandle = {
   flushSave: () => Promise<void>;
 };
-
-export class RecipeWriteDiscardedError extends Error {
-  constructor(readonly content: string) {
-    super("Recipe changes discarded after write conflict.");
-  }
-}
 
 const AUTOSAVE_DEBOUNCE_MS = 350;
 
@@ -72,7 +68,7 @@ function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; 
   );
 }
 
-type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error" | "conflict-discarded";
+type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
 const LazyRecipeEditor = React.lazy(() => import("./RecipeEditor").then((module) => ({ default: module.RecipeEditor })));
 let recipeMarkdownModule: Promise<typeof import("./RecipeMarkdown")> | null = null;
@@ -125,6 +121,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   content,
   mode = "full",
   onSave,
+  onDelete,
   resolveImage
 }: RecipeViewProps, ref): React.ReactElement {
   const [draft, setDraft] = React.useState(content);
@@ -132,42 +129,47 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const [checkedIngredients, setCheckedIngredients] = React.useState<Set<number>>(new Set());
   const [checkedSteps, setCheckedSteps] = React.useState<Set<number>>(new Set());
   const [saveState, setSaveState] = React.useState<RecipeSaveState>("clean");
+  const [mergeConflict, setMergeConflict] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState(false);
   const [editorResetRevision, setEditorResetRevision] = React.useState(0);
   const [selectionGeneration] = React.useState(() => ++nextRecipeSelectionGeneration);
   const isMountedRef = React.useRef(false);
   const autosaveTimerRef = React.useRef<number | null>(null);
   const lastSavedDraftRef = React.useRef(content);
   const draftRef = React.useRef(content);
-  const contentRef = React.useRef(content);
-  const awaitingHostEchoRef = React.useRef<string | null>(null);
   const saveInFlightRef = React.useRef<Promise<void> | null>(null);
 
   const flushSave = React.useCallback(() => {
     if (!onSave || draftRef.current === lastSavedDraftRef.current) return Promise.resolve();
     if (saveInFlightRef.current) return saveInFlightRef.current;
     const operation = (async () => {
+      let operationHadConflict = false;
       while (draftRef.current !== lastSavedDraftRef.current) {
+        const baseContent = lastSavedDraftRef.current;
         const nextContent = draftRef.current;
         if (isMountedRef.current) setSaveState("saving");
         try {
-          await onSave(nextContent);
-          lastSavedDraftRef.current = nextContent;
-          awaitingHostEchoRef.current = contentRef.current === nextContent ? null : nextContent;
-        } catch (error) {
-          const discarded = error instanceof RecipeWriteDiscardedError;
-          if (discarded) {
-            draftRef.current = error.content;
-            lastSavedDraftRef.current = error.content;
-            if (isMountedRef.current) {
-              setDraft(error.content);
-              setEditorResetRevision((revision) => revision + 1);
-            }
+          const result = await onSave(baseContent, nextContent);
+          const pendingDraft = draftRef.current;
+          const rebased = pendingDraft === nextContent
+            ? result
+            : mergeText(nextContent, pendingDraft, result.text);
+          operationHadConflict ||= result.conflicts > 0 || rebased.conflicts > 0;
+          lastSavedDraftRef.current = result.text;
+          draftRef.current = rebased.text;
+          if (isMountedRef.current) {
+            setDraft(rebased.text);
+            if (rebased.text !== pendingDraft) setEditorResetRevision((revision) => revision + 1);
           }
-          if (isMountedRef.current) setSaveState(discarded ? "conflict-discarded" : "error");
+        } catch (error) {
+          if (isMountedRef.current) setSaveState("error");
           throw error;
         }
       }
-      if (isMountedRef.current) setSaveState("saved");
+      if (isMountedRef.current) {
+        setMergeConflict(operationHadConflict);
+        setSaveState("saved");
+      }
     })().finally(() => { saveInFlightRef.current = null; });
     saveInFlightRef.current = operation;
     return operation;
@@ -199,12 +201,6 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const directions = React.useMemo(() => parseDirectionsSection(parsed.body), [parsed.body]);
 
   React.useEffect(() => {
-    contentRef.current = content;
-    const awaitingHostEcho = awaitingHostEchoRef.current;
-    if (awaitingHostEcho !== null) {
-      if (content !== awaitingHostEcho) return;
-      awaitingHostEchoRef.current = null;
-    }
     if (draftRef.current !== lastSavedDraftRef.current) {
       if (content === draftRef.current) {
         lastSavedDraftRef.current = content;
@@ -212,8 +208,10 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       }
       return;
     }
+    const previousDraft = draftRef.current;
     setDraft(content);
     draftRef.current = content;
+    if (isEditing && previousDraft !== content) setEditorResetRevision((revision) => revision + 1);
     // Ticks are keyed by index: only reset when the incoming content genuinely adds, removes,
     // or reorders ingredients/steps. An edit (e.g. a typo fix, or the autosave echo of one)
     // that leaves both lists element-wise identical must not wipe what the cook already ticked.
@@ -300,22 +298,41 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     [mode, bodyWithoutHero, body]
   );
   const readDocument = <PreparedRecipeDocument markdown={readMarkdown} path={path} resolveImage={resolveImage} />;
-  const editor = isEditing ? (
+  const updateDraft = React.useCallback((nextMarkdown: string) => {
+    setDraft(composeMarkdown(parsed.rawFrontmatter, nextMarkdown));
+  }, [parsed.rawFrontmatter]);
+  const hasConflictMarkers = draft.includes("<<<<<<< this device\n")
+    && draft.includes("\n=======\n")
+    && draft.includes("\n>>>>>>>>");
+  const editor = isEditing ? hasConflictMarkers ? (
+    <div className="recipe-view__editor">
+      <div className="recipe-view__editor-actions"><button type="button" onClick={() => setIsEditing(false)}>Done</button></div>
+      <textarea
+        className="recipe-view__conflict-editor"
+        aria-label="Recipe markdown with merge conflicts"
+        value={editorMarkdown}
+        onChange={(event) => updateDraft(event.currentTarget.value)}
+      />
+    </div>
+  ) : (
     <React.Suspense fallback={null}>
       <LazyRecipeEditor
         key={`${path}:${editorResetRevision}`}
         path={path}
         markdown={editorMarkdown}
-        onChange={(nextMarkdown: string) => {
-          setDraft(composeMarkdown(parsed.rawFrontmatter, nextMarkdown));
-        }}
+        onChange={updateDraft}
         onClose={() => setIsEditing(false)}
       />
     </React.Suspense>
   ) : readDocument;
   const saveIndicator = onSave && saveState !== "clean" ? (
     <div className="recipe-view__save-state" role="status" data-save-state={saveState}>
-      {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "conflict-discarded" ? "Changes discarded" : saveState === "error" ? "Could not save changes" : "Unsaved changes"}
+      {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Could not save changes" : "Unsaved changes"}
+    </div>
+  ) : null;
+  const conflictNotice = mergeConflict ? (
+    <div className="recipe-view__save-state" role="status" data-merge-conflict="true">
+      Both versions kept where edits overlapped; look for the marked lines.
     </div>
   ) : null;
 
@@ -324,6 +341,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       <div className={`recipe-view__rendered-content ${isEditing ? "is-editing" : ""}`}>
         <div className="recipe-view__mdx">{editor}</div>
         {saveIndicator}
+        {conflictNotice}
         {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
       </div>
     </section>
@@ -340,6 +358,14 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
                   : meta.source?.label}
               </span>
               {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
+              {onDelete && !isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => {
+                if (!window.confirm(`Delete ${resolvedTitle.trim()}?`)) return;
+                setDeleteError(false);
+                void flushSave().then(onDelete).catch((error) => {
+                  setDeleteError(true);
+                  console.error("Could not delete recipe", { path, error });
+                });
+              }}>Delete recipe</button> : null}
             </div>
           </div>
           {hero && heroUrl && heroIdentifier ? <RecipeHero url={heroUrl} alt={hero.alt} timingIdentifier={heroIdentifier} /> : null}
@@ -421,6 +447,8 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
           </>
         )}
         {saveIndicator}
+        {conflictNotice}
+        {deleteError ? <div className="recipe-view__save-state" role="status">Could not delete recipe.</div> : null}
       </div>
     </section>
   );

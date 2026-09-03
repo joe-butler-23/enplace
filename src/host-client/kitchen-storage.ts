@@ -8,11 +8,14 @@ import {
 } from "../kitchen/doc";
 
 export type KitchenStatus = "local-only" | "connecting" | "connected" | "offline";
+export type FirstSyncState = "synced" | "unreachable";
 export type OpenKitchenOptions = {
   id: string;
   relayUrl: string | null;
   persist?: boolean;
   seed?: (doc: Y.Doc) => Promise<void> | void;
+  deferRelayUntilLocalWrite?: boolean;
+  onFirstLocalWrite?: () => void;
   WebSocketPolyfill?: typeof WebSocket;
 };
 export type KitchenConnection = {
@@ -20,11 +23,14 @@ export type KitchenConnection = {
   doc: Y.Doc;
   adapter: VaultStorageAdapter;
   relayUrl: string | null;
+  hasLocalCopy: boolean;
+  firstSync: Promise<FirstSyncState>;
   status: () => KitchenStatus;
   onStatus: (listener: (status: KitchenStatus) => void) => () => void;
   close: () => Promise<void>;
 };
 const LOCAL_ORIGIN = Symbol("enplace-kitchen-local-write");
+const FIRST_SYNC_SAFETY_DEADLINE_MS = 5_000;
 const databaseName = (id: string): string => `enplace-kitchen-${id}`;
 const blobPart = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
 
@@ -33,10 +39,24 @@ export async function openKitchen(options: OpenKitchenOptions): Promise<KitchenC
   const persistence = options.persist !== false && typeof indexedDB !== "undefined"
     ? new IndexeddbPersistence(databaseName(options.id), doc) : null;
   if (persistence) await persistence.whenSynced;
-  if (options.seed && kitchenFiles(doc).size === 0) await options.seed(doc);
+  const hasLocalCopy = kitchenFiles(doc).size > 0;
+  if (options.seed && !hasLocalCopy) await options.seed(doc);
   const listeners = new Set<(status: KitchenStatus) => void>();
-  let status: KitchenStatus = options.relayUrl ? "connecting" : "local-only";
+  const deferredRelay = Boolean(options.relayUrl && options.deferRelayUntilLocalWrite);
+  let status: KitchenStatus = options.relayUrl && !deferredRelay ? "connecting" : "local-only";
   let provider: WebsocketProvider | null = null;
+  let localWriteListener: ((transaction: Y.Transaction) => void) | null = null;
+  let firstSyncDeadline: ReturnType<typeof setTimeout> | null = null;
+  let firstSyncSettled = false;
+  let settleFirstSync!: (state: FirstSyncState) => void;
+  const firstSync = new Promise<FirstSyncState>((resolve) => { settleFirstSync = resolve; });
+  const finishFirstSync = (state: FirstSyncState): void => {
+    if (firstSyncSettled) return;
+    firstSyncSettled = true;
+    if (firstSyncDeadline !== null) clearTimeout(firstSyncDeadline);
+    firstSyncDeadline = null;
+    settleFirstSync(state);
+  };
   let closed = false;
   const write = (path: string, bytes: Uint8Array): void => writeKitchenBytes(doc, path, bytes, LOCAL_ORIGIN);
   const adapter: VaultStorageAdapter = {
@@ -82,20 +102,45 @@ export async function openKitchen(options: OpenKitchenOptions): Promise<KitchenC
     status = next;
     listeners.forEach((listener) => listener(next));
   };
-  if (options.relayUrl) {
+  const connectRelay = (): void => {
+    if (!options.relayUrl || provider || closed) return;
+    setStatus("connecting");
     provider = new WebsocketProvider(options.relayUrl, options.id, doc, {
       connect: false, WebSocketPolyfill: options.WebSocketPolyfill,
     });
-    provider.on("status", ({ status: next }) => setStatus(next === "disconnected" ? "offline" : next));
+    provider.on("sync", (synced: boolean) => {
+      if (synced) finishFirstSync("synced");
+    });
+    provider.on("status", ({ status: next }) => {
+      setStatus(next === "disconnected" ? "offline" : next);
+      if (next === "disconnected") finishFirstSync("unreachable");
+    });
+    // This deadline only bounds the wait if the transport emits neither sync nor disconnect.
+    firstSyncDeadline = setTimeout(() => finishFirstSync("unreachable"), FIRST_SYNC_SAFETY_DEADLINE_MS);
     provider.connect();
+  };
+  if (!options.relayUrl) finishFirstSync("unreachable");
+  if (deferredRelay || options.onFirstLocalWrite) {
+    localWriteListener = (transaction: Y.Transaction): void => {
+      if (transaction.origin !== LOCAL_ORIGIN || transaction.changed.size === 0) return;
+      doc.off("afterTransaction", localWriteListener!);
+      localWriteListener = null;
+      options.onFirstLocalWrite?.();
+      if (deferredRelay) connectRelay();
+    };
+    doc.on("afterTransaction", localWriteListener);
   }
+  if (options.relayUrl && !deferredRelay) connectRelay();
   return {
-    id: options.id, doc, adapter, relayUrl: options.relayUrl,
+    id: options.id, doc, adapter, relayUrl: options.relayUrl, hasLocalCopy, firstSync,
     status: () => status,
     onStatus(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async close() {
       if (closed) return;
       closed = true;
+      if (localWriteListener) doc.off("afterTransaction", localWriteListener);
+      localWriteListener = null;
+      finishFirstSync("unreachable");
       provider?.destroy();
       if (provider) setStatus("offline");
       await persistence?.destroy();

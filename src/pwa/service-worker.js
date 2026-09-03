@@ -24,18 +24,33 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
+    // Cache-first: a warm launch must paint from the cached shell without waiting on the
+    // network. The shell is refreshed in the background; a new version activates through
+    // the normal update path.
     event.respondWith((async () => {
-      try {
-        const response = await fetch(request);
-        if (response.ok) return response;
-      } catch {
-        // Fall through to the cached app shell while offline.
-      }
       const cache = await caches.open(CACHE_NAME);
-      return (await cache.match("/")) || (await cache.match("/index.html")) || Response.error();
+      const cached = (await cache.match("/")) || (await cache.match("/index.html"));
+      const refresh = fetch(request).then(async (response) => {
+        if (response.ok) await cache.put("/", response.clone());
+        return response;
+      });
+      if (cached) {
+        event.waitUntil(refresh.catch(() => undefined));
+        return cached;
+      }
+      try { return await refresh; } catch { return Response.error(); }
     })());
     return;
   }
 
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+  // Assets: cache-first, and anything fetched on demand (lazy chunks, sample files) is
+  // cached for next time, so the precache can stay small.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok && url.pathname.startsWith("/assets/")) event.waitUntil(cache.put(request, response.clone()));
+    return response;
+  })());
 });

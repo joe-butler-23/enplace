@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { MergeResult } from "@/kitchen/merge";
 import { RecipeView, type RecipeViewHandle } from "./RecipeView";
 
 class PreviewErrorBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
@@ -12,7 +13,7 @@ export type PreviewPaneProps = {
   path: string | null; content: string; isRecipe: boolean; width: number; revision: number;
   recipeRef: React.RefObject<RecipeViewHandle | null>;
   onClose: () => void; onWidth: (width: number) => void;
-  onSave: (text: string) => Promise<void>; resolveImage: (path: string, source: string) => string | null;
+  onSave: (baseContent: string, nextContent: string) => Promise<MergeResult>; resolveImage: (path: string, source: string) => string | null;
 };
 export function PreviewPane(props: PreviewPaneProps): React.JSX.Element {
   const { path, content, isRecipe, width, revision, recipeRef, onClose, onWidth, onSave, resolveImage } = props;

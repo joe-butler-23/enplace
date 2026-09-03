@@ -16,6 +16,7 @@ import {
   writeKitchenBytes,
   writeKitchenText,
 } from "../src/kitchen/doc.js";
+import { mergeText } from "../src/kitchen/merge.js";
 
 export const MIRROR_ORIGIN = Symbol("mep-mirror");
 
@@ -24,105 +25,6 @@ const INITIAL_SYNC_DEADLINE_MS = 15_000;
 const MAX_PATH_SYNC_RETRIES = 8;
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
-
-type MergeHunk = {
-  start: number;
-  end: number;
-  lines: string[];
-};
-
-function splitLines(text: string): string[] {
-  return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-}
-
-function diffHunks(base: string[], next: string[]): MergeHunk[] {
-  const lengths = Array.from({ length: base.length + 1 }, () => new Uint32Array(next.length + 1));
-  for (let left = base.length - 1; left >= 0; left -= 1) {
-    for (let right = next.length - 1; right >= 0; right -= 1) {
-      lengths[left][right] = base[left] === next[right]
-        ? lengths[left + 1][right + 1] + 1
-        : Math.max(lengths[left + 1][right], lengths[left][right + 1]);
-    }
-  }
-
-  const hunks: MergeHunk[] = [];
-  let left = 0;
-  let right = 0;
-  let hunk: MergeHunk | null = null;
-  const finishHunk = (): void => {
-    if (hunk) hunks.push(hunk);
-    hunk = null;
-  };
-  const currentHunk = (): MergeHunk => {
-    hunk ??= { start: left, end: left, lines: [] };
-    return hunk;
-  };
-
-  while (left < base.length || right < next.length) {
-    if (left < base.length && right < next.length && base[left] === next[right]) {
-      finishHunk();
-      left += 1;
-      right += 1;
-    } else if (
-      right < next.length
-      && (left === base.length || lengths[left][right + 1] >= lengths[left + 1][right])
-    ) {
-      currentHunk().lines.push(next[right]);
-      right += 1;
-    } else {
-      currentHunk().end += 1;
-      left += 1;
-    }
-  }
-  finishHunk();
-  return hunks;
-}
-
-function hunksOverlap(left: MergeHunk, right: MergeHunk): boolean {
-  const leftInsertion = left.start === left.end;
-  const rightInsertion = right.start === right.end;
-  if (leftInsertion && rightInsertion) return left.start === right.start;
-  if (leftInsertion) return left.start > right.start && left.start < right.end;
-  if (rightInsertion) return right.start > left.start && right.start < left.end;
-  return Math.max(left.start, right.start) < Math.min(left.end, right.end);
-}
-
-function mergePeerText(baseText: string, diskText: string, kitchenText: string): string {
-  if (diskText === kitchenText) return diskText;
-  if (diskText === baseText) return kitchenText;
-  if (kitchenText === baseText) return diskText;
-
-  const base = splitLines(baseText);
-  const disk = diffHunks(base, splitLines(diskText));
-  const kitchen: MergeHunk[] = [];
-  for (const kitchenHunk of diffHunks(base, splitLines(kitchenText))) {
-    const samePosition = disk.find((diskHunk) =>
-      diskHunk.start === diskHunk.end
-      && kitchenHunk.start === kitchenHunk.end
-      && diskHunk.start === kitchenHunk.start,
-    );
-    if (samePosition) {
-      const diskLines = new Set(samePosition.lines);
-      samePosition.lines.push(...kitchenHunk.lines.filter((line) => !diskLines.has(line)));
-    } else if (!disk.some((diskHunk) => hunksOverlap(diskHunk, kitchenHunk))) {
-      kitchen.push(kitchenHunk);
-    }
-  }
-  const hunks = [...disk, ...kitchen].sort((left, right) =>
-    left.start - right.start
-    || Number(left.start !== left.end) - Number(right.start !== right.end)
-    || left.end - right.end,
-  );
-
-  const output: string[] = [];
-  let cursor = 0;
-  for (const hunk of hunks) {
-    output.push(...base.slice(cursor, hunk.start), ...hunk.lines);
-    cursor = Math.max(cursor, hunk.end);
-  }
-  output.push(...base.slice(cursor));
-  return output.join("");
-}
 
 type MirrorOptions = {
   folder: string;
@@ -391,20 +293,22 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
 
     if (localChanged && diskBytes !== null) {
       if (docBytes !== null && isTextPath(relative)) {
-        const merged = mergePeerText(
+        const merged = mergeText(
           baseline === null ? "" : decoder.decode(baseline),
           decoder.decode(diskBytes),
           decoder.decode(docBytes),
         );
-        const mergedBytes = encoder.encode(merged);
+        const mergedBytes = encoder.encode(merged.text);
         await mkdir(path.dirname(file), { recursive: true });
         await rejectSymlinks(folder, relative);
         if (!await replaceFileIfCurrent(file, mergedBytes, diskBytes, docStillCurrent)) return retry();
         if (!docStillCurrent()) return retry();
-        writeKitchenText(doc, relative, merged, MIRROR_ORIGIN);
+        writeKitchenText(doc, relative, merged.text, MIRROR_ORIGIN);
         const currentBytes = readKitchenBytes(doc, relative)!;
         rememberBaseline(relative, currentBytes);
-        log(`merged local changes with kitchen for ${relative}`, true);
+        log(merged.conflicts > 0
+          ? `merged local changes with kitchen for ${relative}; kept ${merged.conflicts} conflict${merged.conflicts === 1 ? "" : "s"}`
+          : `merged local changes with kitchen for ${relative}`, true);
         return;
       }
 
