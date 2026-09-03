@@ -89,12 +89,14 @@ describe("PWA route", () => {
     }
   });
 
-  it("serves only the installed index shell for offline navigation", async () => {
+  it("serves the canonical installed shell for offline navigation", async () => {
     const worker = await readFile(new URL("../pwa/service-worker.js", import.meta.url), "utf8");
+    const build = await readFile(new URL("../../vite.config.ts", import.meta.url), "utf8");
 
-    expect(worker).toContain('cache.match("/index.html", { ignoreVary: true })');
-    expect(worker).not.toContain('cache.match("/")');
-    expect(worker).not.toContain('cache.put("/"');
+    expect(worker).toContain('cache.match("/", { ignoreVary: true })');
+    expect(worker).not.toContain('cache.match("/index.html"');
+    expect(build).toContain('const files = new Set(["/", "/manifest.webmanifest"');
+    expect(build).not.toContain('const files = new Set(["/index.html"');
   });
 
   it("releases the compact desktop sidebar width for the mobile shopping header", async () => {

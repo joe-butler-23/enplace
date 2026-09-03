@@ -28,7 +28,7 @@ self.addEventListener("fetch", (event) => {
     // assets always come from the same release.
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match("/index.html", { ignoreVary: true });
+      const cached = await cache.match("/", { ignoreVary: true });
       if (cached) return cached;
       try { return await fetch(request); } catch { return Response.error(); }
     })());
