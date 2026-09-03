@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useEffectEvent } from "@/shared/use-effect-event";
 import Pikaday from "pikaday";
 
 interface UsePikadayDatePickerOptions {
@@ -30,8 +31,8 @@ export function usePikadayDatePicker(
 	} = options;
 
 	const pickerRef = React.useRef<Pikaday | null>(null);
-	const handleSelect = React.useEffectEvent(onSelect);
-	const handleClose = React.useEffectEvent(onClose);
+	const handleSelect = useEffectEvent(onSelect);
+	const handleClose = useEffectEvent(onClose);
 	const selectedDateKey = selectedDate?.getTime() ?? null;
 
 	React.useEffect(() => {

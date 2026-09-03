@@ -116,8 +116,15 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
+        "react/jsx-runtime": "preact/jsx-runtime",
+        "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
+        "react-dom/client": "preact/compat/client",
+        "react-dom/server": "preact/compat/server",
+        "react-dom/test-utils": "preact/test-utils",
+        "react-dom": "preact/compat",
+        "react": "preact/compat",
       },
-      dedupe: ["react", "react-dom"],
+      dedupe: ["preact"],
     },
     define: {
       __MEP_DEV__: JSON.stringify(mode === "development"),

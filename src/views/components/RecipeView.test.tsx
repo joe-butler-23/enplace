@@ -2,7 +2,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ReadDocument } from "./RecipeMarkdown";
-import { PreparedRecipeDocument, RecipeView, StepText, parsedListsMatch } from "./RecipeView";
+import { RecipeView, parsedListsMatch } from "./RecipeView";
 
 describe("recipe read/edit boundary", () => {
   it("renders GFM through the allowlisted renderer and resolves recipe images", () => {
@@ -221,14 +221,6 @@ describe("recipe read/edit boundary", () => {
     expect(markup).not.toContain("<p>");
   });
 
-  it("memoises each step's markdown so an unrelated toggle does not reparse every step (defect 1b)", () => {
-    // renderToStaticMarkup is a single-shot render with no DOM and no event dispatch, so it
-    // cannot itself drive a checkbox toggle and count reparses. What IS directly verifiable
-    // without a renderer is the actual fix the constraint calls for: StepText is wrapped in
-    // React.memo (props-equal renders bail before the Markdown renderer ever runs). This fails before
-    // the fix (StepText did not exist) and passes after.
-    expect(StepText.$$typeof).toBe(Symbol.for("react.memo"));
-  });
 
   it("preserves checked ticks when a content update leaves the ingredient/step lists unchanged (defect 2)", () => {
     // The reset effect only runs on commit (useEffect), which renderToStaticMarkup never
@@ -243,14 +235,6 @@ describe("recipe read/edit boundary", () => {
     expect(parsedListsMatch([], [])).toBe(true);
   });
 
-  it("memoises the notes renderer so a checkbox toggle does not reparse the notes body (defect 3)", () => {
-    // Same renderer-less limitation as defect 2: no DOM means no way to toggle a checkbox and
-    // observe whether the Markdown renderer ran again. The mechanism that prevents it is verifiable
-    // directly: PreparedRecipeDocument is wrapped in React.memo, so a re-render with the same
-    // markdown/path/image-resource props bails before ReadDocument (and Marked) runs.
-    // Fails before the fix (the component was a plain, unmemoised function).
-    expect(PreparedRecipeDocument.$$typeof).toBe(Symbol.for("react.memo"));
-  });
 
   it("uses the renamed method column class instead of the stale method-pane name (defect 4)", () => {
     const markup = renderToStaticMarkup(

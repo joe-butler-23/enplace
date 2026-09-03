@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useEffectEvent } from "@/shared/use-effect-event";
 import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import { importPastedRecipe, PasteRecipeInput } from "../../recipe-import/paste-import";
 
@@ -221,7 +222,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     }
   }, [recipes, isPending, sourceError, state.sort, semanticReadyQueryKey, totalCount]);
 
-  const onSearchChangeEvent = React.useEffectEvent(onSearchChange);
+  const onSearchChangeEvent = useEffectEvent(onSearchChange);
   const selectedTags = React.useMemo(() => new Set(state.tags), [state.tags]);
 
   React.useEffect(() => {

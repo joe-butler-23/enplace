@@ -32,7 +32,7 @@ describe("recipe database source errors", () => {
 
     expect(markup).toContain('role="alert"');
     expect(markup).toContain(
-      "Configured recipe source &#x27;cooking/recipes&#x27; does not exist under the current vault root."
+      "Configured recipe source 'cooking/recipes' does not exist under the current vault root."
     );
     expect(markup).not.toContain("No recipes yet");
   });
@@ -82,7 +82,7 @@ describe("recipe database empty collection", () => {
   it("keeps recipe card actions semantically separate from the mark checkbox", () => {
     const recipe = [{ path: "recipes/test.md", title: "Test recipe", marked: false }];
     const markup = renderDatabase({ recipes: recipe, totalCount: 1 });
-    expect(markup).toContain("<article class=\"cooking-db__card\"");
+    expect(markup).toMatch(/<article[^>]*class="cooking-db__card"/);
     expect(markup).toContain("class=\"cooking-db__card-open\"");
     expect(markup).not.toContain('role="button"');
   });

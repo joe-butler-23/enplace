@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useEffectEvent } from "@/shared/use-effect-event";
 import {
   closestCenter,
   DndContext,
@@ -329,7 +330,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     [resolveCover]
   );
 
-	const saveMarkedWidth = React.useEffectEvent((width: number) => {
+	const saveMarkedWidth = useEffectEvent((width: number) => {
 		onSaveMarkedWidth?.(width);
 	});
 	const isResizingMarked = resizeSession !== null;

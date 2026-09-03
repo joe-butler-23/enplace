@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import * as React from "react";
-import { act } from "react";
+import { act } from "preact/test-utils";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openKitchen, type KitchenConnection } from "../host-client/kitchen-storage";

@@ -252,7 +252,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const meta = React.useMemo(() => buildRecipeMeta(parsed.frontmatter), [parsed.frontmatter]);
   const cookLog = React.useMemo(() => parseCookLog(parsed.body), [parsed.body]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!onSave || draft === lastSavedDraftRef.current) return;
     draftRef.current = draft;
     setSaveState("dirty");
