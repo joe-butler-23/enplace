@@ -303,3 +303,5 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .mep-vault-gate__card { width: min(520px, 100%); padding: clamp(24px, 5vw, 48px); border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); }
 .mep-vault-gate h1 { margin: 0 0 16px; font-family: "Fraunces Variable", Georgia, serif; font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1; }
 .mep-vault-gate p { line-height: 1.55; }
+.mep-view { display: contents; }
+.mep-view[hidden] { display: none; }

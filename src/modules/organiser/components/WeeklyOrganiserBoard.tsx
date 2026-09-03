@@ -1,10 +1,31 @@
 import * as React from "react";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Plan, Recipe, RecipePlanning } from "@/core";
 import { createWeeklyOrganiserConfig } from "../boards/weeklyOrganiserConfig";
-import { useKanbanBoard } from "../hooks/useKanbanBoard";
 import { usePikadayDatePicker } from "../hooks/usePikadayDatePicker";
 import { OrganiserItem } from "../types";
-import { buildBoardEntries } from "../kanban/buildBoardsData";
+import { buildBoardEntries, type BoardEntry } from "../kanban/buildBoardsData";
+import {
+  laneClassNameFor,
+  resolveOrganiserDrop,
+} from "../kanban/dropPolicy";
 import {
 	appendCookLogEntryToFile,
 	CookLogEntryInput,
@@ -37,9 +58,9 @@ import {
 	type OrganiserToolbarWeekNav,
 } from "./OrganiserToolbar";
 import { WeeklyReviewPanel } from "./WeeklyReviewPanel";
-import { WeeklyKanbanSurface } from "./WeeklyKanbanSurface";
+import type { ColumnDefinition } from "../types/kanban-config";
 import type { ReviewEntry } from "./WeeklyReviewPanel";
-import type { PlannerOrderStore } from "../utils/planner-order";
+import { plannerOrderKey, type PlannerOrderStore } from "../utils/planner-order";
 import { selectWeeklyShoppingRecipePaths } from "../utils/weekly-shopping-selection";
 import type {
 	PlannerBoardIdentity,
@@ -77,6 +98,141 @@ type MarkedColumnResizeSession = {
 	startWidth: number;
 };
 
+type PlannerDrag = {
+  entryId: string;
+  filePath: string;
+  sourceColumnId: string;
+  duplicate: boolean;
+};
+
+type PlannerCardProps = {
+  entry: BoardEntry<OrganiserItem>;
+  coverUrl: string;
+  overlay?: boolean;
+  onOpen?: (event: React.MouseEvent, path: string) => void;
+  onRemove?: (path: string, sourceColumnId: string) => void;
+};
+
+const RECIPE_ICON = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+    <path d="M7 2v20" />
+    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+  </svg>
+);
+
+function PlannerCard({ entry, coverUrl, overlay = false, onOpen, onRemove }: PlannerCardProps): React.JSX.Element {
+  const sortable = useSortable({
+    id: overlay ? `overlay:${entry.entryId}` : entry.entryId,
+    data: { type: "card", laneId: entry.columnId, entry },
+    disabled: overlay,
+  });
+  const handleProps = overlay ? {} : { ...sortable.attributes, ...sortable.listeners };
+  const transform = sortable.isDragging ? undefined : CSS.Transform.toString(sortable.transform);
+  return (
+    <div
+      ref={overlay ? undefined : sortable.setNodeRef}
+      className={`kanban-item organiser-card--recipe-card${overlay ? " is-drag-overlay" : ""}${sortable.isDragging ? " is-dragging" : ""}`}
+      data-eid={entry.entryId}
+      {...(!overlay ? ({ elementtiming: `mep:planner-card:${entry.entryId}` } as React.HTMLAttributes<HTMLDivElement>) : {})}
+      style={{ transform, visibility: sortable.isDragging ? "hidden" : undefined }}
+    >
+      <div className="organiser-card-content">
+        <button
+          className="card-remove-btn"
+          data-kanban-action="remove-recipe"
+          title="Unschedule recipe"
+          aria-label="Unschedule recipe"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove?.(entry.filePath, entry.columnId);
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        {coverUrl ? (
+          <div
+            className="card-cover"
+            {...handleProps}
+            style={{ touchAction: "none" }}
+            onClick={(event) => onOpen?.(event, entry.filePath)}
+          >
+            <img src={coverUrl} alt={entry.item.title} decoding="async" draggable={false} />
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className="card-open-btn card-header"
+          aria-label={`Open ${entry.item.title}`}
+          {...(!coverUrl ? handleProps : {})}
+          style={!coverUrl ? { touchAction: "none" } : undefined}
+          onClick={(event) => onOpen?.(event, entry.filePath)}
+        >
+          {RECIPE_ICON}
+          <span
+            className="card-title"
+            {...(!overlay ? ({ elementtiming: `mep:planner-card-title:${entry.entryId}` } as React.HTMLAttributes<HTMLSpanElement>) : {})}
+          >
+            {entry.item.title}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type PlannerLaneProps = {
+  column: ColumnDefinition;
+  index: number;
+  entries: BoardEntry<OrganiserItem>[];
+  resolveCover: (entry: BoardEntry<OrganiserItem>) => string;
+  onOpen: (event: React.MouseEvent, path: string) => void;
+  onRemove: (path: string, sourceColumnId: string) => void;
+};
+
+function PlannerLane({ column, index, entries, resolveCover, onOpen, onRemove }: PlannerLaneProps): React.JSX.Element {
+  const { setNodeRef } = useDroppable({ id: column.id, data: { type: "lane", laneId: column.id } });
+  const densityClass = column.id !== "marked" && entries.length > 1 ? " kanban-board--multi-recipe" : "";
+  const headerClass = laneClassNameFor(column.id);
+  return (
+    <div
+      ref={setNodeRef}
+      className={`kanban-board${densityClass}`}
+      data-id={column.id}
+      data-order={index + 1}
+      style={{
+        width: "100%",
+        marginLeft: "0px",
+        marginRight: "0px",
+        gridRow: column.gridRow,
+        gridColumn: column.gridColumn,
+      }}
+    >
+      <header className={`kanban-board-header${headerClass ? ` ${headerClass}` : ""}`}>
+        <div className="kanban-title-board" dangerouslySetInnerHTML={{ __html: column.title }} />
+      </header>
+      <SortableContext items={entries.map((entry) => entry.entryId)} strategy={verticalListSortingStrategy}>
+        <div className="kanban-drag">
+          {entries.map((entry) => (
+            <PlannerCard
+              key={entry.filePath}
+              entry={entry}
+              coverUrl={resolveCover(entry)}
+              onOpen={onOpen}
+              onRemove={onRemove}
+            />
+          ))}
+        </div>
+      </SortableContext>
+      <footer />
+    </div>
+  );
+}
+
+let nextPlannerDropGeneration = 0;
 
 async function updateScheduledDatesForDrop(
   path: string,
@@ -115,10 +271,7 @@ function normalizeReviewDate(value?: string): string {
 	return normalizeFrontmatterDate(value, { onInvalid: "" }) ?? "";
 }
 
-/**
- * Weekly Organiser Board - jKanban + dragula implementation
- * GPU-accelerated drag-and-drop with zero React overhead during drag
- */
+/** Weekly organiser board rendered by React with dnd-kit pointer dragging. */
 export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   recipes,
   plan,
@@ -156,9 +309,9 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 	const [isReviewOpen, setIsReviewOpen] = React.useState(false);
 	const [reviewEntries, setReviewEntries] = React.useState<ReviewEntry[]>([]);
 	const [isReviewSaving, setIsReviewSaving] = React.useState(false);
-	const refreshColumnsRef = React.useRef<((columnIds?: string[]) => void) | null>(null);
-	const rebuildBoardRef = React.useRef<(() => void) | null>(null);
-	const initialFilterRefreshRef = React.useRef(true);
+  const [activeDrag, setActiveDrag] = React.useState<PlannerDrag | null>(null);
+  const [orderRevision, setOrderRevision] = React.useState(0);
+  const dropQueuesRef = React.useRef(new Map<string, Promise<void>>());
 	const plannerRootRef = React.useRef<HTMLDivElement>(null);
 	const topbarRef = React.useRef<HTMLDivElement>(null);
 	const reviewPanelRef = React.useRef<HTMLDivElement>(null);
@@ -356,11 +509,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
           result: removalResult,
           refreshColumns: ["marked", sourceColumnId],
         });
-        const refreshTargets = new Set<string>(["marked", sourceColumnId]);
-        if (removalResult) {
-          for (const date of removalResult.remainingDates) refreshTargets.add(date);
-        }
-        refreshColumnsRef.current?.([...refreshTargets]);
         if (removalResult && !removalResult.marked) return { deleted: true };
         return;
       }
@@ -379,7 +527,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 	);
 
 	const handleCardClick = React.useCallback(
-		(event: MouseEvent, itemId: string, options?: { split: boolean }) => {
+    (event: React.MouseEvent, itemId: string, options?: { split: boolean }) => {
       if (!recipes.some((recipe) => recipe.path === itemId)) return;
 			const split = options?.split ?? (event.ctrlKey || event.metaKey);
       onOpenFile(itemId, { split });
@@ -481,51 +629,135 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 		}
 	}, [isCalendarOpen, isTimeRowVisible]);
 
-	// jKanban integration - GPU-accelerated drag-and-drop
-	const { containerRef, refreshColumns, rebuild } = useKanbanBoard<OrganiserItem>({
-    recipes,
-    plan,
-    notify,
-		config,
-		elementId: "weekly-organiser-kanban",
-		onDrop: handleDrop,
-		onCardClick: handleCardClick,
-		onRemove: handleRemoveRecipe,
-		runtimeFilter,
-		runtimeSort,
-		resolveCardImageSrc: resolveKanbanImageSrc,
-		logPrefix: "WeeklyOrganiser",
-		plannerOrderPresetId: "weekly",
-		manualOrder: sortBy === "default",
-		refreshDelayMs: 50,
-		clickBlockMs: 500,
-		dragCooldownMs: 300,
-		plannerOrderStore,
-		onBoardReady: handleBoardReady,
-		onBoardError,
-	});
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 5 },
+  }));
 
-	React.useEffect(() => {
-		refreshColumnsRef.current = refreshColumns;
-	}, [refreshColumns]);
+  const renderedEntriesByColumn = React.useMemo(() => {
+    const { entriesByColumn } = buildBoardEntries(recipes, plan, config, {
+      plannerOrderStore,
+      plannerOrderPresetId: "weekly",
+      manualOrder: sortBy === "default",
+    });
+    const rendered = new Map<string, BoardEntry<OrganiserItem>[]>();
+    for (const column of config.columns) {
+      const filtered = (entriesByColumn.get(column.id) ?? []).filter(({ item }) => runtimeFilter(item));
+      rendered.set(column.id, runtimeSort ? [...filtered].sort((a, b) => runtimeSort(a.item, b.item)) : filtered);
+    }
+    return rendered;
+  }, [config, orderRevision, plan, plannerOrderStore, recipes, runtimeFilter, runtimeSort, sortBy]);
 
-	React.useEffect(() => {
-		rebuildBoardRef.current = rebuild;
-	}, [rebuild]);
+  const laneIdentities = React.useMemo<PlannerLaneIdentity[]>(() => config.columns.map((column) => ({
+    id: column.id,
+    cardIds: (renderedEntriesByColumn.get(column.id) ?? []).map((entry) => entry.entryId),
+  })), [config.columns, renderedEntriesByColumn]);
 
+  React.useLayoutEffect(() => {
+    try {
+      handleBoardReady(laneIdentities);
+    } catch (error) {
+      onBoardError?.(error);
+    }
+  }, [handleBoardReady, laneIdentities, onBoardError]);
 
-	// Refresh when sort/filter changes
-	React.useEffect(() => {
-		if (initialFilterRefreshRef.current) {
-			initialFilterRefreshRef.current = false;
-			return;
-		}
-		refreshColumns();
-	}, [
-		sortBy,
-		normalizedSearch,
-		refreshColumns,
-	]);
+  const resolveEntryCover = React.useCallback(
+    (entry: BoardEntry<OrganiserItem>) => resolveKanbanImageSrc(entry.item),
+    [resolveKanbanImageSrc],
+  );
+
+  const handleDragStart = React.useCallback((event: DragStartEvent) => {
+    const entry = event.active.data.current?.entry as BoardEntry<OrganiserItem> | undefined;
+    if (!entry) return;
+    const activator = event.activatorEvent;
+    setActiveDrag({
+      entryId: entry.entryId,
+      filePath: entry.filePath,
+      sourceColumnId: entry.columnId,
+      duplicate: "shiftKey" in activator && Boolean(activator.shiftKey),
+    });
+  }, []);
+
+  const handleDragEnd = React.useCallback((event: DragEndEvent) => {
+    const drag = activeDrag;
+    setActiveDrag(null);
+    if (!drag || !event.over) return;
+    const targetColumnId = String(event.over.data.current?.laneId ?? event.over.id);
+    if (!config.columns.some((column) => column.id === targetColumnId)) return;
+
+    const outcome = resolveOrganiserDrop({
+      cardId: drag.entryId,
+      sourceLaneId: drag.sourceColumnId,
+      targetLaneId: targetColumnId,
+      isTemplate: false,
+      duplicateModifier: drag.duplicate,
+    });
+    if (outcome === "reject" || outcome === "remove") return;
+    const duplicate = outcome === "copy";
+    const targetEntryId = `${drag.filePath}::${targetColumnId}`;
+    const sourceIds = (renderedEntriesByColumn.get(drag.sourceColumnId) ?? []).map((entry) => entry.entryId);
+    const currentTargetIds = (renderedEntriesByColumn.get(targetColumnId) ?? []).map((entry) => entry.entryId);
+    if (duplicate && currentTargetIds.includes(targetEntryId)) return;
+
+    const overIndex = currentTargetIds.indexOf(String(event.over.id));
+    const afterOver = overIndex >= 0
+      && event.active.rect.current.translated !== null
+      && event.active.rect.current.translated.top > event.over.rect.top + event.over.rect.height / 2;
+    const insertionIndex = overIndex < 0
+      ? currentTargetIds.length
+      : Math.min(currentTargetIds.length, overIndex + (afterOver ? 1 : 0));
+
+    let nextSourceIds: string[];
+    let nextTargetIds: string[];
+    if (drag.sourceColumnId === targetColumnId) {
+      const fromIndex = sourceIds.indexOf(drag.entryId);
+      const destination = insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex;
+      const toIndex = Math.max(0, Math.min(sourceIds.length - 1, destination));
+      if (fromIndex < 0 || fromIndex === toIndex) return;
+      nextSourceIds = arrayMove(sourceIds, fromIndex, toIndex);
+      nextTargetIds = nextSourceIds;
+    } else {
+      nextSourceIds = duplicate ? sourceIds : sourceIds.filter((id) => id !== drag.entryId);
+      const existingTargetIndex = currentTargetIds.indexOf(targetEntryId);
+      const targetWithoutEntry = currentTargetIds.filter((id) => id !== targetEntryId);
+      const adjustedInsertionIndex = existingTargetIndex >= 0 && existingTargetIndex < insertionIndex
+        ? insertionIndex - 1
+        : insertionIndex;
+      const targetIndex = Math.min(adjustedInsertionIndex, targetWithoutEntry.length);
+      nextTargetIds = [...targetWithoutEntry.slice(0, targetIndex), targetEntryId, ...targetWithoutEntry.slice(targetIndex)];
+    }
+
+    const previous = dropQueuesRef.current.get(drag.filePath) ?? Promise.resolve();
+    const commit = previous.catch(() => undefined).then(async () => {
+      const result = drag.sourceColumnId === targetColumnId
+        ? undefined
+        : await handleDrop(drag.filePath, targetColumnId, {
+          sourceColumnId: drag.sourceColumnId,
+          duplicate,
+        });
+      if (result?.deleted === true) nextTargetIds = nextTargetIds.filter((id) => id !== targetEntryId);
+      if (sortBy === "default" && plannerOrderStore) {
+        const updates = new Map<string, readonly string[]>();
+        updates.set(plannerOrderKey(config.id, "weekly", drag.sourceColumnId), nextSourceIds);
+        updates.set(plannerOrderKey(config.id, "weekly", targetColumnId), nextTargetIds);
+        await plannerOrderStore.replaceMany(updates);
+        setOrderRevision((value) => value + 1);
+      }
+      performance.mark("mep:planner:drop-settled", { detail: {
+        generation: ++nextPlannerDropGeneration,
+        itemId: drag.filePath,
+        sourceLaneId: drag.sourceColumnId,
+        targetLaneId: targetColumnId,
+        targetEntryId,
+        presentationIdentifier: `mep:planner-card-title:${targetEntryId}`,
+      }});
+    }).catch((error) => {
+      console.error("[WeeklyOrganiser] Failed to move recipe", error);
+      notify("Could not move recipe. Please try again.");
+    }).finally(() => {
+      if (dropQueuesRef.current.get(drag.filePath) === commit) dropQueuesRef.current.delete(drag.filePath);
+    });
+    dropQueuesRef.current.set(drag.filePath, commit);
+  }, [activeDrag, config.columns, config.id, handleDrop, notify, plannerOrderStore, renderedEntriesByColumn, sortBy]);
 
 	const handleColumnNoteAction = React.useCallback(
 		async (event: React.MouseEvent, date: string) => {
@@ -779,7 +1011,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 				if (!sourceColumnId || !targetColumnId) return;
 				event.preventDefault();
 				void handleDrop(resolveFilePathFromItemId(card.dataset.eid), targetColumnId, { sourceColumnId })
-					.then(() => refreshColumnsRef.current?.([sourceColumnId, targetColumnId]))
 					.catch(() => notify("Could not move recipe. Please try again."));
 				return;
 			}
@@ -860,6 +1091,10 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 		]
 	);
 
+  const overlayEntry = activeDrag
+    ? (renderedEntriesByColumn.get(activeDrag.sourceColumnId) ?? []).find((entry) => entry.entryId === activeDrag.entryId)
+    : undefined;
+
 	return (
 		<div
 			ref={plannerRootRef}
@@ -901,10 +1136,45 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 					onClickCapture={handleKanbanClickCapture}
 					onKeyDownCapture={handleKanbanKeyDownCapture}
 			>
-				<WeeklyKanbanSurface
-					id="weekly-organiser-kanban"
-					containerRef={containerRef}
-				/>
+        <div
+          id="weekly-organiser-kanban"
+          className={`weekly-organiser-kanban-host${activeDrag ? " is-board-dragging" : ""}`}
+        >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveDrag(null)}
+          >
+            <div className="kanban-container">
+              {config.columns.map((column, index) => (
+                <PlannerLane
+                  key={column.id}
+                  column={column}
+                  index={index}
+                  entries={renderedEntriesByColumn.get(column.id) ?? []}
+                  resolveCover={resolveEntryCover}
+                  onOpen={handleCardClick}
+                  onRemove={(path, sourceColumnId) => {
+                    void handleRemoveRecipe(path, { sourceColumnId }).catch(() =>
+                      notify("Could not remove recipe. Please try again."),
+                    );
+                  }}
+                />
+              ))}
+            </div>
+            <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
+              {overlayEntry ? (
+                <PlannerCard
+                  entry={overlayEntry}
+                  coverUrl={resolveEntryCover(overlayEntry)}
+                  overlay
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </div>
 				<div
 					className={`marked-col-resizer${
 						isResizingMarked ? " is-resizing" : ""

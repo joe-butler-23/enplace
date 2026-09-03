@@ -32,7 +32,7 @@ Success means the kitchen document remains the sole authority; recipe provenance
 
 - Use Node 22 and `npm ci` for a clean dependency install. Build the optional CLI with `npm run build:cli`; run TypeScript checks directly and use the configured Playwright command for browser work.
 - Never use the live vault as a test fixture. Use isolated data for importer, browser, and file-write tests.
-- Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` and `docs/kanban-core-contract.md` for planner work, and `docs/engineering-guardrails.md` for verification.
+- Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` for planner work, and `docs/engineering-guardrails.md` for verification.
 
 ## Verification
 

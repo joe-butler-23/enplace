@@ -1,7 +1,13 @@
-import type { DropOutcome, ResolveDropContext } from "@/kanban-core";
+export type DropOutcome = "move" | "copy" | "remove" | "reject";
+export type ResolveDropContext = {
+  cardId: string;
+  sourceLaneId?: string;
+  targetLaneId: string;
+  isTemplate: boolean;
+  duplicateModifier: boolean;
+};
 
-// The organiser module supplies its own drop, lane, and action policy to
-// kanban-core, keeping those decisions separate from board mechanics.
+// The organiser keeps its drop, lane, and action policy separate from board rendering.
 
 export const MARKED_COLUMN_ID = "marked";
 const MARKED_LANE_CLASS = "kanban-board--marked";
@@ -24,9 +30,7 @@ export function resolveOrganiserDrop(ctx: ResolveDropContext): DropOutcome {
 }
 
 // Decorates rendered lane elements with organiser-specific recipe-density
-// classing. Operates on lane elements directly, so it needs no jKanban-instance
-// API (kanban.findBoard), only the DOM the core hands back after a build or
-// patch flush.
+// classing.
 export function decorateRenderedLanes(elements: Map<string, HTMLElement>, laneIds: string[]): void {
 	for (const laneId of laneIds) {
 		if (laneId === MARKED_COLUMN_ID) continue;

@@ -27,8 +27,6 @@ fi
   cd "${ROOT_DIR}"
   npm run typecheck
   npm test
-  npm run test:kanban-provenance
-  npm run test:kanban-client
   npm run test:static-pwa
 )
 

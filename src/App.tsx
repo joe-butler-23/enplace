@@ -181,6 +181,10 @@ function App(): React.JSX.Element | null {
   const plannerLoad = React.useRef<Promise<void> | null>(null);
   const [plannerCapability, setPlannerCapability] = React.useState<PlannerCapability>({ status: "idle" });
   const plannerReady = plannerCapability.status === "ready";
+  // The database stays mounted once shown, hidden rather than removed, so returning to it never
+  // recreates its cover images and never paints a partial frame.
+  const [databaseSeen, setDatabaseSeen] = React.useState(activeView === "database");
+  React.useEffect(() => { if (activeView === "database") setDatabaseSeen(true); }, [activeView]);
   const [plannerTransition, setPlannerTransition] = React.useState(0);
   const transitionRef = React.useRef(0);
   const [plannerIdentity, setPlannerIdentity] = React.useState<PlannerBoardIdentity | null>(null);
@@ -398,7 +402,7 @@ function App(): React.JSX.Element | null {
       {plannerError && activeView !== "planner" ? <div className="mep-planner-intent-error" role="alert"><span>Planner failed to load: {plannerError}</span><button type="button" className="mep-button mep-button--ghost" onClick={retryPlanner}>Retry planner</button></div> : null}
       {activeView === "planner" && plannerError ? <div {...({ className: "mep-loading", "data-planner-capability-status": plannerCapability.status, "data-planner-dataset-status": "ready", elementtiming: PLANNER_METADATA_PLACEHOLDER_TIMING } as React.HTMLAttributes<HTMLDivElement>)}><div>Planner failed to load: {plannerError}</div><button type="button" className="mep-button mep-button--ghost" onClick={retryPlanner}>Retry planner</button></div> : null}
       {activeView === "planner" && plannerReady ? <PlannerKitchenView key={plannerBoardRevision} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} markedWidth={settings.weeklyOrganiserMarkedWidth} onSaveMarkedWidth={(width) => updateSettings({ weeklyOrganiserMarkedWidth: normalizeWeeklyColumnMinWidth(width) })} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} onBoardReady={handlePlannerReady} onBoardError={handlePlannerError} /> : null}
-      {activeView === "database" ? <DatabaseKitchenView settings={settings} loadView={loadDatabaseView} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /> : null}
+      {databaseSeen ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseKitchenView settings={settings} loadView={loadDatabaseView} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
       {activeView === "shopping" ? <ShoppingKitchenView plan={shoppingPlan} busy={shoppingBusy} error={shoppingError} onApply={() => { if (shoppingPlan) void shoppingWork(() => applyShoppingPlan(shoppingPlan)).then(() => setShoppingPlan(null)); }} onCheck={handleCheckShopping} onRefresh={() => undefined} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} /> : null}
       {activeView === "recipe" && activeFile ? <RecipeKitchenView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
       {settingsOpen ? <SettingsDialog settings={settings} onChange={updateSettings} onClose={closeSettings} /> : null}

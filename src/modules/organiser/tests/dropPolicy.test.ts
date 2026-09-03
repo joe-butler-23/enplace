@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ResolveDropContext } from "@/kanban-core";
+import type { ResolveDropContext } from "../kanban/dropPolicy";
 import {
 	MARKED_COLUMN_ID,
 	decorateRenderedLanes,

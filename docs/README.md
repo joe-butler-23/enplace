@@ -7,8 +7,6 @@ This folder contains active implementation-facing documentation.
 - `repo-architecture.md`: module boundaries and ownership.
 - `cooking-domain-contract.md`: cooking data contracts.
 - `weekly-planner-behaviour.md`: weekly planner behaviour.
-- `kanban-core-contract.md`: kanban board DOM/data contract.
-- `kanban-core-adapter-guide.md`: app adaptation of the kanban contract.
 - `engineering-guardrails.md`: debugging, layout, and verification guardrails.
 
 ## Documentation Policy

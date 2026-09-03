@@ -37,7 +37,10 @@ interface CookingDatabaseProps {
 
 const MIN_CARD_WIDTH_FLOOR = 160;
 const DEFAULT_CARD_MIN_WIDTH = 220;
-const SAMPLE_COVER_WIDTHS = [224, 672, 1288] as const;
+// Card covers stop at 2x density: 672 px serves a 323 px phone card at 2.1x, and a 3x
+// photograph is not distinguishable from a 2x one at that pixel pitch (decision 2026-09-03).
+// The 1288 px files stay for the recipe hero, which renders the full viewport width.
+const SAMPLE_COVER_WIDTHS = [224, 672] as const;
 const CARD_COVER_SIZES = [
   "(max-width: 516px) calc(100vw - 67px)",
   "(max-width: 720px) calc((100vw - 81px) / 2)",

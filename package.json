@@ -1,7 +1,7 @@
 {
   "name": "enplace",
   "version": "0.1.0",
-  "description": "Enplace — local-first cooking app.",
+  "description": "Enplace \u2014 local-first cooking app.",
   "engines": {
     "node": ">=22"
   },
@@ -19,8 +19,6 @@
     "setup:hooks": "./scripts/install-git-hooks.sh",
     "preflight:release": "./scripts/preflight-release.sh",
     "test:static-pwa": "playwright test --config=playwright.static-pwa.config.ts",
-    "test:kanban-client": "playwright test --config=playwright.kanban-client.config.ts",
-    "test:kanban-provenance": "node --test scripts/kanban-provenance-check.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -34,7 +32,9 @@
   },
   "license": "MIT",
   "dependencies": {
-    "dragula": "^3.7.3",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "fflate": "^0.8.3",
     "marked": "^18.0.11",
     "pikaday": "^1.8.2",
@@ -47,7 +47,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@types/dragula": "^3.7.5",
     "@types/node": "^25.2.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.13",

@@ -1,6 +1,5 @@
 node_modules
 dist/
-dist-kanban-client/
 main.js
 .obsidian/
 .DS_Store
