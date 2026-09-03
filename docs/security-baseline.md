@@ -1,58 +1,58 @@
-# Security Baseline (Self-Hosted Web App)
+# Security Baseline
 
-Enplace ships as a self-hosted web application: `scripts/start-web-host.mjs`
-serves the built frontend and the vault API, optionally published to a private
-tailnet through Tailscale Serve. There is no native app surface and no
-internet-facing multi-tenant deployment.
+Enplace is a static PWA. It has no backend logic, accounts, or native sidecar.
+Cloudflare Pages serves only the built application. The one network peer is a
+y-websocket relay that stores and fans out kitchen documents; it runs no
+Enplace code and the app treats it as untrusted transport.
 
-## Filesystem Boundary
+## Kitchen Boundary
 
-- The host server process owns the only real filesystem access:
-  - the mounted vault root (`~/Enplace` by default; host-managed, not
-    client-selectable), and
-  - the host app-data directory (`~/.mep-web-host` by default) for settings,
-    shopping-list state, the activity ledger, and thumbnail caches.
-- Browser clients never touch the filesystem directly. They call the host HTTP
-  API (`/api/*`) with a bearer token issued when the server injects its runtime
-  configuration into the served `index.html`.
-- Path handling resolves and confines every request path under its root;
-  traversal outside the vault or the dist directory is rejected.
+- A kitchen is addressed by 130 random bits carried in the URL fragment, which
+  browsers never send with the page request, so the static host never sees it.
+  The relay does: the id is the room name in the WebSocket path, so relay
+  access logs hold it, and a relay operator can open any kitchen it hosts until
+  end-to-end encryption lands. Anyone holding the link holds the kitchen;
+  sharing the link is the sharing model, and the Settings panel says so.
+- The kitchen document is the sole authority for user content and state. Every
+  device keeps its own full copy in IndexedDB; the relay keeps a copy for
+  fan-out. Clearing browser storage removes this device's copy only.
+- The relay URL is configured at build time with `VITE_ENPLACE_RELAY_URL`, so a
+  household can build the app against a relay it runs itself. The
+  Content-Security-Policy allows `wss:` connections only.
+- Export is always available as a zip of plain files, and `mep mirror` keeps a
+  folder replica, so no data is reachable only through the app.
+- End-to-end encryption of the document with the key in the fragment is a
+  planned follow-up; until then the relay operator can read kitchen content.
 
-## Transport and Access
+## Static Deployment Boundary
 
-- The server binds to loopback by default. Remote access goes through
-  `tailscale serve`, which supplies an identity header the host requires before
-  it accepts a non-loopback Host name. Funnel (public) traffic is rejected.
-- Session tokens are delivered with `HttpOnly; SameSite=Strict` cookies scoped
-  to the thumbnail route plus bearer headers for the API.
-- The application requires no third-party API credentials. Recipe extraction
-  runs in the active agent and reaches the product only through the
-  provider-free `mep recipe import` gate.
+Cloudflare Pages builds with Node 22 using `npm run build:static` and publishes
+`dist-static`. The deployment contains HTML, JavaScript, CSS, images, the web
+manifest, and the service worker only. There is no server process or API.
+
+`public/_redirects` maps browser navigation routes to `index.html`. The service
+worker precaches the application shell and uses cached `index.html` when a
+navigation fails or returns a non-success response. It does not cache or upload
+kitchen contents.
 
 ## Security Headers
 
-Every served response carries the security baseline set in
-`scripts/start-web-host.mjs` (`SECURITY_HEADERS`):
+`public/_headers` applies these headers to every static response:
 
-- `Content-Security-Policy`: `default-src 'self'; script-src 'self';
-  style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:;
-  connect-src 'self'; font-src 'self' data:; media-src 'self' data: blob:;
-  object-src 'none'; frame-ancestors 'none'; base-uri 'self';
-  form-action 'self'`
+- `Content-Security-Policy`: `default-src 'self'; script-src 'self'; style-src
+  'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:;
+  frame-ancestors 'none'; object-src 'none'; base-uri 'self'`
 - `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
 - `Referrer-Policy: no-referrer`
 
-This re-expresses the CSP that previously lived in the native window config for
-a same-origin web runtime: no `asset:`/`ipc:` schemes exist any more, and all
-app traffic (API calls, server-sent events, thumbnails) is same-origin. Static
-assets are additionally served gzip-compressed when the client advertises
-support, so the bundle budget applies to what clients actually download.
+Scripts and connections are same-origin only, and dynamic code generation is not allowed.
+Inline styles remain allowed because the built `index.html` contains its small
+initial-page style and the UI uses inline style attributes. Images may also come
+from local blobs and data URLs. The app cannot be framed, load plugins, or
+change its base URL.
 
 ## Verification
 
-- `npm run precommit` runs the provider-residue lint (no credentials or
-  third-party providers in the repo).
-- `nix-shell --run './scripts/preflight-release.sh'` runs typecheck, unit and
-  workspace Rust tests, dependency audit, the perceptual budgets, and prints
-  the hosted-surface checks to complete manually.
+Build with `npm run build:static`, then confirm `_headers` and `_redirects` are
+present in `dist-static`. Browser verification must serve those headers, load
+the app, reload it offline, and open a deep link such as `/shopping`.

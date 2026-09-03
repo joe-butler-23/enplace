@@ -180,11 +180,6 @@ Acceptance criteria:
     `scheduledDates`)
   - date-column resolution from mixed scheduling fields
   - drag intent resolution logic (`move` vs `generator-copy`)
-- Deterministic web diagnostic:
-  - `tests/diagnostics/shift-drag.spec.ts` via
-    `playwright.diagnostics.config.ts`
-  - relies on seeded `/home/vault` shim fixture data in web mode
-  - emits before/after board snapshots plus debug log stream
 - Regression tests:
   - multi-day single-note appears in each target day column
   - no duplicate file creation for shift-copy

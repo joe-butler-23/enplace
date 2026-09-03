@@ -8,5 +8,4 @@ export * from "./selectors";
 export * from "./patcher";
 export * from "./refresh-scheduler";
 export * from "./resolve-drop";
-export * from "./image-loader";
 export * from "./adopt";

@@ -1,7 +1,5 @@
-node_modules/
+node_modules
 dist/
-dist-web/
-dist-kanban-core/
 dist-kanban-client/
 main.js
 .obsidian/
@@ -9,18 +7,12 @@ main.js
 *.log
 *.lock
 !package-lock.json
-!/Cargo.lock
 data.json
 coverage/
 tmp/
 backups/
-src-tauri/gen/
-src-tauri/target/
-target/
 test-results/
 playwright-report/
-src-tauri/updater.key
-src-tauri/updater.key.pub
 .opencode/
 .worktrees/
 result-bin
@@ -36,3 +28,5 @@ result-bin
 .beads/
 .claude/
 .codex/
+dist-static/
+dist-cli/

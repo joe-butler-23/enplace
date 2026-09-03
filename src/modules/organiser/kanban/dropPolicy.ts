@@ -8,9 +8,6 @@ const MARKED_LANE_CLASS = "kanban-board--marked";
 const MULTI_RECIPE_LANE_CLASS = "kanban-board--multi-recipe";
 const RECIPE_CARD_SELECTOR = ".kanban-item.organiser-card--recipe-card";
 
-/** Action name emitted by organiserCardTemplate.ts's recipe-remove button
- * (`data-kanban-action`) and matched by useKanbanBoard.ts's onAction
- * handler — defined once so the two sides can never drift. */
 export const REMOVE_RECIPE_ACTION = "remove-recipe";
 
 /** Lane-class config: only the marked column carries a structural class. */
@@ -18,14 +15,10 @@ export function laneClassNameFor(columnId: string): string {
 	return columnId === MARKED_COLUMN_ID ? MARKED_LANE_CLASS : "";
 }
 
-// MEP's drop policy:
-//  - dropping a card on marked never duplicates: a reminder is removed from
-//    view (the drop still persists, e.g. marking it done), any other type is
-//    a plain move ("duplicate blocked to marked");
-//  - elsewhere, the duplicate modifier produces a real copy.
+// MEP's drop policy keeps marked moves singular and permits a real copy in day lanes.
 export function resolveOrganiserDrop(ctx: ResolveDropContext): DropOutcome {
 	if (ctx.targetLaneId === MARKED_COLUMN_ID) {
-		return String(ctx.cardType ?? "").toLowerCase() === "reminder" ? "remove" : "move";
+		return "move";
 	}
 	return ctx.duplicateModifier ? "copy" : "move";
 }

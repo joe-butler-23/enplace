@@ -12,12 +12,6 @@ export type ReviewEntry = {
   include: boolean;
 };
 
-type CoverImageProps = {
-  src: string;
-  onLoadImage?: (path: string) => Promise<string | null>;
-  onGetLoadedImage?: (path: string) => string | undefined;
-};
-
 type WeeklyReviewPanelProps = {
   entries: ReviewEntry[];
   isSaving: boolean;
@@ -26,65 +20,7 @@ type WeeklyReviewPanelProps = {
   onClose: () => void;
   onCompleteWeek: () => void;
   onUpdateEntry: (path: string, updates: Partial<ReviewEntry>) => void;
-  onLoadImage?: (path: string) => Promise<string | null>;
-  onGetLoadedImage?: (path: string) => string | undefined;
 };
-
-function isExternalImageSrc(value: string): boolean {
-  return (
-    value.startsWith("http") ||
-    value.startsWith("blob:") ||
-    value.startsWith("data:") ||
-    value.startsWith("app:")
-  );
-}
-
-function CoverImage({ src, onLoadImage, onGetLoadedImage }: CoverImageProps): React.JSX.Element | null {
-  const [imgSrc, setImgSrc] = React.useState<string | null>(() => {
-    if (!src) return null;
-    if (isExternalImageSrc(src)) {
-      return src;
-    }
-    if (onGetLoadedImage) {
-      return onGetLoadedImage(src) ?? null;
-    }
-    return null;
-  });
-
-  React.useEffect(() => {
-    if (!src) {
-      setImgSrc(null);
-      return;
-    }
-    if (isExternalImageSrc(src)) {
-      setImgSrc(src);
-      return;
-    }
-    const cached = onGetLoadedImage?.(src) ?? null;
-    setImgSrc(cached);
-  }, [src, onGetLoadedImage]);
-
-  React.useEffect(() => {
-    if (!src) return;
-    if (imgSrc) return;
-
-    if (!onLoadImage) {
-      setImgSrc(src);
-      return;
-    }
-
-    let cancelled = false;
-    onLoadImage(src).then((url) => {
-      if (!cancelled && url) setImgSrc(url);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [src, onLoadImage, imgSrc]);
-
-  if (!imgSrc) return null;
-  return <img src={imgSrc} alt="" loading="lazy" aria-hidden="true" />;
-}
 
 export function WeeklyReviewPanel({
   entries,
@@ -94,8 +30,6 @@ export function WeeklyReviewPanel({
   onClose,
   onCompleteWeek,
   onUpdateEntry,
-  onLoadImage,
-  onGetLoadedImage,
 }: WeeklyReviewPanelProps): React.JSX.Element {
   return (
     <div className="weekly-review-panel" ref={panelRef}>
@@ -123,11 +57,7 @@ export function WeeklyReviewPanel({
                 <div className="weekly-review-row-info">
                   {entry.coverUrl ? (
                     <div className="weekly-review-thumb">
-                      <CoverImage
-                        src={entry.coverUrl}
-                        onLoadImage={onLoadImage}
-                        onGetLoadedImage={onGetLoadedImage}
-                      />
+                      <img src={entry.coverUrl} alt="" loading="lazy" aria-hidden="true" />
                     </div>
                   ) : null}
                   <div className="weekly-review-row-title">

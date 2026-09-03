@@ -17,7 +17,6 @@ export type RecipeIndexQuery = {
   sortBy?: RecipeIndexSort;
   filter?: RecipeIndexFilter;
   search?: string;
-  recipesFolder?: string;
   limit?: number;
 };
 
@@ -28,6 +27,7 @@ export type RecipeIndexItem = {
   marked: boolean;
   added: string | null;
   scheduled: string | null;
+  scheduledDates?: string[];
   addedTimestamp: number | null;
   scheduledTimestamp: number | null;
   tags: string[];

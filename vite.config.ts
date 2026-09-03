@@ -1,14 +1,36 @@
 import { defineConfig } from "vite";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import type { Plugin } from "vite";
+
+function appShellServiceWorker(): Plugin {
+  return {
+    name: "enplace-app-shell-service-worker",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const files = new Set(["/", "/index.html", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png", "/icons/icon-512.png"]);
+      for (const output of Object.values(bundle)) files.add(`/${output.fileName}`);
+      const precache = [...files].sort();
+      const version = createHash("sha256").update(precache.join("\n")).digest("hex").slice(0, 12);
+      const template = readFileSync(path.resolve(__dirname, "src/pwa/service-worker.js"), "utf8");
+      this.emitFile({
+        type: "asset",
+        fileName: "sw.js",
+        source: template
+          .replace("__MEP_CACHE_NAME__", `enplace-shell-${version}`)
+          .replace("__MEP_PRECACHE__", JSON.stringify(precache)),
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   return {
+    plugins: [appShellServiceWorker()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
-        obsidian: path.resolve(__dirname, "src/platform.ts"),
-        "@joe-butler-23/ptt-node": path.resolve(__dirname, "src/shims/ptt-node.ts"),
-        "ptt-node": path.resolve(__dirname, "src/shims/ptt-node.ts"),
       },
       dedupe: ["react", "react-dom"],
     },
@@ -29,7 +51,7 @@ export default defineConfig(({ mode }) => {
     base: "/",
     build: {
       target: "es2020",
-      outDir: "dist-web",
+      outDir: "dist-static",
       emptyOutDir: true,
       manifest: true,
       rolldownOptions: {

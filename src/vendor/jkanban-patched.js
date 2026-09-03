@@ -7,6 +7,7 @@
 import dragula from "dragula";
 import { buildJKanbanCardElement } from "../kanban-core/patcher";
 import { classTokens } from "../kanban-core/lifecycle";
+import { KANBAN_ACTION_ATTRIBUTE } from "../kanban-core/selectors";
 
 const defaults = {
 	element: "",
@@ -52,7 +53,7 @@ export default function jKanban(options = {}) {
 		addClasses(header, board.headerClasses);
 		header.innerHTML = `<div class="kanban-title-board">${board.titleHtml}</div>`;
 
-		const cards = document.createElement("main");
+		const cards = document.createElement("div");
 		cards.classList.add("kanban-drag");
 		addClasses(cards, board.bodyClasses);
 		this.boardContainer.push(cards);
@@ -68,9 +69,10 @@ export default function jKanban(options = {}) {
 	this.element.appendChild(container);
 
 	this.drake = dragula(this.boardContainer, {
-		moves: (element) =>
+		moves: (element, _source, handle) =>
 			Boolean(self.options.dragItems) &&
-			!element.classList.contains("not-draggable"),
+			!element.classList.contains("not-draggable") &&
+			!handle.closest(`[${KANBAN_ACTION_ATTRIBUTE}]`),
 		copy(element, source) {
 			return typeof self.options.copyItem === "function"
 				? Boolean(self.options.copyItem(element, source))

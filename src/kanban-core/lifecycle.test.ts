@@ -113,14 +113,14 @@ describe("kanban lifecycle boundary", () => {
   it("reconciles a same-column external drop without a signed move", async () => {
     const onMove = vi.fn();
     const rebuild = vi.fn();
-    await settleExternalDrop({ cardId: "exercise/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-13", sourceOrder: [], targetOrder: [] }, { onMove }, rebuild);
+    await settleExternalDrop({ cardId: "recipe/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-13", sourceOrder: [], targetOrder: [] }, { onMove }, rebuild);
     expect(onMove).not.toHaveBeenCalled();
     expect(rebuild).toHaveBeenCalledOnce();
   });
 
   it("forwards a cross-column external drop to the signed move", async () => {
     const onMove = vi.fn().mockResolvedValue(undefined);
-    await settleExternalDrop({ cardId: "exercise/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-14", sourceOrder: [], targetOrder: [] }, { onMove }, vi.fn());
+    await settleExternalDrop({ cardId: "recipe/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-14", sourceOrder: [], targetOrder: [] }, { onMove }, vi.fn());
     expect(onMove).toHaveBeenCalledOnce();
   });
 
@@ -128,7 +128,7 @@ describe("kanban lifecycle boundary", () => {
     const error = new Error("stale schedule");
     const onMoveError = vi.fn().mockResolvedValue(undefined);
     const rebuild = vi.fn();
-    await settleExternalDrop({ cardId: "exercise/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-14", sourceOrder: [], targetOrder: [] }, { onMove: vi.fn().mockRejectedValue(error), onMoveError }, rebuild);
+    await settleExternalDrop({ cardId: "recipe/a", sourceLaneId: "2026-07-13", targetLaneId: "2026-07-14", sourceOrder: [], targetOrder: [] }, { onMove: vi.fn().mockRejectedValue(error), onMoveError }, rebuild);
     expect(onMoveError).toHaveBeenCalledWith(error, expect.anything());
     expect(rebuild).toHaveBeenCalledOnce();
   });

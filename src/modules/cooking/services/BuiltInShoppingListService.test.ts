@@ -1,45 +1,46 @@
-import { describe, expect, it, vi } from "vitest";
-import { TFile } from "@/platform";
+import { describe, expect, it } from "vitest";
+import { scanRecipes } from "@/core";
 import { BuiltInShoppingListService } from "./BuiltInShoppingListService";
 
+function serviceWith(markdown: Map<string, string>) {
+  const byPath = new Map(scanRecipes([...markdown].map(([path, text]) => ({ path, text })))
+    .map((recipe) => [recipe.path, recipe]));
+  return new BuiltInShoppingListService(async (path) => byPath.get(path) ?? null);
+}
+
 describe("BuiltInShoppingListService", () => {
-  it("loads scheduled recipes in deterministic order and previews Rust aggregation", async () => {
+  it("loads scheduled recipes in deterministic order and previews Markdown aggregation", async () => {
     const recipes = new Map([
-      ["Recipes/b.md", "# B\n\n## Ingredients\n- 1 | onion | produce\n\n## Method\n1. Cook"],
-      ["Recipes/a.md", "# A\n\n## Ingredients\n- 1 | milk | dairy\n\n## Method\n1. Cook"]
+      ["Recipes/b.md", "# B\n\n## Ingredients\n- onion\n\n## Method\n1. Cook"],
+      ["Recipes/a.md", "# A\n\n## Ingredients\n- milk\n\n## Method\n1. Cook"],
     ]);
-    const buildDesiredItems = vi.fn().mockResolvedValue([
-      { content: "milk - 1 (A)", labels: ["dairy"] },
-      { content: "onion - 1 (B)", labels: ["produce"] }
-    ]);
-    const app = {
-      vault: {
-        getAbstractFileByPath: (path: string) =>
-          recipes.has(path)
-            ? new TFile(path, path.split("/").at(-1) ?? path, path, { mtime: 0, size: 0 })
-            : null,
-        read: async (file: TFile) => recipes.get(file.path) ?? ""
-      },
-      metadataCache: { getFileCache: () => null },
-      cookingCapabilities: { buildDesiredItems }
-    };
-    const preview = vi.fn().mockResolvedValue({ baseRevision: 0, items: [] });
 
-    await new BuiltInShoppingListService(app as never, { preview } as never).previewWeek({
+    const preview = await serviceWith(recipes).previewWeek({
       recipePaths: ["Recipes/b.md", "Recipes/a.md", "Recipes/b.md"],
-      weekLabel: "This week"
+      weekLabel: "This week",
     });
 
-    expect(buildDesiredItems.mock.calls[0][0].map((recipe: { path: string }) => recipe.path)).toEqual([
-      "Recipes/a.md",
-      "Recipes/b.md"
-    ]);
-    expect(preview).toHaveBeenCalledWith({
+    expect(preview).toEqual({
       weekLabel: "This week",
-      desiredItems: [
-        { content: "milk - 1 (A)", labels: ["dairy"] },
-        { content: "onion - 1 (B)", labels: ["produce"] }
-      ]
+      items: [
+        { id: "desired:0", content: "milk", labels: [], sources: ["A"], checked: false },
+        { id: "desired:1", content: "onion", labels: [], sources: ["B"], checked: false },
+      ],
     });
+  });
+
+  it("fails closed and names every missing requested recipe", async () => {
+    await expect(serviceWith(new Map()).previewWeek({
+      recipePaths: ["Recipes/missing-b.md", "Recipes/missing-a.md", "Recipes/missing-b.md"],
+      weekLabel: "This week",
+    })).rejects.toThrow("Missing scheduled recipe files: Recipes/missing-a.md, Recipes/missing-b.md");
+  });
+
+  it("fails closed when only part of the requested week can be loaded", async () => {
+    const recipes = new Map([["Recipes/present.md", "# Present\n\n## Ingredients\n- salt"]]);
+    await expect(serviceWith(recipes).previewWeek({
+      recipePaths: ["Recipes/present.md", "Recipes/missing.md"],
+      weekLabel: "This week",
+    })).rejects.toThrow("Missing scheduled recipe files: Recipes/missing.md");
   });
 });

@@ -6,12 +6,12 @@ export type PlannerNavigationIntent = {
 export type PlannerNavigationIntentState = {
   nextGeneration: number;
   pending: PlannerNavigationIntent | null;
-  boardReadyGeneration: number | null;
+  mountReadyGeneration: number | null;
   failure: string | null;
 };
 
 export function createPlannerNavigationIntentState(): PlannerNavigationIntentState {
-  return { nextGeneration: 0, pending: null, boardReadyGeneration: null, failure: null };
+  return { nextGeneration: 0, pending: null, mountReadyGeneration: null, failure: null };
 }
 
 export function requestPlannerNavigation(
@@ -21,7 +21,7 @@ export function requestPlannerNavigation(
   const intent = { generation: state.nextGeneration + 1, history };
   state.nextGeneration = intent.generation;
   state.pending = intent;
-  state.boardReadyGeneration = null;
+  state.mountReadyGeneration = null;
   state.failure = null;
   return intent;
 }
@@ -30,7 +30,7 @@ export function cancelPlannerNavigation(
   state: PlannerNavigationIntentState
 ): void {
   state.pending = null;
-  state.boardReadyGeneration = null;
+  state.mountReadyGeneration = null;
   state.failure = null;
 }
 
@@ -39,7 +39,7 @@ export function failPlannerNavigation(
   message: string
 ): void {
   if (state.pending === null) return;
-  state.boardReadyGeneration = null;
+  state.mountReadyGeneration = null;
   state.failure = message;
 }
 
@@ -47,14 +47,14 @@ export function retryPlannerNavigation(
   state: PlannerNavigationIntentState
 ): void {
   if (state.pending === null) return;
-  state.boardReadyGeneration = null;
+  state.mountReadyGeneration = null;
   state.failure = null;
 }
 
-export function acknowledgePlannerBoardReady(
+export function acknowledgePlannerMountReady(
   state: PlannerNavigationIntentState
 ): void {
-  state.boardReadyGeneration = state.pending?.generation ?? null;
+  state.mountReadyGeneration = state.pending?.generation ?? null;
 }
 
 export function settlePlannerNavigation(
@@ -65,13 +65,13 @@ export function settlePlannerNavigation(
     !datasetReady
     || state.pending === null
     || state.failure !== null
-    || state.boardReadyGeneration !== state.pending.generation
+    || state.mountReadyGeneration !== state.pending.generation
   ) {
     return null;
   }
   const intent = state.pending;
   state.pending = null;
-  state.boardReadyGeneration = null;
+  state.mountReadyGeneration = null;
   state.failure = null;
   return intent;
 }

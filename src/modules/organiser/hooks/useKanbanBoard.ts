@@ -1,15 +1,10 @@
 import * as React from "react";
-import { App, TFile, TAbstractFile } from "@/platform";
+import type { Plan, Recipe } from "@/core";
 import type { BaseKanbanItem, BoardConfig } from "../types/kanban-config";
-import {
-	BoardEntry,
-	buildBoardEntries,
-	resolveBoardEntriesForFile,
-} from "../kanban/buildBoardsData";
-import { ColumnLookup } from "../utils/field-manager";
+import { BoardEntry, buildBoardEntries } from "../kanban/buildBoardsData";
 import {
 	createKanbanDropFailureHandler,
-	createKanbanRemoveHandler,
+	createKanbanOrderFailureHandler,
 } from "../utils/kanban-mutation-handlers";
 import {
 	applyPlannerOrder,
@@ -23,7 +18,6 @@ import {
 	createModifierKeyHandlers,
 	createRefreshScheduler,
 	resolveCardSplitOpen,
-	resolveCardImagesInDom as loadPendingCardImages,
 	resolveDropOutcome,
 	type ClickGate,
 	type DragIntent,
@@ -45,10 +39,13 @@ import type { PlannerLaneIdentity } from "@/standalone/planner-transition-eviden
 
 const plannerCardTimingIdentifier = (entryId: string): string => `mep:planner-card:${entryId}`;
 const plannerCardTitleTimingIdentifier = (entryId: string): string => `mep:planner-card-title:${entryId}`;
+let nextPlannerDropGeneration = 0;
 
 interface UseKanbanBoardOptions<T extends BaseKanbanItem> {
-	app?: App;
-	config: Pick<BoardConfig<T>, "id" | "columns">;
+  recipes: readonly Recipe[];
+  plan: Plan;
+  notify: (message: string) => void;
+	config: Pick<BoardConfig, "id" | "columns">;
 	elementId: string;
 	onDrop?: (
 		itemId: string,
@@ -56,8 +53,6 @@ interface UseKanbanBoardOptions<T extends BaseKanbanItem> {
 		options?: {
 			sourceColumnId?: string;
 			duplicate?: boolean;
-			itemType?: string;
-			itemTitle?: string;
 			order?: {
 				sourceColumnId?: string;
 				targetColumnId: string;
@@ -78,26 +73,12 @@ interface UseKanbanBoardOptions<T extends BaseKanbanItem> {
 		itemId: string,
 		options?: {
 			sourceColumnId?: string;
-			entryId?: string;
 		}
 	) => Promise<void> | void;
-	runtimeFilter?: (
-		item: T,
-		frontmatter: Record<string, unknown>
-	) => boolean;
+  runtimeFilter?: (item: T) => boolean;
 	runtimeSort?: (a: T, b: T) => number;
-	groupBy?: (
-		item: T,
-		frontmatter: Record<string, unknown>
-	) => string | undefined;
-	groupLabel?: (groupId: string) => string;
-	groupOrder?: (a: string, b: string) => number;
-	resolveCardImageSrc?: (item: T) => string;
-	loadCardImageSrc?: (path: string) => Promise<string | null>;
-	getLoadedCardImageSrc?: (path: string) => string | undefined;
+	resolveCardImageSrc: (item: T) => string;
 	logPrefix?: string;
-	logItemErrors?: boolean;
-	presetTypeFilter?: string[];
 	plannerOrderPresetId?: string;
 	plannerOrderStore?: PlannerOrderStore;
 	manualOrder?: boolean;
@@ -124,7 +105,9 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 	options: UseKanbanBoardOptions<T>
 ): UseKanbanBoardResult {
 	const {
-		app,
+    recipes,
+    plan,
+    notify,
 		config,
 		elementId,
 		onDrop,
@@ -132,15 +115,8 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		onRemove,
 		runtimeFilter,
 		runtimeSort,
-		groupBy,
-		groupLabel,
-		groupOrder,
 		resolveCardImageSrc,
-		loadCardImageSrc,
-		getLoadedCardImageSrc,
 		logPrefix = "KanbanBoard",
-		logItemErrors = false,
-		presetTypeFilter,
 		plannerOrderPresetId = config.id,
 		plannerOrderStore: providedPlannerOrderStore,
 		manualOrder = true,
@@ -151,14 +127,9 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		onBoardError,
 	} = options;
 	const [plannerOrderStore] = React.useState<PlannerOrderStore | null>(
-		() => providedPlannerOrderStore ?? (app && manualOrder ? new PlannerOrderStore(app) : null)
+		() => providedPlannerOrderStore ?? (manualOrder ? new PlannerOrderStore() : null)
 	);
 	const plannerOrderStoreRef = React.useRef(plannerOrderStore);
-	React.useEffect(() => {
-		if (!plannerOrderStoreRef.current && app && manualOrder) {
-			plannerOrderStoreRef.current = new PlannerOrderStore(app);
-		}
-	}, [app, manualOrder]);
 
 	const containerRef = React.useRef<HTMLDivElement>(null);
 	const kanbanClientRef = React.useRef<KanbanClient | null>(null);
@@ -199,10 +170,9 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 
 	// Data refs
 	const entriesByItemIdRef = React.useRef<Map<string, BoardEntry<T>>>(new Map());
-	const entryIdsByFilePathRef = React.useRef<Map<string, Set<string>>>(new Map());
 	const entriesByColumnRef = React.useRef<Map<string, BoardEntry<T>[]>>(new Map());
-	const columnLookupRef = React.useRef<ColumnLookup | null>(null);
 	const renderedLanesRef = React.useRef<Map<string, string[]>>(new Map());
+	const pendingRemovalIdsRef = React.useRef(new Set<string>());
 	const onBoardReadyRef = React.useRef(onBoardReady);
 	onBoardReadyRef.current = onBoardReady;
 	const onBoardErrorRef = React.useRef(onBoardError);
@@ -210,33 +180,21 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 	const layoutResizeObserverRef = React.useRef<ResizeObserver | null>(null);
 	const refreshColumnsRef = React.useRef<((columnIds?: string[]) => void) | null>(null);
 
+  const dataRef = React.useRef({ recipes, plan });
+  dataRef.current = { recipes, plan };
+
 	const optionsRef = React.useRef({
 		runtimeFilter,
 		runtimeSort,
-		groupBy,
-		groupLabel,
-		groupOrder,
 		resolveCardImageSrc,
-		loadCardImageSrc,
-		getLoadedCardImageSrc,
 	});
 	React.useEffect(() => {
 		optionsRef.current = {
 			runtimeFilter,
 			runtimeSort,
-			groupBy,
-			groupLabel,
-			groupOrder,
 			resolveCardImageSrc,
-			loadCardImageSrc,
-			getLoadedCardImageSrc,
 		};
 	}, [
-		getLoadedCardImageSrc,
-		groupBy,
-		groupLabel,
-		groupOrder,
-		loadCardImageSrc,
 		resolveCardImageSrc,
 		runtimeFilter,
 		runtimeSort,
@@ -270,21 +228,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		return intent;
 	}, [logPrefix]);
 
-	const resolveCardImagesInDom = React.useCallback((root?: ParentNode) => {
-		const container = root ?? containerRef.current;
-		const loader = optionsRef.current.loadCardImageSrc;
-		if (!container || !loader) return;
-
-		loadPendingCardImages(container, {
-			loadCardImage: loader,
-			onImageUnavailable: (img) => {
-				img.closest(".card-cover")?.classList.add("card-cover--unavailable");
-			},
-			onImageLoadError: (error, rawPath) => {
-				debugLog(logPrefix, "image:load:failed", { rawPath, error });
-			},
-		});
-	}, [logPrefix]);
 
 	const applyColumnLayoutStyles = React.useCallback(
 		(kanban: KanbanClient, columnIds?: string[]) => {
@@ -329,9 +272,8 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 				if (boardElement) elements.set(id, boardElement);
 			}
 			decorateRenderedLanes(elements, ids);
-			for (const element of elements.values()) resolveCardImagesInDom(element);
 		},
-		[config.columns, resolveCardImagesInDom]
+		[config.columns]
 	);
 
 	// Build board data from entries
@@ -354,9 +296,7 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 
 				// Apply filter
 				const filtered = opts.runtimeFilter
-					? entries.filter(({ item, frontmatter }) =>
-							opts.runtimeFilter!(item, frontmatter)
-						)
+					? entries.filter(({ item }) => opts.runtimeFilter!(item))
 					: entries;
 
 				// Apply sort
@@ -364,46 +304,9 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 					? [...filtered].sort((a, b) => opts.runtimeSort!(a.item, b.item))
 					: filtered;
 
-				const cards: KanbanCardData[] = [];
-
-				if (opts.groupBy) {
-					// Group items
-					const grouped = new Map<string, BoardEntry<T>[]>();
-					for (const entry of sorted) {
-						const rawGroup = opts.groupBy(entry.item, entry.frontmatter);
-						const gid = rawGroup && rawGroup.trim().length > 0 ? rawGroup : "Ungrouped";
-						const bucket = grouped.get(gid);
-						if (bucket) {
-							bucket.push(entry);
-						} else {
-							grouped.set(gid, [entry]);
-						}
-					}
-
-					const groupIds = Array.from(grouped.keys());
-					if (opts.groupOrder) {
-						groupIds.sort(opts.groupOrder);
-					} else {
-						groupIds.sort((a, b) => a.localeCompare(b));
-					}
-
-					for (const gid of groupIds) {
-						const label = opts.groupLabel ? opts.groupLabel(gid) : gid;
-						cards.push({
-							id: `__group:${column.id}:${gid}`,
-							html: `<div class="kanban-group-label">${escapeHtml(label)}</div>`,
-							classes: ["kanban-group-header", "not-draggable"],
-						});
-						for (const entry of grouped.get(gid) ?? []) {
-							cards.push(createKanbanItem(entry));
-						}
-					}
-				} else {
-					// No grouping
-					for (const entry of sorted) {
-						cards.push(createKanbanItem(entry));
-					}
-				}
+				const cards = sorted
+					.filter((entry) => !pendingRemovalIdsRef.current.has(entry.entryId))
+					.map(createKanbanItem);
 
 				boards.push({
 					id: column.id,
@@ -419,26 +322,15 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 	);
 
 	const createKanbanItem = (entry: BoardEntry<T>): KanbanCardData => {
-		const classes: string[] = [];
-		if (entry.item.type === "recipe") {
-			classes.push("organiser-card--recipe-card");
-		}
-		const resolvedCoverImage = optionsRef.current.resolveCardImageSrc?.(entry.item);
-		const signature = [
-			entry.item.title,
-			entry.item.type ?? "",
-			resolvedCoverImage ?? entry.item.coverImage ?? "",
-		].join("|");
+		const classes = ["organiser-card--recipe-card"];
+		const resolvedCoverImage = optionsRef.current.resolveCardImageSrc(entry.item);
+		const signature = [entry.item.title, resolvedCoverImage].join("|");
 		const cached = itemHtmlCacheRef.current.get(entry.filePath);
 		let titleHtml: string;
 		if (cached && cached.signature === signature) {
 			titleHtml = cached.html;
 		} else {
-			titleHtml = renderItemHTML(
-				entry.item,
-				resolvedCoverImage,
-				optionsRef.current.getLoadedCardImageSrc
-			);
+			titleHtml = renderItemHTML(entry.item, resolvedCoverImage);
 			itemHtmlCacheRef.current.set(entry.filePath, { signature, html: titleHtml });
 		}
 		const instrumentedTitleHtml = titleHtml.replace(
@@ -452,6 +344,17 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 			elementTimingIdentifier: plannerCardTimingIdentifier(entry.entryId),
 		};
 	};
+
+	const patchBoards = React.useCallback((boards: KanbanBoardData[]): string[] => {
+		const kanban = kanbanClientRef.current;
+		if (!kanban) return [];
+		for (const board of boards) {
+			renderedLanesRef.current.set(board.id, board.cards.map((card) => card.id));
+		}
+		const changedLaneIds = kanban.patchLanes(boards);
+		applyColumnLayoutStyles(kanban, changedLaneIds);
+		return changedLaneIds;
+	}, [applyColumnLayoutStyles]);
 
 	const handleCardMouseDown = React.useCallback((event: MouseEvent, cardId: string) => {
 		const item = (event.target as HTMLElement).closest<HTMLElement>(".kanban-item");
@@ -475,9 +378,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		onCardClick(event, filePath, { split });
 	}, [logPrefix, onCardClick]);
 
-	// Core's onAction delegation (data-kanban-action): the only action name
-	// the organiser module wires up today is the recipe-remove button
-	// (REMOVE_RECIPE_ACTION, from ../kanban/dropPolicy) handles that action.
 	const handleCardAction = React.useCallback((name: string, cardId: string, event: MouseEvent) => {
 		if (name !== REMOVE_RECIPE_ACTION || !onRemove) return;
 		event.stopPropagation();
@@ -485,8 +385,22 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		const item = target.closest<HTMLElement>(".kanban-item");
 		const filePath = resolveFilePathFromItemId(cardId, entriesByItemIdRef.current.get(cardId)?.filePath);
 		const sourceColumnId = item?.closest(".kanban-board")?.getAttribute("data-id") ?? entriesByItemIdRef.current.get(cardId)?.columnId;
-		void createKanbanRemoveHandler(onRemove, logPrefix)(filePath, { sourceColumnId: sourceColumnId ?? undefined, entryId: cardId });
-	}, [logPrefix, onRemove]);
+		if (!sourceColumnId || !entriesByItemIdRef.current.has(cardId)) return;
+
+		pendingRemovalIdsRef.current.add(cardId);
+		patchBoards(buildBoardData([sourceColumnId]));
+		void (async () => {
+			try {
+				await onRemove(filePath, { sourceColumnId });
+			} catch (error) {
+				console.error(`[${logPrefix}] Failed to remove recipe`, error);
+				notify("Could not remove recipe. Please try again.");
+			} finally {
+				pendingRemovalIdsRef.current.delete(cardId);
+				patchBoards(buildBoardData([sourceColumnId]));
+			}
+		})();
+	}, [buildBoardData, logPrefix, notify, onRemove, patchBoards]);
 
 	const publishBoardReady = React.useCallback(() => {
 		onBoardReadyRef.current?.(config.columns.map((column) => ({
@@ -521,7 +435,15 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 						sourceColumnId,
 						targetColumnId,
 						(columnIds) => refreshColumnsRef.current?.(columnIds),
-						logPrefix
+						logPrefix,
+            notify
+					)(error);
+				};
+				const reportOrderFailure = (error: unknown, columnIds: string[]) => {
+					createKanbanOrderFailureHandler(
+						() => refreshColumnsRef.current?.(columnIds),
+						logPrefix,
+            notify
 					)(error);
 				};
 				debugLog(logPrefix, "Initializing jKanban", {
@@ -626,7 +548,7 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 								const entry = entriesByItemIdRef.current.get(cardId);
 								const filePath = resolveFilePathFromItemId(cardId, entry?.filePath);
 								const nextEntryId = `${filePath}::${targetLaneId}`;
-								// The organiser's marked-column/reminder policy
+								// The organiser's marked-column policy
 								// decides move/copy/remove; this handler only carries
 								// out the DOM/persistence mechanics for whichever
 								// outcome comes back.
@@ -637,7 +559,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 										targetLaneId,
 										isTemplate: false,
 										duplicateModifier: intentForDrop.duplicate,
-										cardType: entry?.item.type,
 									},
 									resolveOrganiserDrop
 								);
@@ -678,8 +599,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 								internalDrop(filePath, targetLaneId, {
 									sourceColumnId: intentForDrop.sourceLaneId,
 									duplicate: shouldDuplicate,
-									itemType: entry?.item.type ?? "",
-									itemTitle: entry?.item.title ?? "",
 									order,
 								})
 							)
@@ -711,9 +630,22 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 												ids,
 											] as const)
 										);
-										await store.replaceMany(scopedUpdates);
-										refreshColumnsRef.current?.(Array.from(updates.keys()));
+										const updatedColumns = Array.from(updates.keys());
+										try {
+											await store.replaceMany(scopedUpdates);
+											refreshColumnsRef.current?.(updatedColumns);
+										} catch (error) {
+											reportOrderFailure(error, updatedColumns);
+										}
 									}
+									performance.mark("mep:planner:drop-settled", { detail: {
+										generation: ++nextPlannerDropGeneration,
+										itemId: filePath,
+										sourceLaneId: intentForDrop.sourceLaneId,
+										targetLaneId,
+										targetEntryId: nextEntryId,
+										presentationIdentifier: plannerCardTitleTimingIdentifier(nextEntryId),
+									}});
 								})
 							.catch((err) => {
 								reportDropFailure(
@@ -740,7 +672,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 					presentation: { gutter: "0px", widthBoard: "100%" },
 					onLanesRendered: (laneIds, elements) => {
 						decorateRenderedLanes(elements, laneIds);
-						for (const laneElement of elements.values()) resolveCardImagesInDom(laneElement);
 						publishBoardReady();
 					},
 				});
@@ -788,50 +719,26 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 	// Rebuild from scratch
 	const rebuild = React.useCallback(() => {
 		try {
-			if (!app) throw new Error("Kanban board requires an app");
-			// Rebuild data
-			const {
-				entriesByColumn,
-				entriesByItemId,
-				entryIdsByFilePath,
-				columnLookup,
-			} = buildBoardEntries(
-				app,
-				config as BoardConfig<T>,
-				{
-					logPrefix,
-					logItemErrors,
-					presetTypeFilter,
-					plannerOrderStore: plannerOrderStoreRef.current ?? undefined,
-					plannerOrderPresetId,
-					manualOrder,
-				}
-			);
+      const { entriesByColumn, entriesByItemId } = buildBoardEntries(
+        dataRef.current.recipes,
+        dataRef.current.plan,
+        config,
+        {
+          plannerOrderStore: plannerOrderStoreRef.current ?? undefined,
+          plannerOrderPresetId,
+          manualOrder,
+        },
+      );
 
-			entriesByColumnRef.current = entriesByColumn;
-			entriesByItemIdRef.current = entriesByItemId;
-			entryIdsByFilePathRef.current = entryIdsByFilePath;
-			columnLookupRef.current = columnLookup;
+      entriesByColumnRef.current = entriesByColumn as Map<string, BoardEntry<T>[]>;
+      entriesByItemIdRef.current = entriesByItemId as Map<string, BoardEntry<T>>;
 			itemHtmlCacheRef.current.clear();
-
-			// Reinitialize jKanban; the patcher is reseeded from the freshly
-			// built DOM inside initKanban (snapshotFromDom), so no separate
-			// snapshot/signature reset is needed here.
 			initKanban();
 		} catch (error) {
 			console.error(`[${logPrefix}] Error rebuilding kanban board:`, error);
 			onBoardErrorRef.current?.(error);
 		}
-	}, [
-		app,
-		config,
-		logPrefix,
-		logItemErrors,
-		presetTypeFilter,
-		plannerOrderPresetId,
-		manualOrder,
-		initKanban,
-	]);
+	}, [config, logPrefix, plannerOrderPresetId, manualOrder, initKanban]);
 
 	// The scheduler owns pending-lane batching, the refresh timer, and
 	// drag-cooldown deferral; this flush implementation is what it calls once
@@ -840,14 +747,7 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 	flushRef.current = (laneIds: string[]) => {
 		const refreshStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
 		const boards = buildBoardData(laneIds);
-		const kanban = kanbanClientRef.current;
-		if (!kanban) return;
-		for (const board of boards) {
-			renderedLanesRef.current.set(board.id, board.cards.map((card) => card.id));
-		}
-
-		const changedLaneIds = kanban.patchLanes(boards);
-		applyColumnLayoutStyles(kanban, changedLaneIds);
+		patchBoards(boards);
 		const refreshEndedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
 		debugLog(logPrefix, "refresh:applied", {
 			columns: laneIds,
@@ -871,188 +771,6 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 		refreshColumnsRef.current = refreshColumns;
 	}, [refreshColumns]);
 
-	// Set up file watchers
-	// react-doctor-disable-next-line effect-needs-cleanup
-	React.useEffect(() => {
-		if (!app) return;
-		const removeEntryByPath = (filePath: string): Set<string> => {
-			const entriesByItemId = entriesByItemIdRef.current;
-			const entryIdsByFilePath = entryIdsByFilePathRef.current;
-			const entriesByColumn = entriesByColumnRef.current;
-			const affectedColumns = new Set<string>();
-			const entryIds = entryIdsByFilePath.get(filePath);
-
-			if (!entryIds || entryIds.size === 0) {
-				itemHtmlCacheRef.current.delete(filePath);
-				return affectedColumns;
-			}
-
-			for (const entryId of entryIds) {
-				const existingEntry = entriesByItemId.get(entryId);
-				if (!existingEntry) continue;
-				const columnEntries = entriesByColumn.get(existingEntry.columnId);
-				if (columnEntries) {
-					const index = columnEntries.findIndex((e) => e.entryId === entryId);
-					if (index !== -1) {
-						columnEntries.splice(index, 1);
-					}
-				}
-				entriesByItemId.delete(entryId);
-				affectedColumns.add(existingEntry.columnId);
-			}
-
-			entryIdsByFilePath.delete(filePath);
-			itemHtmlCacheRef.current.delete(filePath);
-			return affectedColumns;
-		};
-
-		const updateEntryForFile = (file: TFile): Set<string> => {
-			const columnLookup = columnLookupRef.current;
-			const entriesByItemId = entriesByItemIdRef.current;
-			const entryIdsByFilePath = entryIdsByFilePathRef.current;
-			const entriesByColumn = entriesByColumnRef.current;
-			const affectedColumns = new Set<string>();
-
-			if (!columnLookup) return affectedColumns;
-
-			const nextEntries = resolveBoardEntriesForFile<T>(
-				app,
-				file,
-				config as BoardConfig<T>,
-				columnLookup,
-				{ logPrefix, logItemErrors, presetTypeFilter }
-			);
-			const existingEntryIds = Array.from(
-				entryIdsByFilePath.get(file.path) ?? new Set<string>()
-			);
-			const nextEntryIdSet = new Set(nextEntries.map((entry) => entry.entryId));
-			const membershipUnchanged =
-				existingEntryIds.length === nextEntries.length &&
-				existingEntryIds.every((entryId) => nextEntryIdSet.has(entryId));
-
-			if (membershipUnchanged) {
-				for (const nextEntry of nextEntries) {
-					const previousEntry = entriesByItemId.get(nextEntry.entryId);
-					if (!previousEntry) continue;
-					const columnEntries = entriesByColumn.get(previousEntry.columnId);
-					const index = columnEntries?.findIndex((entry) => entry.entryId === nextEntry.entryId) ?? -1;
-					if (columnEntries && index >= 0) columnEntries[index] = nextEntry;
-					entriesByItemId.set(nextEntry.entryId, nextEntry);
-					affectedColumns.add(nextEntry.columnId);
-				}
-				return affectedColumns;
-			}
-
-			for (const entryId of existingEntryIds) {
-				const previousEntry = entriesByItemId.get(entryId);
-				if (!previousEntry) continue;
-				const previousColumn = entriesByColumn.get(previousEntry.columnId);
-				if (previousColumn) {
-					const index = previousColumn.findIndex((candidate) => candidate.entryId === entryId);
-					if (index !== -1) {
-						previousColumn.splice(index, 1);
-					}
-				}
-				entriesByItemId.delete(entryId);
-				affectedColumns.add(previousEntry.columnId);
-			}
-
-			if (nextEntries.length === 0) {
-				entryIdsByFilePath.delete(file.path);
-				itemHtmlCacheRef.current.delete(file.path);
-				return affectedColumns;
-			}
-
-			const nextEntryIds = new Set<string>();
-			for (const nextEntry of nextEntries) {
-				const nextColumn = entriesByColumn.get(nextEntry.columnId) ?? [];
-				if (!entriesByColumn.has(nextEntry.columnId)) {
-					entriesByColumn.set(nextEntry.columnId, nextColumn);
-				}
-				nextColumn.push(nextEntry);
-				entriesByItemId.set(nextEntry.entryId, nextEntry);
-				nextEntryIds.add(nextEntry.entryId);
-				affectedColumns.add(nextEntry.columnId);
-			}
-			entryIdsByFilePath.set(file.path, nextEntryIds);
-
-			return affectedColumns;
-		};
-
-		const reconcileOrder = (affected: Set<string>) => {
-			if (!manualOrder || !plannerOrderStoreRef.current || affected.size === 0) return;
-			const updates = new Map<string, string[]>();
-			for (const columnId of affected) {
-				const ordered = applyPlannerOrder(
-					entriesByColumnRef.current.get(columnId) ?? [],
-					plannerOrderStoreRef.current.get(config.id, plannerOrderPresetId, columnId)
-				);
-				updates.set(plannerOrderKey(config.id, plannerOrderPresetId, columnId), ordered.map((entry) => entry.entryId));
-			}
-			void plannerOrderStoreRef.current.reconcileMany(updates).catch((error) => {
-				console.warn(`[${logPrefix}] Failed to reconcile planner order`, error);
-			});
-		};
-
-		const handleMetadataChange = (file: TAbstractFile | string) => {
-			if (!(file instanceof TFile)) return;
-			const affected = updateEntryForFile(file);
-			reconcileOrder(affected);
-			scheduleRefresh(affected);
-		};
-
-		const scheduleRefresh = (affectedColumns: Set<string>) => {
-			if (affectedColumns.size === 0) return;
-			refreshColumns(Array.from(affectedColumns));
-		};
-
-		const handleCreate = (file: TAbstractFile) => {
-			if (!(file instanceof TFile)) return;
-			const affected = updateEntryForFile(file);
-			reconcileOrder(affected);
-			scheduleRefresh(affected);
-		};
-
-		const handleDelete = (file: TAbstractFile) => {
-			if (!(file instanceof TFile)) return;
-			const affected = removeEntryByPath(file.path);
-			reconcileOrder(affected);
-			scheduleRefresh(affected);
-		};
-
-		const handleRename = (file: TAbstractFile, oldPath: string) => {
-			if (!(file instanceof TFile)) return;
-			const affected = new Set<string>();
-			const removed = removeEntryByPath(oldPath);
-			for (const id of removed) affected.add(id);
-			const added = updateEntryForFile(file);
-			for (const id of added) affected.add(id);
-			reconcileOrder(affected);
-			scheduleRefresh(affected);
-		};
-
-		const metadataRef = app.metadataCache.on("changed", handleMetadataChange);
-		const createRef = app.vault.on("create", handleCreate);
-		const deleteRef = app.vault.on("delete", handleDelete);
-		const renameRef = app.vault.on("rename", handleRename);
-
-		return () => {
-			app.metadataCache.offref(metadataRef);
-			app.vault.offref(createRef);
-			app.vault.offref(deleteRef);
-			app.vault.offref(renameRef);
-			schedulerRef.current?.cancel();
-		};
-	}, [
-		app,
-		config,
-		logPrefix,
-		logItemErrors,
-		presetTypeFilter,
-		plannerOrderPresetId,
-		manualOrder,
-		refreshColumns,
-	]);
 
 	// Build synchronously before the first paint when authoritative order is already loaded.
 	// The async branch remains completion-owned for other hosts that have not preloaded it.
@@ -1075,6 +793,24 @@ export function useKanbanBoard<T extends BaseKanbanItem>(
 			destroyKanban();
 		};
 	}, [rebuild, destroyKanban]);
+
+  React.useLayoutEffect(() => {
+    if (!kanbanClientRef.current) return;
+    const { entriesByColumn, entriesByItemId } = buildBoardEntries(
+      recipes,
+      plan,
+      config,
+      {
+        plannerOrderStore: plannerOrderStoreRef.current ?? undefined,
+        plannerOrderPresetId,
+        manualOrder,
+      },
+    );
+    entriesByColumnRef.current = entriesByColumn as Map<string, BoardEntry<T>[]>;
+    entriesByItemIdRef.current = entriesByItemId as Map<string, BoardEntry<T>>;
+    itemHtmlCacheRef.current.clear();
+    patchBoards(buildBoardData());
+  }, [buildBoardData, config, manualOrder, patchBoards, plan, plannerOrderPresetId, recipes]);
 
 	React.useEffect(() => {
 		const updateDuplicateModifierState = (isPressed: boolean) => {

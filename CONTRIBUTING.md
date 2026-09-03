@@ -12,30 +12,43 @@ agent-developed, so the engineering contract lives in agent-readable form.
 
 ## Verification
 
+Contributor tooling and tracked verification scripts are written for Bash. On
+Windows, use Git Bash or WSL for contributing.
+
+Install the tracked hooks once after cloning. This composes Enplace checks with
+the repository's Beads lifecycle hooks when `bd` is available:
+
+```bash
+npm run setup:hooks
+```
+
 Run the cheapest checks that cover your change, and escalate with risk:
 
 ```bash
-npm run precommit        # lint + typecheck + unit tests gate
+npm run precommit        # fast provider/credential-boundary lint
 npm run typecheck
 npm test -- <focused-test>
-nix-shell --run 'cargo test -p <affected-crate>'   # Rust work (Linux)
 ```
 
-Before pushing a normal code tranche, run `npm run prepush`, plus
-`nix-shell --run 'cargo test --workspace'` when Rust or cross-surface
-contracts changed.
+Before pushing a normal code tranche, run `npm run prepush`. It runs the
+publication-residue scan, typecheck, the full Vitest suite, kanban provenance,
+and the static-PWA browser contract.
+At a publication boundary, run the complete Node 22 release gate:
+
+```bash
+nix-shell --run './scripts/preflight-release.sh'
+```
 
 ## Verification plane
 
-Verification is local: the git hooks in [.githooks/](.githooks/) run
-`npm run precommit` on commit and `npm run prepush` before push. There is no
-GitHub Actions CI and there are no release builds; the product runs from a
-clone via [docs/web-host-mode.md](docs/web-host-mode.md).
+Verification is local: the tracked hooks in [.githooks/](.githooks/) run the
+fast commit check and full push gate while preserving Beads hooks. A push hook
+is not a release certificate: the preflight also audits dependencies and the
+static PWA needs the manual browser checks printed by that script.
 
 ## Ground rules
 
 - Recipes and planner content belong to the user's vault; app data and derived
   caches stay in their own lanes. Never treat the live vault as a test fixture.
-- The `mep` CLI is the canonical agent-facing write gate for recipe import.
 - Do not create a second implementation of semantics already owned by a
   contract in [docs/](docs/).

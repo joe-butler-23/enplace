@@ -4,7 +4,7 @@ import { isIsoDateString } from "./scheduled-dates";
 export function selectWeeklyShoppingRecipePaths(
 	entries: Iterable<{
 		filePath: string;
-		item: Pick<OrganiserItem, "type" | "date">;
+		item: Pick<OrganiserItem, "date">;
 	}>,
 	weekStartDate: string,
 	weekEndDate: string
@@ -13,7 +13,6 @@ export function selectWeeklyShoppingRecipePaths(
 	for (const entry of entries) {
 		const scheduledDate = entry.item.date;
 		if (
-			entry.item.type === "recipe" &&
 			isIsoDateString(scheduledDate) &&
 			scheduledDate >= weekStartDate &&
 			scheduledDate <= weekEndDate

@@ -7,20 +7,11 @@ PATTERN='todoist|bridge[ _-]?club|gemini|@google/genai|GoogleGenAI|OPENAI_API_KE
 targets=(
   "$ROOT_DIR/AGENTS.md"
   "$ROOT_DIR/CHANGELOG.md"
-  "$ROOT_DIR/Cargo.toml"
-  "$ROOT_DIR/Cargo.lock"
   "$ROOT_DIR/package.json"
   "$ROOT_DIR/package-lock.json"
   "$ROOT_DIR/.agents"
   "$ROOT_DIR/docs"
-  "$ROOT_DIR/mep-cli"
-  "$ROOT_DIR/mep-core"
-  "$ROOT_DIR/mep-remote-host-helper"
-  "$ROOT_DIR/mep-todoist-sync"
-  "$ROOT_DIR/scripts/start-web-host.mjs"
-  "$ROOT_DIR/scripts/start-web-host.test.mjs"
   "$ROOT_DIR/src"
-  "$ROOT_DIR/src-tauri"
 )
 existing_targets=()
 for target in "${targets[@]}"; do

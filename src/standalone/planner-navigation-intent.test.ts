@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  acknowledgePlannerBoardReady,
+  acknowledgePlannerMountReady,
   cancelPlannerNavigation,
   createPlannerNavigationIntentState,
   failPlannerNavigation,
@@ -10,12 +10,12 @@ import {
 } from "./planner-navigation-intent";
 
 describe("planner navigation intent", () => {
-  it("settles only after authoritative dataset readiness", () => {
+  it("settles only after authoritative mount readiness", () => {
     const state = createPlannerNavigationIntentState();
     const requested = requestPlannerNavigation(state, "push");
     expect(settlePlannerNavigation(state, false)).toBeNull();
     expect(settlePlannerNavigation(state, true)).toBeNull();
-    acknowledgePlannerBoardReady(state);
+    acknowledgePlannerMountReady(state);
     expect(settlePlannerNavigation(state, true)).toEqual(requested);
     expect(settlePlannerNavigation(state, true)).toBeNull();
   });
@@ -24,7 +24,7 @@ describe("planner navigation intent", () => {
     const state = createPlannerNavigationIntentState();
     requestPlannerNavigation(state, "push");
     const latest = requestPlannerNavigation(state, "replace");
-    acknowledgePlannerBoardReady(state);
+    acknowledgePlannerMountReady(state);
     expect(settlePlannerNavigation(state, true)).toEqual(latest);
     requestPlannerNavigation(state, "none");
     cancelPlannerNavigation(state);
@@ -33,12 +33,12 @@ describe("planner navigation intent", () => {
   it("retains a failed intent for a distinct retry", () => {
     const state = createPlannerNavigationIntentState();
     requestPlannerNavigation(state, "push");
-    acknowledgePlannerBoardReady(state);
+    acknowledgePlannerMountReady(state);
     failPlannerNavigation(state, "EACCES");
     expect(settlePlannerNavigation(state, true)).toBeNull();
     expect(state.pending).not.toBeNull();
     retryPlannerNavigation(state);
-    acknowledgePlannerBoardReady(state);
+    acknowledgePlannerMountReady(state);
     expect(settlePlannerNavigation(state, true)?.history).toBe("push");
   });
 

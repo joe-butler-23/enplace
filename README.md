@@ -1,112 +1,60 @@
+> Published snapshot of a private repository, refreshed at each release. Source commit `cf0f0c6d569d`, 2026-09-03.
+
+<p align="center">
+  <img src="docs/enplace-logo.png" alt="" width="260">
+</p>
+
 # Enplace
 
-> Enplace was formerly known as Mise en Place; the `mep` CLI keeps its historical name.
+Enplace is a local-first meal-planning app for turning the recipes you already own into a practical week. Browse recipes, choose what to cook, plan each day, and build the shopping list. Open the link and your kitchen is there; send the link and your household is in it too.
 
-Enplace is a local-first meal-planning app built on the professional kitchen's
-mise en place discipline: get every ingredient prepped and in its place before
-the heat is on. In the app that means your recipe collection is in order before
-the week is, so cooking is execution instead of improvisation.
+**[Open Enplace](https://enplace-trial.pages.dev/)**
 
-The weekly loop:
+<p align="center">
+  <img src="docs/enplace-weekly-loop.gif" alt="Browse recipes, choose meals, plan the week, and build a shopping list in Enplace">
+</p>
 
-1. **Recipe database** — browse, search, and filter your recipes.
-2. **Mark** the recipes you want this week.
-3. **Plan** — drag them onto days on the weekly kanban board.
-4. **Shop** — the built-in shopping list aggregates what you planned.
+## The weekly loop
 
-## Who it's for
+1. Browse or filter your recipes.
+2. Mark what you want to cook this week.
+3. Drag each recipe onto a day in the planner.
+4. Build the shopping list and check items off as you shop.
 
-Home cooks who plan their week and want their recipes somewhere durable:
-people who cook from a rotating set of trusted recipes, shop once, and don't
-want their meal planning held hostage by a web service.
+## Your kitchen
 
-## Your data is yours
+Opening Enplace makes a kitchen and gives it a private link. The kitchen lives on your device and works offline. To use it on another device or with a partner, share the link from Settings; everyone on the link sees the same recipes, plan, and shopping list, and ticks made in the shop appear on the other phone within a moment. There is no account and no sign-in: the link is the key, so treat it like one.
 
-- Recipes are **plain Markdown files** in a folder you own — a standard
-  Obsidian-compatible vault. No proprietary database, no export step: your
-  recipe library is already portable.
-- The app is **local-first**. The self-hosted server reads and writes your
-  folder on your own machine, over loopback or a private tailnet — it is a
-  trusted household runtime, not a cloud service.
-- No account, no telemetry, no lock-in. Stop using Enplace and your recipes
-  are exactly where you left them.
+## Your files
 
-## Quickstart
+Everything is plain Markdown. Download the whole kitchen as a zip from Settings at any time, or run `mep mirror` to keep a folder on disk in step with the kitchen in both directions, so Obsidian, Syncthing, and your own scripts work on ordinary files.
 
-Enplace ships as a build-from-source self-hosted web app with an installable
-PWA client.
+## Adding recipes
 
-Prerequisites: Node.js 22+ and Rust (for the helper binary).
+Paste a recipe as Markdown, import files or a zip from Settings, or let an assistant do the extraction: the `recipe-extraction` skill in this repository produces Enplace Markdown from a link, text, or photo, and `mep add` validates and files it.
+
+## Sharing and sync
+
+Devices sync through a small relay that speaks the Yjs websocket protocol. The hosted app points at one by default; you can run your own with `node scripts/kitchen-relay.mjs` and set `VITE_ENPLACE_RELAY_URL` when building the app. See [docs/relay.md](docs/relay.md).
+
+## Optional CLI
+
+For terminal or agent-assisted workflows, the optional Node 22 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a kitchen. Build it from this repository with `npm run build:cli`; the web app does not require it.
+
+## Development
 
 ```bash
+git clone https://github.com/joe-butler-23/mise-en-place.git
+cd mise-en-place
 npm ci
-npm run build:remote-helper
-npm run host:web
+npm run build:static
+npm run preview
 ```
 
-Then open `http://127.0.0.1:4173/`. Your browser should offer to install
-Enplace as an app; the installed PWA is the full application, with the shared
-shopping list one tap away at `/shopping`.
+Open `http://127.0.0.1:4173/`; a fresh kitchen is created for you. Set `VITE_ENPLACE_RELAY_URL` at build time to sync through a relay.
 
-The host binds to loopback by default. On first start it asks where your vault
-should live and creates `~/Enplace` if you accept the default — or point it at
-an existing Obsidian-compatible folder:
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making changes.
 
-```bash
-npm run host:web -- --vault /path/to/your/vault   # skip the prompt entirely
-```
+The public repository at [github.com/joe-butler-23/enplace](https://github.com/joe-butler-23/enplace) is a snapshot of this one, refreshed at each release by `scripts/publish-public.sh`.
 
-To use it from
-other household devices, publish it over Tailscale — see
-[docs/web-host-mode.md](docs/web-host-mode.md).
-
-### `mep` CLI
-
-The `mep` CLI is the canonical, agent-friendly write gate for recipe import.
-Recipe extraction itself (reading a URL, pasted text, or a photo) is done by
-your coding agent using the bundled
-[recipe-extraction skill](.agents/skills/recipe-extraction/SKILL.md); the
-resulting Markdown is imported through the CLI:
-
-```bash
-cargo build --release -p mep-cli
-./target/release/mep recipe import recipe.md --recipes-dir /path/to/vault/cooking/recipes
-```
-
-There are no prebuilt releases; building the CLI from this clone is the
-supported path.
-
-## Platforms
-
-Enplace runs anywhere its server runs. The host is plain Node.js plus one Rust
-helper binary, so any Linux, macOS, or Windows machine that builds those can
-serve it; clients only need a modern browser.
-
-## Screenshots
-
-TODO: add current screenshots of the recipe database, weekly planner kanban,
-and shopping list views.
-
-## Architecture
-
-Enplace is a React + TypeScript frontend served by an authenticated local web
-host (`scripts/start-web-host.mjs`) over a shared Rust domain core used by the
-host helper and the `mep` CLI. Module ownership and boundaries are documented
-in [docs/repo-architecture.md](docs/repo-architecture.md). Key contracts:
-
-- [docs/cooking-domain-contract.md](docs/cooking-domain-contract.md) — shared cooking semantics across TypeScript and Rust.
-- [docs/mep-cli-contracts.md](docs/mep-cli-contracts.md) — CLI behaviour and data flow.
-- [docs/kanban-core-contract.md](docs/kanban-core-contract.md) and [docs/weekly-planner-behaviour.md](docs/weekly-planner-behaviour.md) — planner behaviour.
-- [docs/web-host-mode.md](docs/web-host-mode.md) — hosted browser runtime and its filesystem boundary.
-- [docs/security-baseline.md](docs/security-baseline.md) — filesystem scope, security headers, and transport baseline.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Engineering principles, verification
-commands, and CI layout live in [AGENTS.md](AGENTS.md).
-
-## Status
-
-Enplace is early, actively developed software, and largely agent-developed.
-Interfaces and behaviour change; the cooking data contracts are the stable
-part. Licensed under the [MIT license](LICENSE).
+Enplace is early, actively developed software. Licensed under the [MIT license](LICENSE).

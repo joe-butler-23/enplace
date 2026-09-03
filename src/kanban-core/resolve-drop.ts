@@ -8,7 +8,6 @@ export type ResolveDropContext = {
 	targetLaneId: string;
 	isTemplate: boolean;
 	duplicateModifier: boolean;
-	cardType?: string;
 };
 
 export type DropOutcome = "move" | "copy" | "remove" | "reject";

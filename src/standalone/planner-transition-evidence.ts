@@ -1,5 +1,4 @@
 export const PLANNER_METADATA_PLACEHOLDER_TIMING = "mep:planner-placeholder:metadata";
-export const PLANNER_SUSPENSE_PLACEHOLDER_TIMING = "mep:planner-placeholder:suspense";
 export type PlannerLaneIdentity = {
   id: string;
   cardIds: string[];

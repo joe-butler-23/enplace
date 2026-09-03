@@ -10,6 +10,8 @@ The default `CONTRACT_SELECTORS` use `data-kanban-lane` for lanes, `data-kanban-
 
 Cards must be direct children of their lane's cards container. Movement indexes are zero-based over those direct card elements after excluding the moving card.
 
+Elements carrying `data-kanban-action` are delegated card actions, never card-open or drag handles. Pointer movement that begins on an action stays in the action lifecycle.
+
 ## Patcher modes
 
 `createBoardPatcher({ container, selectors?, buildCardElement?, onLanesRendered? })` reconciles partial `KanbanLanePatch[]` card data with an existing static lane topology. Empty ids, unknown lanes, duplicate lane ids, and duplicate card ids are contract errors; a partial patch cannot introduce a card retained by an untouched lane. Adding, removing, or renaming lanes requires a fresh render.
@@ -68,9 +70,3 @@ core.destroy();
 The coordinator owns one settlement queue across root generations. A confirmed move caches the resulting source and target orders. A rejected move restores the exact captured orders before reporting `rejected`. An indeterminate move leaves the optimistic DOM visible, does not cache it, and blocks further drops for that root generation until fresh server markup is adopted. Queued work from an older adopted root is fenced before it can mutate the current root or call `onMove`; an in-flight old-root completion resolves `indeterminate` and never calls `onSettled`.
 
 `adopt(newRoot)` treats the new server-rendered root and its lane membership as authoritative. It only reapplies a cached confirmed order among the fresh-server slots occupied by cards still in that lane cache; cards absent from that cache remain anchored in server order, and no card moves between fresh server lanes. An old in-flight move is versioned to the root it started on, so its completion cannot mutate or cache against a newer adopted root.
-
-## Distribution boundary
-
-The core has no React, platform, vendor, or organiser-module imports. `npm run build:kanban-core` emits the minimal adopt coordinator only (`src/kanban-core/adopt-entry.ts`) as one dependency-free ESM vendor file in `dist-kanban-core/`, with the package version and current source state in its banner. Build-mode consumers continue to import the complete internal API from `src/kanban-core/index.ts`.
-
-`npm run build:kanban-client` emits the separate dependency-free client renderer and structural CSS in `dist-kanban-client/`. Its provenance records the exact commit, dirty state, byte count, and SHA-256 digest of both artifacts. The client validates all lane and card identities before replacing an existing render. The client output bundles the patched jKanban renderer and Dragula; the core output does not.

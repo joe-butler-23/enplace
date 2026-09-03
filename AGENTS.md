@@ -1,8 +1,8 @@
 # Purpose — mise-en-place
 
-Enplace is the local-first cooking application and automation surface for recipe import, weekly planning, cooking, and shopping. It provides an authenticated self-hosted web application with an installable PWA client, and the `mep` CLI, over shared domain code.
+Enplace is a local-first cooking application for recipe import, weekly planning, cooking, and shopping. It is one static PWA over a **shared kitchen**: one merge document per household, keyed by folder-relative path, held on every device and synced through a relay, addressed by an unguessable link. Plain Markdown is the schema; a folder on disk is a mirror of the kitchen, never a second authority.
 
-Success means the hosted and CLI surfaces preserve their declared cooking contracts; recipe provenance and source truth remain visible; shopping changes are deterministic, previewable, and recoverable; the interface remains fast and coherent; and no runtime, adapter, cache, or integration becomes a second authority for the same data.
+Success means the kitchen document remains the sole authority; recipe provenance stays visible; shopping changes merge deterministically across devices; the kitchen is always exportable as plain files; and the interface remains fast and coherent.
 
 <!-- clai:instructions:coding:start -->
 <!-- source-sha256:125fbd0ba45f15bcd8964ecd8bb5dd139da49002dbaf2db8229a6156593a274e -->
@@ -19,20 +19,18 @@ Success means the hosted and CLI surfaces preserve their declared cooking contra
 
 ## Repository Boundaries
 
-- The selected vault owns recipe markdown and planner-note content. App data owns settings, the activity ledger, and the authoritative built-in shopping list. Caches, indexes, thumbnails, and browser fixtures are derived state.
-- `mep-core` owns shared Rust domain primitives. `mep-cli`, `scripts/start-web-host.mjs`, and `mep-remote-host-helper` are integration surfaces.
-- Known TypeScript/Rust differences are explicit contract locks in `docs/cooking-domain-contract.md`. Do not silently normalise them or create another implementation of the same semantics.
-- Frontend features must not call the host transport directly. Centralise `mep_*` invokes in `src/host-client/commands.ts`; all requests go through the web host HTTP API.
-- The `mep` CLI is the canonical agent-facing interface for recipe import. Its generated help owns command syntax; linked contracts own domain semantics.
-- Treat recipe import as a vault write.
-- Web-host mode is a trusted local or private-tailnet runtime, not an internet-facing multi-tenant service. Keep it loopback-bound and preserve its authenticated filesystem boundary.
-- `.agents/skills/recipe-extraction/SKILL.md` owns extraction of new recipes from URLs, pasted text, or images and writes only through `mep recipe import`. `.agents/skills/mep-ai-led-qa/SKILL.md` is the sole authority for read-only QA of existing recipes.
+- The kitchen document (`src/kitchen/doc.ts`) is the sole authority for recipe Markdown, `Plan.md`, and `Shopping.md`. Browser storage holds the kitchen's own persisted copy, the current kitchen id, and UI preferences. A folder on disk is only a mirror made by the CLI or a plain-file export.
+- Storage adapters live in `src/host-client/`: `kitchen-storage.ts` implements the browser adapter over Yjs, IndexedDB, and the relay; `browser-storage.ts` defines the adapter contract and storage helpers. Shared recipe, planning, and shopping rules belong in the pure TypeScript `src/core.ts`.
+- The optional `mep` Node CLI lives in `cli/`, uses plain filesystem access, imports the same `src/core.ts` and `src/kitchen/doc.ts`, and owns the folder mirror (`mep mirror`).
+- The only network transport is the y-websocket relay connection for the kitchen document. Frontend features must not add another transport, a second store for kitchen content, accounts, or provider sign-in. Recipe extraction stays outside the app (paste, chat-assistant prompt, agents).
+- `cooking/enplace-shared-kitchen.md` in the vault records the design decision and the provider-API evidence behind it.
+- `.agents/skills/recipe-extraction/SKILL.md` owns agent-led extraction and CLI addition. `.agents/skills/recipe-qa/SKILL.md` owns read-only QA of existing recipes.
 
 ## Working Contract
 
-- Use Node 22 and `npm ci` for a clean dependency install. Pure TypeScript lint, typecheck, and unit tests may run directly; use `nix-shell` for Rust workspace and Playwright work.
-- Never use the live vault as a test fixture. Load the project `recipe-extraction` skill for a new recipe import and `mep-ai-led-qa` for read-only existing-recipe review. Test importer changes only against an isolated recipes directory.
-- Use `docs/repo-architecture.md` for module ownership; `docs/mep-cli-contracts.md` and `docs/cooking-domain-contract.md` for recipe and cooking semantics; `docs/weekly-planner-behaviour.md` and `docs/kanban-core-contract.md` for planner work; and `docs/web-host-mode.md` and `docs/engineering-guardrails.md` for runtime proof, plus `docs/security-baseline.md` for the security baseline.
+- Use Node 22 and `npm ci` for a clean dependency install. Build the optional CLI with `npm run build:cli`; run TypeScript checks directly and use the configured Playwright command for browser work.
+- Never use the live vault as a test fixture. Use isolated data for importer, browser, and file-write tests.
+- Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` and `docs/kanban-core-contract.md` for planner work, and `docs/engineering-guardrails.md` for verification.
 
 ## Verification
 
@@ -42,19 +40,18 @@ During implementation, run the cheapest affected checks:
 npm run precommit
 npm run typecheck
 npm test -- <focused-test>
-nix-shell --run 'cargo test -p <affected-crate>'
 ```
 
-Run `npm run prepush` before pushing a normal code tranche, plus `nix-shell --run 'cargo test --workspace'` when Rust or cross-surface contracts changed.
+Run `npm run prepush` before pushing a normal code tranche.
 
-Browser smoke tests exercise synthetic web-host data. Verify served-surface changes against a real browser boot of `npm run host:web`, including PWA installability of the manifest.
+Browser smoke tests use synthetic data and an in-process relay. Verify primary-surface changes against a real browser boot of the static PWA, including a fresh kitchen, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
 
 For project-skill changes, run:
 
 ```bash
-clai validate skill mep-ai-led-qa --scope project --project-root .
 clai validate skill recipe-extraction --scope project --project-root .
+clai validate skill recipe-qa --scope project --project-root .
 clai validate all --scope project --project-root .
 ```
 
-For a release boundary, run `nix-shell --run './scripts/preflight-release.sh'` and complete the hosted checks printed by that script.
+For a release boundary, run `nix-shell --run './scripts/preflight-release.sh'` and complete the static-PWA checks printed by that script. A release is not finished until `scripts/publish-public.sh` has pushed the snapshot to the public repository (`joe-butler-23/enplace`, a squashed projection of this private repository) and the static site has been redeployed.

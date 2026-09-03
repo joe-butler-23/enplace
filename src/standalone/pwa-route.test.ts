@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialViewForPathname,
   pathnameForView,
+  preserveKitchenHash,
   shoppingShareUrl
 } from "./pwa-route";
 
@@ -12,22 +13,45 @@ describe("initial view route resolution", () => {
   it.each([
     ["/database", "database"],
     ["/database/", "database"],
+    ["/settings", "settings"],
     ["/shopping", "shopping"],
     ["/shopping/", "shopping"],
     ["/planner", "planner"],
-    ["/", "planner"],
-    ["/unknown", "planner"]
-  ] as const)("resolves remote pathname %s to %s", (pathname, expectedView) => {
+    ["/planner/", "planner"],
+    ["/", "database"],
+    ["/unknown", "database"]
+  ] as const)("resolves pathname %s to %s", (pathname, expectedView) => {
     expect(initialViewForPathname(pathname)).toBe(expectedView);
   });
 
 });
 
-describe("hosted PWA route", () => {
+describe("PWA route", () => {
+  it("keeps the kitchen fragment across in-app history changes", () => {
+    const urls: Array<string | URL | null | undefined> = [];
+    const history = {
+      pushState: (_data: unknown, _unused: string, url?: string | URL | null) => { urls.push(url); },
+      replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => { urls.push(url); },
+    } as unknown as History;
+    preserveKitchenHash(history, {
+      href: "https://enplace.example/planner#k=old",
+      origin: "https://enplace.example",
+    }, "abcdefghijklmnopqrstuvwxyz");
+
+    history.pushState(null, "", "/shopping");
+    history.replaceState(null, "", "/settings?tab=files#ignored");
+
+    expect(urls).toEqual([
+      "/shopping#k=abcdefghijklmnopqrstuvwxyz",
+      "/settings?tab=files#k=abcdefghijklmnopqrstuvwxyz",
+    ]);
+  });
+
   it("maps views and shopping shares to their public paths", () => {
     expect(pathnameForView("shopping")).toBe("/shopping");
-    expect(pathnameForView("database")).toBe("/database");
-    expect(pathnameForView("planner")).toBe("/");
+    expect(pathnameForView("database")).toBe("/");
+    expect(pathnameForView("settings")).toBe("/settings");
+    expect(pathnameForView("planner")).toBe("/planner");
     expect(shoppingShareUrl("https://mep.example.ts.net")).toBe(
       "https://mep.example.ts.net/shopping"
     );
@@ -65,6 +89,15 @@ describe("hosted PWA route", () => {
     }
   });
 
+  it("prefers the non-redirected cached root for offline navigation", async () => {
+    const worker = await readFile(new URL("../pwa/service-worker.js", import.meta.url), "utf8");
+    const rootFallback = worker.indexOf('cache.match("/")');
+    const indexFallback = worker.indexOf('cache.match("/index.html")');
+
+    expect(rootFallback).toBeGreaterThan(-1);
+    expect(indexFallback).toBeGreaterThan(rootFallback);
+  });
+
   it("releases the compact desktop sidebar width for the mobile shopping header", async () => {
     const css = await readFile(new URL("../standalone.css", import.meta.url), "utf8");
     const mobileStyles = css.slice(css.indexOf("@media (max-width: 720px)"));
@@ -73,4 +106,6 @@ describe("hosted PWA route", () => {
     min-width: 0 !important;
     max-width: none !important;`);
   });
+
+
 });

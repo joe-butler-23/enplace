@@ -21,21 +21,14 @@ function buildContext(overrides: Partial<ResolveDropContext> = {}): ResolveDropC
 describe("resolveOrganiserDrop", () => {
 	it("blocks duplicate to marked: a duplicate-modifier drop onto marked is a plain move, not a copy", () => {
 		const outcome = resolveOrganiserDrop(
-			buildContext({ targetLaneId: MARKED_COLUMN_ID, duplicateModifier: true, cardType: "task" })
+		buildContext({ targetLaneId: MARKED_COLUMN_ID, duplicateModifier: true })
 		);
 		expect(outcome).toBe("move");
 	});
 
-	it("deletes a reminder dropped on marked (still persists, vanishes from the board)", () => {
+	it("moves recipes dropped on marked", () => {
 		const outcome = resolveOrganiserDrop(
-			buildContext({ targetLaneId: MARKED_COLUMN_ID, cardType: "reminder" })
-		);
-		expect(outcome).toBe("remove");
-	});
-
-	it("does not remove a non-reminder card dropped on marked", () => {
-		const outcome = resolveOrganiserDrop(
-			buildContext({ targetLaneId: MARKED_COLUMN_ID, cardType: "event" })
+			buildContext({ targetLaneId: MARKED_COLUMN_ID })
 		);
 		expect(outcome).toBe("move");
 	});

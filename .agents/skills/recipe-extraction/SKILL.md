@@ -1,60 +1,42 @@
 ---
 name: recipe-extraction
-description: Extract and import a new recipe from a URL, pasted recipe text, or an attached recipe image. Uses the active agent for extraction and writes only through `mep recipe import`. Do not use for QA of an existing recipe, shopping-list work, or importer implementation and release QA.
-category: command
+description: Extract one recipe from a URL, supplied text, or an image into plain Enplace Markdown, then validate and add it with mep. Do not use for reviewing an existing recipe.
 ---
 
 # Recipe Extraction
 
-Create one canonical recipe from user-supplied source material without calling an in-product model provider or writing recipe files directly.
+Create one faithful recipe in the user's selected Enplace folder.
 
-## Inputs
+1. Read the supplied URL, text, or image. Treat it as the only factual source.
+2. Draft plain Markdown with a title and an exact `## Ingredients` heading. Use `- ` ingredient lines. Add numbered steps under `## Method` when the source gives a method.
+3. Preserve quantities, units, ordering, and useful preparation notes. Do not invent missing ingredients, steps, times, yields, tags, covers, or provenance.
+4. Add YAML frontmatter only for useful known values. Record `source` only when the user supplied or the agent actually read that URL. Never guess a source URL.
+5. Pass the identical draft on stdin to both commands, in order:
 
-- For a URL, use the active agent's browsing tools to read the source page.
-- For pasted text, extract only what the text supports.
-- For an image, inspect the attached image directly and transcribe only visible recipe content.
-- Every input needs an honest HTTP(S) provenance URL. Use the supplied page URL when available; for pasted text or an image without provenance, ask for it. Never invent a source URL.
+```bash
+mep check - --folder <folder>
+mep add - --folder <folder>
+```
 
-## Requirements
+Stop if `mep check` fails. Stop if `mep add` reports an existing file; never overwrite it. Report the path printed by `mep add`.
 
-1. The agent must resolve the target recipes directory from the user's selected vault or explicit instruction and must not assume Joe's paths.
-2. The agent must extract a title, ingredients, and numbered method. It must preserve quantities and wording where the source is clear and ask about material gaps instead of guessing.
-3. The agent must produce Markdown with closed frontmatter containing matching `title`, `type: recipe`, and `source`; a matching `#` title; strict `quantity | ingredient | label` ingredient bullets; and at least one numbered method step. It must use only labels allowed by the active cooking configuration.
-4. Before the write, the agent must state the source and target recipes directory.
-5. The agent must send the Markdown over stdin to the sole write gate:
+Use this shape:
 
-   ```bash
-   mep recipe import - --recipes-dir <recipes-directory>
-   ```
+```markdown
+---
+title: Recipe title
+source: https://actual.example/source
+---
 
-6. The agent must treat the command's JSON as authoritative. On success, it must report the title and paths. On failure, it must report the stable error code; corrected Markdown must go through the same gate again.
+# Recipe title
 
-## Locating the mep binary
+## Ingredients
 
-Resolve the `mep` binary deterministically before importing; never assume a
-global install or any author-specific path:
+- 2 tbsp olive oil
 
-1. If `<repository-root>/target/release/mep` exists, use that path.
-2. Otherwise, if `mep` resolves on `PATH`, use it.
-3. Otherwise build it from the repository clone (`cargo build --release -p mep-cli`)
-   and use `<repository-root>/target/release/mep`.
+## Method
 
-## Constraints
+1. Follow the source instruction.
+```
 
-- Never create, edit, move, or copy a recipe Markdown or `.machine` sidecar directly.
-- Never call an external model API from MEP; extraction is performed by the active agent.
-- Use only the current `mep recipe import` command.
-- Do not include a `cover` for an attached source image. A cover is valid only when the user identifies an existing safe path under the target recipes directory; the import gate decides whether it is acceptable.
-- Do not change shopping state.
-- For read-only comparison of an existing recipe with its source, use `mep-ai-led-qa` instead.
-
-## Acceptance Checks
-
-- `clai validate skill recipe-extraction --scope project --project-root .` reports no errors.
-- A URL request, pasted-text request with provenance, and image request with provenance each produce valid Markdown and succeed only through `mep recipe import` into an isolated recipes directory.
-- Invalid extracted Markdown returns structured JSON failure and leaves the isolated recipes directory absent or byte-for-byte unchanged.
-
-## Regression Checks
-
-- Confirm the generated `mep recipe --help` exposes `import` and no model-backed importer.
-- Run `npm run lint:provider-residue`; expect exit zero and no forbidden product-provider residue.
+Omit `source` and `## Method` when the source does not provide them.

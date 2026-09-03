@@ -1,8 +1,6 @@
 import * as React from "react";
-import { OrganiserPreset, OrganiserPresetId } from "../presets/organiserPresets";
-import { WeeklyVisibleType, WeeklyVisibleTypeState } from "./weekly-organiser-types";
 
-type PopoverId = "filter" | "group" | "sort" | null;
+type PopoverId = "filter" | "sort" | null;
 
 type ToolbarOption = {
   id: string;
@@ -10,9 +8,8 @@ type ToolbarOption = {
 };
 
 export type OrganiserToolbarCalendar = {
-  isOpen: boolean;
-  isTimeRowVisible: boolean;
-  isTimeBasedPreset: boolean;
+	isOpen: boolean;
+	isTimeRowVisible: boolean;
   startDateValue: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   popoverRef: React.RefObject<HTMLDivElement | null>;
@@ -30,57 +27,40 @@ export type OrganiserToolbarWeekNav = {
 };
 
 export type OrganiserToolbarPopovers = {
-  filterButtonRef: React.RefObject<HTMLButtonElement | null>;
-  filterPopoverRef: React.RefObject<HTMLDivElement | null>;
-  groupButtonRef: React.RefObject<HTMLButtonElement | null>;
-  groupPopoverRef: React.RefObject<HTMLDivElement | null>;
+	filterButtonRef: React.RefObject<HTMLButtonElement | null>;
+	filterPopoverRef: React.RefObject<HTMLDivElement | null>;
   sortButtonRef: React.RefObject<HTMLButtonElement | null>;
   sortPopoverRef: React.RefObject<HTMLDivElement | null>;
   activePopover: PopoverId;
   onToggle: (next: Exclude<PopoverId, null>) => void;
   showTimeControls: boolean;
   onToggleShowTimeControls: (next: boolean) => void;
-  isWeeklyPreset: boolean;
-  weeklyVisibleTypes: WeeklyVisibleTypeState;
-  onToggleWeeklyType: (type: WeeklyVisibleType) => void;
-  groupOptions: ToolbarOption[];
-  groupBy: string;
-  onGroupChange: (next: string) => void;
-  sortOptions: ToolbarOption[];
+	sortOptions: ToolbarOption[];
   sortBy: string;
   onSortChange: (next: string) => void;
   isFilterActive: boolean;
-  isGroupActive: boolean;
-  isSortActive: boolean;
+	isSortActive: boolean;
 };
 
 type OrganiserToolbarProps = {
   topbarRef: React.RefObject<HTMLDivElement | null>;
-  presets: OrganiserPreset[];
-  activePresetId: OrganiserPresetId;
-  onPresetChange: (next: OrganiserPresetId) => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   calendar: OrganiserToolbarCalendar;
   weekNav: OrganiserToolbarWeekNav;
   onSendShoppingList?: () => void;
-  isRecipePreset: boolean;
-  isReviewOpen: boolean;
+	isReviewOpen: boolean;
   onToggleReview: () => void;
   popovers: OrganiserToolbarPopovers;
 };
 
 function renderOrganiserToolbar({
   topbarRef,
-  presets,
-  activePresetId,
-  onPresetChange,
   searchQuery,
   onSearchChange,
   calendar,
   weekNav,
   onSendShoppingList,
-  isRecipePreset,
   isReviewOpen,
   onToggleReview,
   popovers,
@@ -88,7 +68,6 @@ function renderOrganiserToolbar({
   const {
     isOpen: isCalendarOpen,
     isTimeRowVisible,
-    isTimeBasedPreset,
     startDateValue,
     inputRef: calendarInputRef,
     popoverRef: calendarPopoverRef,
@@ -101,43 +80,20 @@ function renderOrganiserToolbar({
   const {
     filterButtonRef,
     filterPopoverRef,
-    groupButtonRef,
-    groupPopoverRef,
     sortButtonRef,
     sortPopoverRef,
     activePopover,
     onToggle: onTogglePopover,
     showTimeControls,
     onToggleShowTimeControls,
-    isWeeklyPreset,
-    weeklyVisibleTypes,
-    onToggleWeeklyType,
-    groupOptions,
-    groupBy,
-    onGroupChange,
     sortOptions,
     sortBy,
     onSortChange,
     isFilterActive,
-    isGroupActive,
     isSortActive,
   } = popovers;
   return (
     <div className="organiser-topbar" ref={topbarRef}>
-		<select
-			id="preset-select"
-			className="topbar-select"
-			aria-label="Organiser preset"
-        value={activePresetId}
-        onChange={(event) => onPresetChange(event.target.value as OrganiserPresetId)}
-      >
-        {presets.map((preset) => (
-          <option key={preset.id} value={preset.id}>
-            {preset.label}
-          </option>
-        ))}
-      </select>
-
       <input
         id="board-search"
         className="topbar-input"
@@ -240,8 +196,7 @@ function renderOrganiserToolbar({
             </button>
           </div>
         )}
-        {isRecipePreset && (
-          <div className="topbar-action">
+		<div className="topbar-action">
             <button
               className={`topbar-icon-btn${isReviewOpen ? " is-active" : ""}`}
               type="button"
@@ -256,8 +211,7 @@ function renderOrganiserToolbar({
                 <path d="m9 14 2 2 4-4" />
               </svg>
             </button>
-          </div>
-        )}
+		</div>
         <div className="topbar-action">
           <button
             ref={filterButtonRef}
@@ -282,84 +236,14 @@ function renderOrganiserToolbar({
           </button>
           {activePopover === "filter" && (
             <div ref={filterPopoverRef} className="topbar-popover">
-              {isTimeBasedPreset && (
-                <label className="topbar-toggle">
+				<label className="topbar-toggle">
                   <input
                     type="checkbox"
                     checked={showTimeControls}
                     onChange={(event) => onToggleShowTimeControls(event.target.checked)}
                   />
                   <span>Show date row</span>
-                </label>
-              )}
-              {isWeeklyPreset && (
-                <>
-                  <div className="topbar-popover__section-label">Show types</div>
-                  <label className="topbar-toggle">
-                    <input
-                      type="checkbox"
-                      checked={weeklyVisibleTypes.recipe}
-                      onChange={() => onToggleWeeklyType("recipe")}
-                    />
-                    <span>Meals</span>
-                  </label>
-                  <label className="topbar-toggle">
-                    <input
-                      type="checkbox"
-                      checked={weeklyVisibleTypes.exercise}
-                      onChange={() => onToggleWeeklyType("exercise")}
-                    />
-                    <span>Exercise</span>
-                  </label>
-                  <label className="topbar-toggle">
-                    <input
-                      type="checkbox"
-                      checked={weeklyVisibleTypes.task}
-                      onChange={() => onToggleWeeklyType("task")}
-                    />
-                    <span>Tasks</span>
-                  </label>
-                  <label className="topbar-toggle">
-                    <input
-                      type="checkbox"
-                      checked={weeklyVisibleTypes.reminder}
-                      onChange={() => onToggleWeeklyType("reminder")}
-                    />
-                    <span>Reminders</span>
-                  </label>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="topbar-action">
-          <button
-            ref={groupButtonRef}
-            className={`topbar-icon-btn${isGroupActive ? " is-active" : ""}`}
-            type="button"
-            title="Group"
-            aria-label="Group"
-            aria-expanded={activePopover === "group"}
-            onClick={() => onTogglePopover("group")}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 2 7 12 12 22 7 12 2" />
-              <polyline points="2 17 12 22 22 17" />
-              <polyline points="2 12 12 17 22 12" />
-            </svg>
-          </button>
-          {activePopover === "group" && (
-            <div ref={groupPopoverRef} className="topbar-popover">
-              {groupOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`topbar-option${groupBy === option.id ? " is-active" : ""}`}
-                  onClick={() => onGroupChange(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
+				</label>
             </div>
           )}
         </div>

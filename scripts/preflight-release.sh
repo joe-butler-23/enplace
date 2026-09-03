@@ -4,40 +4,39 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-echo "==> Typecheck"
-npm run typecheck
-
-echo "==> Portable kanban provenance failure check"
-npm run test:kanban-provenance
-
-echo "==> Dependency audit"
-npm audit --audit-level=high
-
-echo "==> Startup path smoke test"
-npm run test:startup
-
-echo "==> Web frontend build (dist-web/, served by the web host)"
-npm run build
-
-echo "==> Rust workspace tests (mep-core, mep-cli, mep-remote-host-helper)"
-if command -v nix-shell >/dev/null 2>&1; then
-  nix-shell --run "cargo test --workspace"
-else
-  cargo test --workspace
+if [[ "${SKIP_MEP_PREPUSH:-0}" == "1" ]]; then
+  echo "Release certification refuses SKIP_MEP_PREPUSH=1." >&2
+  exit 1
 fi
+
+node_major="$(node -p 'process.versions.node.split(`.`)[0]')"
+if [[ "$node_major" != "22" ]]; then
+  echo "Release certification requires Node 22; found $(node --version)." >&2
+  exit 1
+fi
+
+echo "==> Clean dependency install"
+npm ci
 
 echo "==> Provision Playwright Chromium"
 npx playwright install chromium
 
-echo "==> Portable kanban client contract"
-npm run test:kanban-client
+echo "==> Full local push gate"
+./scripts/pre-push.sh
 
-echo "==> Perceptual release budgets (benchmark:recipe-scroll + check-release-budgets)"
-npm run perf:release -- --output-dir target/release-evidence
+echo "==> Dependency audit"
+npm audit --audit-level=high --ignore-scripts
 
-echo "==> MANUAL STEP REQUIRED: hosted PWA install verification"
-echo "Start the web host (npm run host:web), open the served URL, and confirm"
-echo "the browser offers the Enplace install and the installed app launches"
-echo "into the full app with the /shopping shortcut working."
+echo "==> Static production build"
+npm run build:static
 
-echo "Preflight release checks passed."
+echo "==> MANUAL STEP REQUIRED: installed-PWA verification"
+echo "Open the static site in desktop Chromium with an isolated folder, install Enplace,"
+echo "and confirm reload, offline launch, direct Markdown writes, /, and /shopping."
+
+echo "==> Public snapshot"
+echo "After certification, publish this commit to the public repository with:"
+echo "  scripts/publish-public.sh"
+echo "and redeploy the static site from dist-static."
+
+echo "Automated preflight release checks passed; manual installed-PWA certification remains required."

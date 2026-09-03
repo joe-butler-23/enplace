@@ -1,8 +1,5 @@
-import {
-  isIsoDateString,
-  readScheduledDateList,
-  writeScheduledDateList,
-} from "./scheduled-dates";
+import type { RecipePlanning } from "@/core";
+import { isIsoDateString } from "./scheduled-dates";
 
 export { isIsoDateString };
 
@@ -17,11 +14,11 @@ export type RecipeDateRemovalOptions = {
 };
 
 export function removeRecipeScheduledDateOccurrence(
-  frontmatter: Record<string, unknown>,
+  planning: RecipePlanning,
   sourceDate: string,
   options: RecipeDateRemovalOptions = {}
 ): RecipeDateRemovalResult {
-  const nextDates = readScheduledDateList(frontmatter);
+  const nextDates = [...planning.scheduledDates];
   const sourceIndex = nextDates.indexOf(sourceDate);
   const removedSourceDate = sourceIndex !== -1;
   const markWhenEmpty = options.markWhenEmpty ?? true;
@@ -30,14 +27,9 @@ export function removeRecipeScheduledDateOccurrence(
     nextDates.splice(sourceIndex, 1);
   }
 
-  writeScheduledDateList(frontmatter, nextDates);
-
+  planning.scheduledDates = nextDates;
   const marked = markWhenEmpty && nextDates.length === 0;
-  if (marked) {
-    frontmatter.marked = true;
-  } else {
-    delete frontmatter.marked;
-  }
+  planning.marked = marked;
 
   return {
     removedSourceDate,

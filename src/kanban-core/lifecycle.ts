@@ -158,7 +158,9 @@ export function createKanbanLifecycle<TInstance extends KanbanConstructorInstanc
         callbacks.onCardClick?.(event, card.dataset.eid);
       };
       const mouseDown = (event: MouseEvent) => {
-        const card = (event.target as HTMLElement).closest<HTMLElement>(".kanban-item");
+        const target = event.target as HTMLElement;
+        if (target.closest(`[${KANBAN_ACTION_ATTRIBUTE}]`)) return;
+        const card = target.closest<HTMLElement>(".kanban-item");
         if (card?.dataset.eid) callbacks.onCardMouseDown?.(event, card.dataset.eid);
       };
       element.addEventListener("click", click);

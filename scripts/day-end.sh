@@ -20,7 +20,7 @@ require_cmd "$NPM_BIN"
 cd "$ROOT_DIR"
 echo "[day-end] mode: $MODE"
 echo "[day-end] syncing tracked hooks"
-git config core.hooksPath .githooks
+./scripts/install-git-hooks.sh
 
 echo "[day-end] running quick checks"
 ./scripts/pre-commit.sh

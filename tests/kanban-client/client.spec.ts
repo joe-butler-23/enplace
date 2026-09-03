@@ -91,6 +91,24 @@ test("prevents non-draggable cards from entering the drag lifecycle", async ({ p
 	)).toEqual([]);
 });
 
+test("keeps card action controls out of the drag lifecycle", async ({ page }) => {
+	const action = page.locator('[data-eid="one"] [data-kanban-action="remove"]');
+	const box = await action.boundingBox();
+	expect(box).toBeTruthy();
+
+	await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box!.x + box!.width / 2 + 1, box!.y + box!.height / 2 + 1);
+	await expect(page.locator(".gu-mirror")).toHaveCount(0);
+	await page.mouse.up();
+
+	expect(await page.evaluate(() => window.kanbanFixture.events.filter(({ type }) =>
+		type === "action" || type === "drag" || type === "dragend" || type === "drop"
+	))).toEqual([
+		{ type: "action", name: "remove", cardId: "one" },
+	]);
+});
+
 test("cleans up movement state after a spilled drag is cancelled", async ({ page }) => {
 	await startDragging(page, "one");
 	await expect(page.locator(".gu-mirror")).toHaveCount(1);

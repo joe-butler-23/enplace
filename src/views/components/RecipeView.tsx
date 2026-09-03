@@ -1,203 +1,282 @@
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { parseIngredientsSection } from "@/modules/cooking/services/ingredient-parsing";
+import { parseIngredientsSection } from "@/modules/cooking/services/recipe-section-parsing";
+import { formatCookLogDate, parseCookLog } from "@/modules/cooking/services/RecipeLogService";
 import {
+  buildRecipeMeta,
   composeMarkdown,
+  extractHeroImage,
   extractRecipeTitle,
-  formatPropertyLabel,
-  formatPropertyValue,
-  getPropertyHref,
-  normalizeFrontmatterValue,
   parseDirectionsSection,
   parseFrontmatter,
-  stripLeadingH1
+  stripLeadingH1,
+  stripStructuredSections,
+  stripWrappedQuotes
 } from "../utils/recipe-frontmatter";
-import type { ImageResource } from "../utils/image-resources";
+import type { RecipeImageResources } from "./RecipeMarkdown";
+import { recipeViewTransitionName } from "./recipe-view-transition";
 
-type RecipeViewProps = {
+type RecipeViewProps = RecipeImageResources & {
   path: string;
   title: string;
   content: string;
   mode?: "full" | "rendered";
   onSave?: (nextContent: string) => Promise<void>;
-  resolveImageResource?: (
-    imagePath: string,
-    sourcePath: string
-  ) => Promise<ImageResource | null>;
-  getImageResource?: (
-    imagePath: string,
-    sourcePath: string
-  ) => ImageResource | undefined;
 };
+
+export type RecipeViewHandle = {
+  flushSave: () => Promise<void>;
+};
+
+export class RecipeWriteDiscardedError extends Error {
+  constructor(readonly content: string) {
+    super("Recipe changes discarded after write conflict.");
+  }
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 350;
 
-const LazyRecipeEditor = React.lazy(() => import("./RecipeEditor").then((module) => ({ default: module.RecipeEditor })));
-
-function ReadImage({
-  src,
-  alt,
-  imageTitle,
-  path,
-  resolveImageResource,
-  getImageResource
-}: {
-  src: string;
-  alt?: string;
-  imageTitle?: string;
-  path: string;
-  resolveImageResource?: RecipeViewProps["resolveImageResource"];
-  getImageResource?: RecipeViewProps["getImageResource"];
-}): React.ReactElement {
-  const [resource, setResource] = React.useState<ImageResource | null>(
-    () => getImageResource?.(src, path) ?? null
-  );
-  const [failed, setFailed] = React.useState(false);
-  React.useEffect(() => {
-    let cancelled = false;
-    const cached = getImageResource?.(src, path) ?? null;
-    if (cached) {
-      setFailed(false);
-      setResource(cached);
-      return () => { cancelled = true; };
-    }
-    setFailed(false);
-    setResource(null);
-    const load = resolveImageResource
-      ? resolveImageResource(src, path).then((value) => value ? value : null)
-      : /^(https?:|data:|blob:|file:|asset:|app:|obsidian:)/i.test(src)
-        ? Promise.resolve({ url: src, width: 16, height: 9 })
-        : Promise.resolve(null);
-    void load.then((value) => {
-      if (!cancelled) setResource(value);
-    }).catch(() => {
-      if (!cancelled) setFailed(true);
-    });
-    return () => { cancelled = true; };
-  }, [src, path, getImageResource, resolveImageResource]);
-
-  return (
-    <figure className="recipe-view__image">
-      {resource ? (
-        <img src={resource.url} alt={alt ?? ""} title={imageTitle} loading="eager" decoding="async" onError={() => setFailed(true)} />
-      ) : failed ? (
-        <div className="recipe-view__image-error" role="img" aria-label={`${alt || "Image"} unavailable`}>Image unavailable</div>
-      ) : (
-        <div className="recipe-view__image-placeholder" aria-hidden="true" />
-      )}
-    </figure>
-  );
+function toggleIndex(previous: Set<number>, index: number): Set<number> {
+  const next = new Set(previous);
+  if (next.has(index)) next.delete(index); else next.add(index);
+  return next;
 }
 
-export function ReadDocument({
-  markdown,
-  path,
-  resolveImageResource,
-  getImageResource
-}: {
-  markdown: string;
-  path: string;
-  resolveImageResource?: RecipeViewProps["resolveImageResource"];
-  getImageResource?: RecipeViewProps["getImageResource"];
-}): React.ReactElement {
+/**
+ * True when two parsed ingredient/step lists are element-wise identical. Checked state is
+ * keyed by index, so a genuine gain/loss/reorder makes the old indices meaningless (reset is
+ * correct); an unchanged list must not wipe ticks just because the surrounding content changed.
+ */
+export function parsedListsMatch(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+let nextRecipeSelectionGeneration = 0;
+
+export function recipeHeroTimingIdentifier(selectionGeneration: number, path: string): string {
+  return `mep:recipe-hero:${selectionGeneration}:${path}`;
+}
+
+/** Masthead image. Kept out of the lazy markdown chunk so a warm cover paints with the first frame. */
+function RecipeHero({ url, alt, timingIdentifier, path }: { url: string; alt: string; timingIdentifier: string; path: string }): React.ReactElement {
   return (
-    <div className="recipe-view__read-document">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        urlTransform={(url) => url}
-        components={{
-          img: ({ src, alt, title }) => (
-            <ReadImage src={src ?? ""} alt={alt} imageTitle={title} path={path} resolveImageResource={resolveImageResource} getImageResource={getImageResource} />
-          )
-        }}
-      >
-        {markdown}
-      </ReactMarkdown>
+    <div className="recipe-view__hero">
+      <img
+        {...({
+          src: url,
+          alt,
+          fetchPriority: "high",
+          decoding: "async",
+          elementtiming: timingIdentifier,
+          style: { viewTransitionName: recipeViewTransitionName(path) },
+        } as React.ImgHTMLAttributes<HTMLImageElement>)}
+      />
     </div>
   );
 }
 
-export function RecipeView({
+type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error" | "conflict-discarded";
+
+const LazyRecipeEditor = React.lazy(() => import("./RecipeEditor").then((module) => ({ default: module.RecipeEditor })));
+let recipeMarkdownModule: Promise<typeof import("./RecipeMarkdown")> | null = null;
+let PreparedReadDocument: typeof import("./RecipeMarkdown").ReadDocument | null = null;
+let PreparedReadInline: typeof import("./RecipeMarkdown").ReadInline | null = null;
+export function prepareRecipeMarkdown() {
+  recipeMarkdownModule ??= import("./RecipeMarkdown").then((module) => {
+    PreparedReadDocument = module.ReadDocument;
+    PreparedReadInline = module.ReadInline;
+    return module;
+  });
+  return recipeMarkdownModule;
+}
+
+/** Resolves to the lazily-loaded component once `prepareRecipeMarkdown` has settled. */
+function useLazyMarkdownComponent<C>(read: () => C | null): C | null {
+  const [Component, setComponent] = React.useState(read);
+  React.useEffect(() => {
+    if (Component) return;
+    void prepareRecipeMarkdown().then(() => setComponent(() => read()));
+  }, [Component]);
+  return Component;
+}
+
+/**
+ * Memoised on its own props so an unrelated RecipeView re-render (a checkbox toggle) does not
+ * re-invoke react-markdown, which builds a fresh unified processor and fully reparses every call.
+ */
+export const PreparedRecipeDocument = React.memo(function PreparedRecipeDocument(
+  props: RecipeImageResources & { markdown: string; path: string }
+) {
+  const Component = useLazyMarkdownComponent(() => PreparedReadDocument);
+  return Component ? <Component {...props} /> : null;
+});
+
+/**
+ * One method step, memoised on its step text alone: toggling that step's own checkbox (or any
+ * other step's) changes the wrapping `<span>` class but not this prop, so it bails without
+ * re-parsing — the fix for N-parses-per-toggle. Falls back to literal text until the markdown
+ * chunk loads, matching the notes renderer below.
+ */
+export const StepText = React.memo(function StepText({ text }: { text: string }) {
+  const Component = useLazyMarkdownComponent(() => PreparedReadInline);
+  return Component ? <Component text={text} /> : <>{text}</>;
+});
+
+export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(function RecipeView({
   path,
   title,
   content,
   mode = "full",
   onSave,
-  resolveImageResource,
-  getImageResource
-}: RecipeViewProps): React.ReactElement {
+  resolveImage
+}: RecipeViewProps, ref): React.ReactElement {
   const [draft, setDraft] = React.useState(content);
   const [isEditing, setIsEditing] = React.useState(false);
   const [checkedIngredients, setCheckedIngredients] = React.useState<Set<number>>(new Set());
-  const [activeStep, setActiveStep] = React.useState<number | null>(null);
+  const [checkedSteps, setCheckedSteps] = React.useState<Set<number>>(new Set());
+  const [saveState, setSaveState] = React.useState<RecipeSaveState>("clean");
+  const [editorResetRevision, setEditorResetRevision] = React.useState(0);
+  const [selectionGeneration] = React.useState(() => ++nextRecipeSelectionGeneration);
   const isMountedRef = React.useRef(false);
   const autosaveTimerRef = React.useRef<number | null>(null);
   const lastSavedDraftRef = React.useRef(content);
+  const draftRef = React.useRef(content);
+  const contentRef = React.useRef(content);
+  const awaitingHostEchoRef = React.useRef<string | null>(null);
+  const saveInFlightRef = React.useRef<Promise<void> | null>(null);
+
+  const flushSave = React.useCallback(() => {
+    if (!onSave || draftRef.current === lastSavedDraftRef.current) return Promise.resolve();
+    if (saveInFlightRef.current) return saveInFlightRef.current;
+    const operation = (async () => {
+      while (draftRef.current !== lastSavedDraftRef.current) {
+        const nextContent = draftRef.current;
+        if (isMountedRef.current) setSaveState("saving");
+        try {
+          await onSave(nextContent);
+          lastSavedDraftRef.current = nextContent;
+          awaitingHostEchoRef.current = contentRef.current === nextContent ? null : nextContent;
+        } catch (error) {
+          const discarded = error instanceof RecipeWriteDiscardedError;
+          if (discarded) {
+            draftRef.current = error.content;
+            lastSavedDraftRef.current = error.content;
+            if (isMountedRef.current) {
+              setDraft(error.content);
+              setEditorResetRevision((revision) => revision + 1);
+            }
+          }
+          if (isMountedRef.current) setSaveState(discarded ? "conflict-discarded" : "error");
+          throw error;
+        }
+      }
+      if (isMountedRef.current) setSaveState("saved");
+    })().finally(() => { saveInFlightRef.current = null; });
+    saveInFlightRef.current = operation;
+    return operation;
+  }, [onSave]);
+
+  React.useImperativeHandle(ref, () => ({ flushSave }), [flushSave]);
+
+  React.useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (draftRef.current === lastSavedDraftRef.current && saveInFlightRef.current === null) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, []);
 
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
     };
   }, []);
 
+  const parsed = React.useMemo(() => parseFrontmatter(draft), [draft]);
+  const ingredients = React.useMemo(() => parseIngredientsSection(parsed.body), [parsed.body]);
+  const directions = React.useMemo(() => parseDirectionsSection(parsed.body), [parsed.body]);
+
   React.useEffect(() => {
+    contentRef.current = content;
+    const awaitingHostEcho = awaitingHostEchoRef.current;
+    if (awaitingHostEcho !== null) {
+      if (content !== awaitingHostEcho) return;
+      awaitingHostEchoRef.current = null;
+    }
+    if (draftRef.current !== lastSavedDraftRef.current) {
+      if (content === draftRef.current) {
+        lastSavedDraftRef.current = content;
+        setSaveState("saved");
+      }
+      return;
+    }
     setDraft(content);
-    setCheckedIngredients(new Set());
-    setActiveStep(null);
-    setIsEditing(false);
+    draftRef.current = content;
+    // Ticks are keyed by index: only reset when the incoming content genuinely adds, removes,
+    // or reorders ingredients/steps. An edit (e.g. a typo fix, or the autosave echo of one)
+    // that leaves both lists element-wise identical must not wipe what the cook already ticked.
+    const nextBody = parseFrontmatter(content).body;
+    if (!parsedListsMatch(parseIngredientsSection(nextBody), ingredients)) setCheckedIngredients(new Set());
+    if (!parsedListsMatch(parseDirectionsSection(nextBody), directions)) setCheckedSteps(new Set());
     lastSavedDraftRef.current = content;
+    setSaveState("clean");
     if (autosaveTimerRef.current !== null) {
       window.clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     }
-  }, [content, path]);
+    // Deliberately keyed on `content` alone: `ingredients`/`directions` are read as the
+    // lists-before-this-update (this render's values, derived from the still-old `draft`) to
+    // compare against the lists implied by the incoming content. Adding them as dependencies
+    // would make the effect re-fire the moment `draft` catches up to `content` above, since a
+    // fresh parse always returns a new array reference even when its contents are unchanged.
+  }, [content]);
 
-  const parsed = React.useMemo(() => parseFrontmatter(draft), [draft]);
-  const ingredients = React.useMemo(() => parseIngredientsSection(parsed.body), [parsed.body]);
-  const ingredientRows = React.useMemo(() => {
-    const occurrences = new Map<string, number>();
-    return ingredients.map((ingredient, index) => {
-      const occurrence = occurrences.get(ingredient) ?? 0;
-      occurrences.set(ingredient, occurrence + 1);
-      return { ingredient, index, key: `${ingredient}:${occurrence}` };
-    });
-  }, [ingredients]);
-  const directions = React.useMemo(() => parseDirectionsSection(parsed.body), [parsed.body]);
   const resolvedTitle = React.useMemo(() => {
-    const frontmatterTitle = parsed.frontmatter.title;
-    return typeof frontmatterTitle === "string" && frontmatterTitle.trim()
-      ? frontmatterTitle.trim()
-      : extractRecipeTitle(parsed.body, title);
+    const frontmatterTitle = typeof parsed.frontmatter.title === "string"
+      ? stripWrappedQuotes(parsed.frontmatter.title.trim()).trim()
+      : "";
+    return frontmatterTitle || extractRecipeTitle(parsed.body, title);
   }, [parsed.body, parsed.frontmatter.title, title]);
   const body = parsed.body.trim() ? parsed.body : `# ${resolvedTitle}\n`;
   const editorMarkdown = body;
-  const visibleProperties = React.useMemo(() => {
-    const hiddenKeys = new Set(["title", "cover", "image"]);
-    const priorityOrder = ["source", "scheduled", "added", "cooked", "tags", "type"];
-    const rank = (key: string) => { const index = priorityOrder.indexOf(key); return index === -1 ? priorityOrder.length : index; };
-    return Object.entries(parsed.frontmatter).flatMap(([key, value]) => {
-      if (hiddenKeys.has(key)) return [];
-      const normalized = normalizeFrontmatterValue(value);
-      return normalized !== "" && normalized !== null && (!Array.isArray(normalized) || normalized.length > 0)
-        ? [[key, normalized] as const]
-        : [];
-    })
-      .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
-      .slice(0, 10);
-  }, [parsed.frontmatter]);
+  const { hero, body: bodyWithoutHero } = React.useMemo(
+    () => extractHeroImage(body, parsed.frontmatter),
+    [body, parsed.frontmatter]
+  );
+  const heroUrl = React.useMemo(
+    () => hero ? resolveImage(hero.src, path) : null,
+    [hero, path, resolveImage]
+  );
+  const heroIdentifier = heroUrl ? recipeHeroTimingIdentifier(selectionGeneration, path) : null;
+  React.useEffect(() => {
+    if (mode !== "full" || typeof performance === "undefined" || typeof performance.mark !== "function") return;
+    performance.mark("mep:recipe:semantic-ready", {
+      detail: {
+        path,
+        title: resolvedTitle,
+        hasHero: Boolean(heroUrl),
+        heroIdentifier,
+        heroUrl,
+        mode,
+        selectionGeneration,
+      }
+    });
+  }, [heroIdentifier, heroUrl, mode, path, resolvedTitle, selectionGeneration]);
+  const meta = React.useMemo(() => buildRecipeMeta(parsed.frontmatter), [parsed.frontmatter]);
+  const cookLog = React.useMemo(() => parseCookLog(parsed.body), [parsed.body]);
 
   React.useEffect(() => {
     if (!onSave || draft === lastSavedDraftRef.current) return;
+    draftRef.current = draft;
+    setSaveState("dirty");
     if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
-      const nextContent = draft;
-      if (nextContent === lastSavedDraftRef.current) return;
-      void onSave(nextContent).then(() => {
-        if (isMountedRef.current) lastSavedDraftRef.current = nextContent;
-      }).catch((error) => console.error("Autosave failed for recipe", { path, error }));
+      autosaveTimerRef.current = null;
+      void flushSave().catch((error) => console.error("Autosave failed for recipe", { path, error }));
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => {
       if (autosaveTimerRef.current !== null) {
@@ -205,21 +284,28 @@ export function RecipeView({
         autosaveTimerRef.current = null;
       }
     };
-  }, [draft, onSave, path]);
+  }, [draft, flushSave, onSave, path]);
 
   const toggleIngredient = React.useCallback((index: number) => {
-    setCheckedIngredients((previous) => {
-      const next = new Set(previous);
-      if (next.has(index)) next.delete(index); else next.add(index);
-      return next;
-    });
+    setCheckedIngredients((previous) => toggleIndex(previous, index));
+  }, []);
+  const toggleStep = React.useCallback((index: number) => {
+    setCheckedSteps((previous) => toggleIndex(previous, index));
+  }, []);
+  const resetAll = React.useCallback(() => {
+    setCheckedIngredients(new Set());
+    setCheckedSteps(new Set());
   }, []);
 
-  const readMarkdown = mode === "full" ? stripLeadingH1(body) : body;
-  const readDocument = <ReadDocument markdown={readMarkdown} path={path} resolveImageResource={resolveImageResource} getImageResource={getImageResource} />;
+  const readMarkdown = React.useMemo(
+    () => (mode === "full" ? stripLeadingH1(stripStructuredSections(bodyWithoutHero)).trim() : body),
+    [mode, bodyWithoutHero, body]
+  );
+  const readDocument = <PreparedRecipeDocument markdown={readMarkdown} path={path} resolveImage={resolveImage} />;
   const editor = isEditing ? (
-    <React.Suspense fallback={<div className="recipe-view__editor-loading">Loading editor…</div>}>
+    <React.Suspense fallback={null}>
       <LazyRecipeEditor
+        key={`${path}:${editorResetRevision}`}
         path={path}
         markdown={editorMarkdown}
         onChange={(nextMarkdown: string) => {
@@ -229,42 +315,116 @@ export function RecipeView({
       />
     </React.Suspense>
   ) : readDocument;
+  const saveIndicator = onSave && saveState !== "clean" ? (
+    <div className="recipe-view__save-state" role="status" data-save-state={saveState}>
+      {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "conflict-discarded" ? "Changes discarded" : saveState === "error" ? "Could not save changes" : "Unsaved changes"}
+    </div>
+  ) : null;
 
   const contentPane = mode === "rendered" ? (
     <section className="recipe-view recipe-view--rendered">
       <div className={`recipe-view__rendered-content ${isEditing ? "is-editing" : ""}`}>
         <div className="recipe-view__mdx">{editor}</div>
+        {saveIndicator}
         {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
       </div>
     </section>
   ) : (
     <section className="recipe-view recipe-view--full">
       <div className="recipe-view__content recipe-view__content--full">
-        <aside className="recipe-view__panel recipe-view__ingredients-panel">
-          <div className="recipe-view__sticky-container">
-            <h3>Ingredients</h3>
-            <ul className="recipe-view__checklist">
-              {ingredientRows.map(({ ingredient, index, key }) => (
-                <li key={key}><label><input type="checkbox" checked={checkedIngredients.has(index)} onChange={() => toggleIngredient(index)} /><span className={checkedIngredients.has(index) ? "is-checked" : ""}>{ingredient}</span></label></li>
-              ))}
-            </ul>
-            {directions.length > 0 ? <span className="recipe-view__steps-count">{directions.length} steps</span> : null}
-          </div>
-        </aside>
-        <article className="recipe-view__panel recipe-view__method-pane">
-          <div className="recipe-view__method-heading">
+        <header className={`recipe-view__masthead${hero ? "" : " recipe-view__masthead--textonly"}`}>
+          <div className="recipe-view__masthead-text">
             <h1>{resolvedTitle}</h1>
-            {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
+            <div className="recipe-view__meta">
+              <span className="recipe-view__source">
+                {meta.source?.href
+                  ? <a href={meta.source.href} target="_blank" rel="noopener noreferrer">{meta.source.label}</a>
+                  : meta.source?.label}
+              </span>
+              {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
+            </div>
           </div>
-          {visibleProperties.length > 0 ? <dl className="recipe-view__meta-grid">{visibleProperties.map(([key, value]) => {
-            const href = getPropertyHref(key, value);
-            return <div key={key} className="recipe-view__meta-card"><dt className="recipe-view__meta-label">{formatPropertyLabel(key)}</dt><dd className="recipe-view__meta-value">{href ? <a className="recipe-view__meta-link" href={href} target="_blank" rel="noopener noreferrer">{formatPropertyValue(key, value)}</a> : formatPropertyValue(key, value)}</dd></div>;
-          })}</dl> : null}
-          <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div>
-          {activeStep !== null ? <span className="recipe-view__active-step" aria-hidden="true">{activeStep}</span> : null}
-        </article>
+          {hero && heroUrl && heroIdentifier ? <RecipeHero url={heroUrl} alt={hero.alt} timingIdentifier={heroIdentifier} path={path} /> : null}
+        </header>
+
+        {isEditing ? <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div> : (
+          <>
+            <aside className="recipe-view__panel recipe-view__ingredients-panel">
+              <div className="recipe-view__panel-heading">
+                <h2>Ingredients</h2>
+              </div>
+              <ul className="recipe-view__checklist">
+                {ingredients.map((ingredient, index) => (
+                  <li key={index}>
+                    <label>
+                      <input className="recipe-view__check" type="checkbox" checked={checkedIngredients.has(index)} onChange={() => toggleIngredient(index)} />
+                      <span className="checkbox-box" aria-hidden="true">
+                        <svg viewBox="0 0 12 12"><polyline points="2,6.4 4.7,9 10,3.2" /></svg>
+                      </span>
+                      <span className={checkedIngredients.has(index) ? "is-checked" : ""}>{ingredient}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+            <article className="recipe-view__panel recipe-view__method">
+              <div className="recipe-view__panel-heading">
+                <h2>Method</h2>
+                <button className="recipe-view__reset" type="button" onClick={resetAll}>Reset</button>
+              </div>
+              <ol className="recipe-view__checklist recipe-view__checklist--steps">
+                {directions.map((step, index) => (
+                  <li key={index}>
+                    <button
+                      type="button"
+                      className="recipe-view__step-number"
+                      aria-pressed={checkedSteps.has(index)}
+                      aria-label={`Step ${index + 1}`}
+                      onClick={() => toggleStep(index)}
+                    >{String(index + 1).padStart(2, "0")}</button>
+                    <p className={`recipe-view__step-text${checkedSteps.has(index) ? " is-checked" : ""}`}><StepText text={step} /></p>
+                  </li>
+                ))}
+              </ol>
+            </article>
+            {readMarkdown ? <div className="recipe-view__notes recipe-view__mdx recipe-view__mdx--full">{editor}</div> : null}
+            {cookLog.length > 0 ? (
+              <details className="recipe-view__cooklog">
+                <summary>
+                  <span className="recipe-view__cooklog-label">Cook log</span>
+                  <span className="recipe-view__cooklog-summary">
+                    {cookLog.length === 1 ? "1 cook" : `${cookLog.length} cooks`} · last {formatCookLogDate(cookLog[0].date)}
+                  </span>
+                </summary>
+                <ul>
+                  {cookLog.map((entry, index) => {
+                    const verdict = [
+                      entry.rating === null ? null : `Rated ${entry.rating}`,
+                      entry.makeAgain === null ? null : entry.makeAgain ? "Would make again" : "Would not make again"
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <li key={`${entry.date}:${index}`}>
+                        <span className="recipe-view__cooklog-date">{formatCookLogDate(entry.date)}</span>
+                        <div className="recipe-view__cooklog-entry">
+                          {entry.notes ? <p>{entry.notes}</p> : null}
+                          {verdict ? <p className="recipe-view__cooklog-verdict">{verdict}</p> : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            ) : null}
+            {meta.tags.length > 0 ? (
+              <ul className="recipe-view__tags">
+                {meta.tags.map((tag) => <li key={tag}>{tag}</li>)}
+              </ul>
+            ) : null}
+          </>
+        )}
+        {saveIndicator}
       </div>
     </section>
   );
   return contentPane;
-}
+});

@@ -1,18 +1,9 @@
-import { defineConfig } from "@playwright/test";
+import { browserSuiteConfig } from "./playwright.shared";
 
-const port = 4193;
-
-export default defineConfig({
-	testDir: "tests/kanban-client",
-	workers: 1,
-	timeout: 30_000,
-	expect: { timeout: 5_000 },
-	webServer: {
-		command: `npm run build:kanban-client && vite --host 127.0.0.1 --port ${port} --strictPort`,
-		port,
-		reuseExistingServer: false,
-	},
-	use: {
-		baseURL: `http://127.0.0.1:${port}`,
-	},
+export default browserSuiteConfig({
+  testDir: "tests/kanban-client",
+  workers: 1,
+  timeout: 30_000,
+  expectTimeout: 5_000,
+  command: (port) => `vite build --config vite.kanban-core.config.ts && vite --host 127.0.0.1 --port ${port} --strictPort`
 });

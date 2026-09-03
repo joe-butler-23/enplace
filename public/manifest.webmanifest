@@ -2,6 +2,7 @@
   "name": "Enplace",
   "short_name": "Enplace",
   "description": "The full Enplace app: recipe database, weekly planner, and shopping list.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

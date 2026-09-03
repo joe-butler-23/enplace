@@ -2,4 +2,12 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-"${repo_root}/scripts/pre-push.sh"
+refs_file="$(mktemp)"
+trap 'rm -f "${refs_file}"' EXIT
+tee "${refs_file}" >/dev/null
+
+if [[ -x "${repo_root}/.beads/hooks/pre-push" ]]; then
+  "${repo_root}/.beads/hooks/pre-push" "$@" <"${refs_file}"
+fi
+
+"${repo_root}/scripts/pre-push.sh" --pre-push <"${refs_file}"

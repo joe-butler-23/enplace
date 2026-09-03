@@ -1,0 +1,30 @@
+export type VaultFile = { path: string; file: File };
+export type VaultStorageAdapter = {
+  readBytes(path: string): Promise<Uint8Array>;
+  writeBytes(path: string, bytes: Uint8Array): Promise<void>;
+  writeNewBytes(path: string, bytes: Uint8Array): Promise<void>;
+  updateText(path: string, update: (current: string) => string): Promise<string>;
+  remove(path: string, recursive?: boolean): Promise<void>;
+  pathExists(path: string): Promise<boolean>;
+  walkFiles(): Promise<VaultFile[]>;
+  fileUrl(path: string): Promise<string>;
+};
+let selected: VaultStorageAdapter | null = null;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const storage = (): VaultStorageAdapter => {
+  if (!selected) throw new Error("No vault storage adapter is selected.");
+  return selected;
+};
+export const useVaultStorage = (next: VaultStorageAdapter | null): void => { selected = next; };
+export const readBytes = (path: string): Promise<Uint8Array> => storage().readBytes(path);
+export const readText = async (path: string): Promise<string> => decoder.decode(await readBytes(path));
+export const writeBytes = (path: string, bytes: Uint8Array): Promise<void> => storage().writeBytes(path, bytes);
+export const writeText = (path: string, text: string): Promise<void> => writeBytes(path, encoder.encode(text));
+export const writeNewBytes = (path: string, bytes: Uint8Array): Promise<void> => storage().writeNewBytes(path, bytes);
+export const writeNewText = (path: string, text: string): Promise<void> => writeNewBytes(path, encoder.encode(text));
+export const updateText = (path: string, update: (current: string) => string): Promise<string> => storage().updateText(path, update);
+export const remove = (path: string, recursive = false): Promise<void> => storage().remove(path, recursive);
+export const pathExists = (path: string): Promise<boolean> => storage().pathExists(path);
+export const walkFiles = (): Promise<VaultFile[]> => storage().walkFiles();
+export const fileUrl = (path: string): Promise<string> => storage().fileUrl(path);

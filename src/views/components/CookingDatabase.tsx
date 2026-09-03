@@ -1,8 +1,7 @@
 import * as React from "react";
-import { setIcon } from "@/platform";
 import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
-import { CookingAssistantSettings } from "../../settings";
-import type { ImageResourceState, ImageResourceStore } from "../utils/image-resources";
+import { importPastedRecipe, PasteRecipeInput } from "../../recipe-import/paste-import";
+import { recipeViewTransitionName } from "./recipe-view-transition";
 
 export type MarkedFilter = "all" | "marked" | "unmarked";
 export type ScheduledFilter = "all" | "scheduled" | "unscheduled";
@@ -17,86 +16,91 @@ export interface DatabaseState {
   tags: string[];
 }
 
-export type DatabaseCoverState = { status: "none" } | { status: "pending" } | ImageResourceState;
-
 interface CookingDatabaseProps {
   recipes: RecipeIndexItem[];
   totalCount: number;
   markedCount: number;
   availableTags: string[];
-  settings: CookingAssistantSettings;
   state: DatabaseState;
   isPending?: boolean;
   sourceError?: string | null;
   onStateChange: (state: DatabaseState) => void;
+  /** Publishes just the query text. Kept separate from `onStateChange` because the debounced
+   * search settles on its own schedule: republishing a whole `DatabaseState` snapshot from that
+   * timer would overwrite a sort or filter the user chose while the search was still settling. */
+  onSearchChange: (search: string) => void;
   onOpenRecipe: (path: string, split: boolean) => void;
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
   onClearMarked: () => Promise<void>;
-  onOpenPlanner: () => void;
   resolveCover: (path: string | null, source: string) => string | null;
-  getCoverState: (coverPath: string | null) => DatabaseCoverState;
-  /** Cover image state lives in this store outside React; each card subscribes to just its own
-   * key so it reveals the moment its own cover decodes, without re-rendering its siblings. */
-  coverStore: ImageResourceStore;
+  onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
 }
 
-const SEARCH_DEBOUNCE_MS = 120;
 const MIN_CARD_WIDTH_FLOOR = 160;
 const DEFAULT_CARD_MIN_WIDTH = 220;
+const INITIAL_CARD_PREFIX = 21;
 
 function formatVisibleCount(recipes: RecipeIndexItem[], totalCount: number): string {
   if (recipes.length < totalCount) {
     return `${recipes.length} of ${totalCount} recipes`;
   }
-  return `${totalCount} recipes`;
+  return `${totalCount} ${totalCount === 1 ? "recipe" : "recipes"}`;
 }
 
-function formatTagSummary(tags: string[]): string {
-  if (tags.length === 0) {
-    return "all";
-  }
-  if (tags.length === 1) {
-    return tags[0];
-  }
-  return `${tags.length} selected`;
+function hasActiveQuery(state: DatabaseState): boolean {
+	return Boolean(
+		state.search.trim() ||
+		state.tags.length > 0 ||
+		state.marked !== "all" ||
+		state.scheduled !== "all" ||
+		state.added !== "all"
+	);
 }
 
 /**
- * Publishes the grid's *resolved* column width as `--cooking-db-card-intrinsic` so the cards'
- * `content-visibility` placeholder estimates their real height.
- *
- * `--cooking-db-card-size` is only the grid's minimum track; `auto-fit` plus `1fr` makes real
- * columns wider, so sizing the placeholder from it under-reports every card that has not been
- * rendered yet and the scroll height shifts under the user as they scroll into fresh content.
- * The measurement gets its own property because `--cooking-db-card-size` also feeds
- * `grid-template-columns` -- writing layout output back into layout input would oscillate.
+ * A tag being typed at the caret: `#` plus whatever follows it, anchored to the end of the
+ * query. Anchoring to the tail is what keeps this a lookahead rather than a query parser --
+ * there is no mid-string edit to reconcile -- and `#` cannot collide with recipe text because
+ * no recipe title or vault path carries one.
  */
-function useCardIntrinsicSize(grid: HTMLDivElement | null, cardMinWidth: number): void {
-  React.useEffect(() => {
-    if (!grid || typeof ResizeObserver === "undefined") return;
-    let frame = 0;
-    const measure = () => {
-      frame = 0;
-      // Resolves to a used px track list; the first track is every column's width.
-      const track = Number.parseFloat(getComputedStyle(grid).gridTemplateColumns);
-      if (!Number.isFinite(track) || track <= 0) return;
-      const next = `${Math.round(track)}px`;
-      // Setting a custom property here recalculates styles for every card, so only ever write
-      // when the value actually moved.
-      if (next === grid.style.getPropertyValue("--cooking-db-card-intrinsic")) return;
-      grid.style.setProperty("--cooking-db-card-intrinsic", next);
-    };
-    const observer = new ResizeObserver(() => {
-      if (frame === 0) frame = requestAnimationFrame(measure);
-    });
-    observer.observe(grid);
-    measure();
-    return () => {
-      observer.disconnect();
-      if (frame !== 0) cancelAnimationFrame(frame);
-    };
-    // `cardMinWidth` changes the track sizing without resizing the grid, so it needs a re-measure.
-  }, [grid, cardMinWidth]);
+const TAG_DRAFT = /(?:^|\s)#([a-z0-9-]*)$/i;
+
+const TAG_SUGGESTION_LIMIT = 8;
+
+function matchTagDraft(query: string): string | null {
+  const match = TAG_DRAFT.exec(query);
+  return match ? match[1] : null;
+}
+
+/**
+ * The query with any in-progress `#tag` removed. The grid searches on this rather than on the
+ * raw field, so typing a tag narrows the collection by tag instead of emptying it against a
+ * substring that no recipe contains.
+ */
+function stripTagDraft(query: string): string {
+  return query.replace(TAG_DRAFT, "").trim();
+}
+
+const SORT_OPTIONS: ReadonlyArray<{ value: RecipeIndexSort; label: string }> = [
+  { value: "added-desc", label: "Newest" },
+  { value: "added-asc", label: "Oldest" },
+  { value: "title-asc", label: "Title (A-Z)" },
+  { value: "title-desc", label: "Title (Z-A)" },
+  { value: "scheduled-desc", label: "Scheduled (latest)" },
+  { value: "scheduled-asc", label: "Scheduled (oldest)" },
+];
+
+function sortLabel(sort: RecipeIndexSort): string {
+  return SORT_OPTIONS.find((option) => option.value === sort)?.label ?? SORT_OPTIONS[0].label;
+}
+
+/** Filters folded behind the Filter button. Tags are excluded -- they are visible as chips. */
+function countActiveFilters(state: DatabaseState): number {
+  return (
+    (state.marked === "all" ? 0 : 1) +
+    (state.scheduled === "all" ? 0 : 1) +
+    (state.added === "all" ? 0 : 1)
+  );
 }
 
 export const CookingDatabase = React.memo(function CookingDatabase({
@@ -104,30 +108,66 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   totalCount,
   markedCount,
   availableTags,
-  settings,
   state,
   isPending = false,
   sourceError = null,
   onStateChange,
+  onSearchChange,
   onOpenRecipe,
   onToggleMarked,
   onClearMarked,
-  onOpenPlanner,
   resolveCover,
-  getCoverState,
-  coverStore,
+  onPointerDownRecipe,
 }: CookingDatabaseProps): React.JSX.Element {
   const [search, setSearch] = React.useState(state.search);
-  const deferredSearch = React.useDeferredValue(search);
-  const [tagMenuOpen, setTagMenuOpen] = React.useState(false);
+  const [transitionSourcePath, setTransitionSourcePath] = React.useState<string | null>(null);
+  const [showImport, setShowImport] = React.useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("share-target"));
+  const [importPending, setImportPending] = React.useState(false);
+  const [coverFile, setCoverFile] = React.useState<File | null>(null);
+  const [importError, setImportError] = React.useState("");
+  const [paste, setPaste] = React.useState<PasteRecipeInput>(() => {
+    const shared = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+    return { title: shared?.get("title") ?? "", source: shared?.get("url") ?? "", ingredients: shared?.get("text") ?? "", method: "", prepTime: "", cookTime: "", servings: "" };
+  });
+  const [prefixSettled, setPrefixSettled] = React.useState(false);
+  const settledPrefixPaths = React.useRef(new Set<string>());
+  const renderedRecipes = (prefixSettled ? recipes : recipes.slice(0, INITIAL_CARD_PREFIX)).map((recipe) => ({
+    recipe, coverPath: resolveCover(recipe.coverPath, recipe.path)
+  }));
+  const initialCovers = renderedRecipes.slice(0, INITIAL_CARD_PREFIX).filter(({ coverPath }) => Boolean(coverPath));
+  const prefixCoverCount = initialCovers.length;
+  const settlePrefixImage = (path: string) => {
+    settledPrefixPaths.current.add(path);
+    if (settledPrefixPaths.current.size === prefixCoverCount) React.startTransition(() => setPrefixSettled(true));
+  };
+  React.useEffect(() => {
+    if (!isPending && prefixCoverCount === 0) React.startTransition(() => setPrefixSettled(true));
+  }, [isPending, prefixCoverCount]);
+  const submitPasteImport = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setImportPending(true);
+    setImportError("");
+    try {
+      await importPastedRecipe({ ...paste, cover: coverFile });
+      setShowImport(false);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setImportPending(false);
+    }
+  };
+  const updatePaste = (field: keyof PasteRecipeInput) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setPaste(current => ({ ...current, [field]: event.target.value }));
+
+  const tagDraft = matchTagDraft(search);
+  const effectiveSearch = React.useMemo(() => stripTagDraft(search), [search]);
+  const deferredSearch = React.useDeferredValue(effectiveSearch);
+  const [openMenu, setOpenMenu] = React.useState<"filter" | "sort" | null>(null);
+  const [suggestDismissed, setSuggestDismissed] = React.useState(false);
+  const [highlight, setHighlight] = React.useState(0);
   const [clearPending, setClearPending] = React.useState(false);
-  const latestStateRef = React.useRef(state);
-  const [gridEl, setGridEl] = React.useState<HTMLDivElement | null>(null);
-  const cardMinWidth = Math.max(
-    MIN_CARD_WIDTH_FLOOR,
-    settings.databaseCardMinWidth || DEFAULT_CARD_MIN_WIDTH
-  );
-  useCardIntrinsicSize(gridEl, cardMinWidth);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const cardMinWidth = Math.max(MIN_CARD_WIDTH_FLOOR, DEFAULT_CARD_MIN_WIDTH);
 
   // Semantic mark for the database latency harness: the moment the current database view has
   // both recipe data and a settled (non-pending) render. The detail carries the exact ordered
@@ -157,6 +197,11 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             total: totalCount,
             sort: state.sort,
             firstFourPaths: recipes.slice(0, 4).map((recipe) => recipe.path),
+            firstViewportPaths: recipes.slice(0, 10).map((recipe) => recipe.path),
+            initialCoverPaths: initialCovers.map(({ recipe }) => recipe.path),
+            firstCoverPath: initialCovers[0]?.recipe.path ?? null,
+            firstCoverUrl: initialCovers[0]?.coverPath ?? null,
+            viewGeneration: semanticReadyQueryKey,
             queryKey: semanticReadyQueryKey
           }
         });
@@ -164,31 +209,65 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     }
   }, [recipes, isPending, sourceError, state.sort, semanticReadyQueryKey, totalCount]);
 
-  const onStateChangeEvent = React.useEffectEvent(onStateChange);
+  const onSearchChangeEvent = React.useEffectEvent(onSearchChange);
   const selectedTags = React.useMemo(() => new Set(state.tags), [state.tags]);
 
   React.useEffect(() => {
-    latestStateRef.current = state;
-  }, [state]);
-
-  // Sync local search if prop changes
-  React.useEffect(() => {
-    setSearch(state.search);
-  }, [state.search]);
-
-  // Debounce search update
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      const latestState = latestStateRef.current;
-      if (deferredSearch !== latestState.search) {
-        onStateChangeEvent({ ...latestState, search: deferredSearch });
-      }
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    onSearchChangeEvent(deferredSearch);
   }, [deferredSearch]);
 
   const updateState = (updates: Partial<DatabaseState>) => {
     onStateChange({ ...state, ...updates });
+  };
+
+  const tagSuggestions = React.useMemo(() => {
+    if (tagDraft === null || suggestDismissed) return [];
+    const prefix = tagDraft.toLowerCase();
+    return availableTags
+      .filter((tag) => !selectedTags.has(tag) && tag.toLowerCase().startsWith(prefix))
+      .slice(0, TAG_SUGGESTION_LIMIT);
+  }, [tagDraft, suggestDismissed, availableTags, selectedTags]);
+
+  React.useEffect(() => {
+    setHighlight(0);
+  }, [tagDraft]);
+
+  const acceptTag = (tag: string) => {
+    if (selectedTags.has(tag)) return;
+    // The draft text and the tag list move in one publish: leaving the `#tag` in the search
+    // string would publish a substring no recipe can match.
+    const nextSearch = stripTagDraft(search);
+    setSearch(nextSearch);
+    setSuggestDismissed(false);
+    onStateChange({ ...state, search: nextSearch, tags: [...state.tags, tag] });
+    searchInputRef.current?.focus();
+  };
+
+  const removeTag = (tag: string) => {
+    updateState({ tags: state.tags.filter((entry) => entry !== tag) });
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && search === "" && state.tags.length > 0) {
+      removeTag(state.tags[state.tags.length - 1]);
+      return;
+    }
+    if (event.key === "Escape" && tagSuggestions.length > 0) {
+      event.preventDefault();
+      setSuggestDismissed(true);
+      return;
+    }
+    if (tagSuggestions.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlight((index) => (index + 1) % tagSuggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlight((index) => (index - 1 + tagSuggestions.length) % tagSuggestions.length);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      acceptTag(tagSuggestions[Math.min(highlight, tagSuggestions.length - 1)]);
+    }
   };
 
   const handleClearMarked = async () => {
@@ -205,17 +284,34 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     }
   };
 
-  // Tag menu click outside
   React.useEffect(() => {
-    if (!tagMenuOpen) return;
+    if (openMenu === null) return;
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target as Element).closest(".cooking-db__popover")) setOpenMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("click", onClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenu]);
+
+  React.useEffect(() => {
+    if (tagSuggestions.length === 0) return;
     const handler = (e: MouseEvent) => {
-      if (!(e.target as Element).closest(".cooking-db__tag-filter")) {
-        setTagMenuOpen(false);
+      if (!(e.target as Element).closest(".cooking-db__searchbox")) {
+        setSuggestDismissed(true);
       }
     };
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
-  }, [tagMenuOpen]);
+  }, [tagSuggestions.length]);
+
+  const activeFilterCount = countActiveFilters(state);
 
   return (
     <div className="cooking-db">
@@ -224,162 +320,249 @@ export const CookingDatabase = React.memo(function CookingDatabase({
         <div className="cooking-db__count">
           {sourceError ? "Unavailable" : formatVisibleCount(recipes, totalCount)}
         </div>
-      </div>
 
-      <div className="cooking-db__controls">
-        <button
-          className="cooking-db__icon-button"
-          type="button"
-          aria-label="Open Cooking Planner"
-          onClick={onOpenPlanner}
-          ref={(el) => { if (el) setIcon(el, "calendar-days"); }}
-        />
-
-        <input
-          className="cooking-db__search"
-          type="search"
-          placeholder="Search recipes..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <select
-          className="cooking-db__select"
-          aria-label="Sort recipes"
-          value={state.sort}
-          onChange={(e) => updateState({ sort: e.target.value as RecipeIndexSort })}
-        >
-          <option value="added-desc">Added (newest)</option>
-          <option value="added-asc">Added (oldest)</option>
-          <option value="title-asc">Title (A-Z)</option>
-          <option value="title-desc">Title (Z-A)</option>
-          <option value="scheduled-desc">Scheduled (latest)</option>
-          <option value="scheduled-asc">Scheduled (oldest)</option>
-        </select>
-
-        <div className="cooking-db__tag-filter">
-          <button
-            className="cooking-db__select cooking-db__tag-toggle"
-            type="button"
-            aria-haspopup="listbox"
-            aria-expanded={tagMenuOpen}
-            onClick={() => setTagMenuOpen(!tagMenuOpen)}
-          >
-            Tags: {formatTagSummary(state.tags)}
-          </button>
-          {tagMenuOpen && (
-            <div className="cooking-db__tag-menu" role="listbox">
-              <label className="cooking-db__tag-option">
-                <input
-                  type="checkbox"
-                  aria-label="Show all tags"
-                  checked={state.tags.length === 0}
-                  onChange={() => updateState({ tags: [] })}
-                />
-                <span>All tags</span>
-              </label>
-              {availableTags.map((tag) => (
-                <label key={tag} className="cooking-db__tag-option">
-                  <input
-                    type="checkbox"
-                    aria-label={`Filter by tag ${tag}`}
-                    checked={selectedTags.has(tag)}
-                    onChange={(e) => {
-                      const newTags = e.target.checked
-                        ? [...state.tags, tag]
-                        : state.tags.filter((t) => t !== tag);
-                      updateState({ tags: newTags });
-                    }}
-                  />
-                  <span>{tag}</span>
-                </label>
+        <div className="cooking-db__searchbox">
+          {state.tags.length > 0 && (
+            <div className="cooking-db__chips">
+              {state.tags.map((tag) => (
+                <button
+                  key={tag}
+                  className="cooking-db__chip"
+                  type="button"
+                  aria-label={`Remove tag filter ${tag}`}
+                  onClick={() => removeTag(tag)}
+                >
+                  #{tag}
+                  <span aria-hidden="true">&#215;</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <input
+            ref={searchInputRef}
+            className="cooking-db__search"
+            type="search"
+            role="combobox"
+            aria-label="Search recipes"
+            aria-autocomplete="list"
+            aria-expanded={tagSuggestions.length > 0}
+            aria-controls="cooking-db-tag-suggest"
+            placeholder="Search recipes, or # for a tag"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSuggestDismissed(false);
+            }}
+            onKeyDown={handleSearchKeyDown}
+          />
+          {tagSuggestions.length > 0 && (
+            <div className="cooking-db__tag-suggest" id="cooking-db-tag-suggest" role="listbox">
+              {tagSuggestions.map((tag, index) => (
+                <button
+                  key={tag}
+                  className={`cooking-db__tag-suggestion${index === highlight ? " is-active" : ""}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === highlight}
+                  // Keeps the caret in the field so the list does not tear down before the click.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setHighlight(index)}
+                  onClick={() => acceptTag(tag)}
+                >
+                  #{tag}
+                </button>
               ))}
             </div>
           )}
         </div>
 
-        <select
-          className="cooking-db__select"
-          aria-label="Marked filter"
-          value={state.marked}
-          onChange={(e) => updateState({ marked: e.target.value as MarkedFilter })}
-        >
-          <option value="all">All marked</option>
-          <option value="marked">Marked only</option>
-          <option value="unmarked">Unmarked only</option>
-        </select>
+        <div className="cooking-db__popover cooking-db__sort">
+          <button
+            className="cooking-db__select cooking-db__popover-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={openMenu === "sort"}
+            // Sort always has a value, so it is named rather than counted.
+            aria-label={`Sort recipes (${sortLabel(state.sort)})`}
+            onClick={() => setOpenMenu(openMenu === "sort" ? null : "sort")}
+          >
+            Sort
+            <span className="cooking-db__popover-badge mod-value" aria-hidden="true">
+              {sortLabel(state.sort)}
+            </span>
+          </button>
+          {openMenu === "sort" && (
+            <div
+              className="cooking-db__popover-menu cooking-db__sort-menu"
+              role="listbox"
+              aria-label="Sort recipes"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={`cooking-db__filter-action cooking-db__sort-option${
+                    state.sort === option.value ? " is-active" : ""
+                  }`}
+                  type="button"
+                  role="option"
+                  aria-selected={state.sort === option.value}
+                  onClick={() => {
+                    updateState({ sort: option.value });
+                    setOpenMenu(null);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <button
-          className="cooking-db__button mod-warning"
-          type="button"
-          onClick={handleClearMarked}
-          disabled={markedCount === 0 || clearPending}
-        >
-          {clearPending ? "Clearing..." : "Clear marked"}
-        </button>
+        <div className="cooking-db__popover cooking-db__filter">
+          <button
+            className="cooking-db__select cooking-db__popover-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={openMenu === "filter"}
+            // The badge is decorative; the count belongs in the name so it is announced as one
+            // control rather than read out as a stray digit after the word.
+            aria-label={activeFilterCount > 0 ? `Filter (${activeFilterCount} active)` : "Filter"}
+            onClick={() => setOpenMenu(openMenu === "filter" ? null : "filter")}
+          >
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="cooking-db__popover-badge" aria-hidden="true">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {openMenu === "filter" && (
+            <div className="cooking-db__popover-menu cooking-db__filter-menu">
+              <div className="cooking-db__filter-row">
+                <span aria-hidden="true">Marked</span>
+                <select
+                  className="cooking-db__select"
+                  aria-label="Marked filter"
+                  value={state.marked}
+                  onChange={(e) => updateState({ marked: e.target.value as MarkedFilter })}
+                >
+                  <option value="all">Any</option>
+                  <option value="marked">Only marked</option>
+                  <option value="unmarked">Only unmarked</option>
+                </select>
+              </div>
 
-        <select
-          className="cooking-db__select"
-          aria-label="Scheduled filter"
-          value={state.scheduled}
-          onChange={(e) =>
-            updateState({ scheduled: e.target.value as ScheduledFilter })
-          }
-        >
-          <option value="all">All scheduled</option>
-          <option value="scheduled">Scheduled only</option>
-          <option value="unscheduled">Unscheduled only</option>
-        </select>
+              <div className="cooking-db__filter-row">
+                <span aria-hidden="true">Scheduled</span>
+                <select
+                  className="cooking-db__select"
+                  aria-label="Scheduled filter"
+                  value={state.scheduled}
+                  onChange={(e) => updateState({ scheduled: e.target.value as ScheduledFilter })}
+                >
+                  <option value="all">Any</option>
+                  <option value="scheduled">Only scheduled</option>
+                  <option value="unscheduled">Only unscheduled</option>
+                </select>
+              </div>
 
-        <select
-          className="cooking-db__select"
-          aria-label="Added date filter"
-          value={state.added}
-          onChange={(e) => updateState({ added: e.target.value as AddedFilter })}
-        >
-          <option value="all">All added dates</option>
-          <option value="last-7-days">Added in last 7 days</option>
-        </select>
+              <div className="cooking-db__filter-row">
+                <span aria-hidden="true">Date added</span>
+                <select
+                  className="cooking-db__select"
+                  aria-label="Added date filter"
+                  value={state.added}
+                  onChange={(e) => updateState({ added: e.target.value as AddedFilter })}
+                >
+                  <option value="all">Any time</option>
+                  <option value="last-7-days">Last 7 days</option>
+                </select>
+              </div>
+
+              <div className="cooking-db__filter-divider" />
+
+              <button
+                className="cooking-db__filter-action"
+                type="button"
+                disabled={activeFilterCount === 0}
+                onClick={() => updateState({ marked: "all", scheduled: "all", added: "all" })}
+              >
+                Clear all filters
+              </button>
+
+              <div className="cooking-db__filter-divider" />
+
+              <button
+                className="cooking-db__filter-action mod-warning"
+                type="button"
+                onClick={handleClearMarked}
+                disabled={markedCount === 0 || clearPending}
+              >
+                {clearPending ? "Clearing..." : "Clear marked"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="cooking-db__grid-container">
         {sourceError ? (
           <div className="cooking-db__error" role="alert">{sourceError}</div>
-        ) : recipes.length === 0 && !isPending ? (
+        ) : showImport || (recipes.length === 0 && !isPending && !hasActiveQuery(state)) ? (
           <div className="cooking-db__empty cooking-db__onboarding">
             <h2>No recipes yet</h2>
             <p>
-              A recipe is a plain Markdown file with <code>title</code>,{" "}
-              <code>type: recipe</code>, and <code>source</code> frontmatter, stored in your
-              vault&apos;s recipe folder. Your library stays readable in any text editor or
-              Obsidian vault.
+              A recipe is any Markdown file in this folder with a <code>## Ingredients</code> heading.
+              Your library stays readable in any text editor or Obsidian vault.
             </p>
-            <p>
-              To add your first recipe, ask your coding agent to use the bundled{" "}
-              <code>recipe-extraction</code> skill, or import a Markdown file yourself with the{" "}
-              <code>mep</code> CLI:
-            </p>
-            <pre><code>{`mep recipe import recipe.md --recipes-dir <vault>/cooking/recipes`}</code></pre>
-            <p>
-              Build the CLI from this repository with{" "}
-              <code>cargo build --release -p mep-cli</code>; see{" "}
-              <code>docs/mep-cli-contracts.md</code> for the full import contract.
-            </p>
+            <p>Paste the title, ingredient lines, and method steps to import a recipe.</p>
+            {!showImport ? (
+              <button type="button" className="cooking-db__filter-action" onClick={() => setShowImport(true)}>Import recipe</button>
+            ) : (
+              <form className="cooking-db__paste-import" onSubmit={submitPasteImport}>
+                <label>Title<input aria-label="Recipe title" value={paste.title} onChange={updatePaste("title")} required /></label>
+                <label>Source URL (optional)<input aria-label="Recipe source URL" type="url" value={paste.source} onChange={updatePaste("source")} /></label>
+                <label>Ingredients<textarea aria-label="Recipe ingredients" value={paste.ingredients} onChange={updatePaste("ingredients")} placeholder="One ingredient per line" required /></label>
+                <label>Method<textarea aria-label="Recipe method" value={paste.method} onChange={updatePaste("method")} placeholder="Cook until tender." required /></label>
+                <label>Cover image (optional)<input aria-label="Recipe cover image" type="file" accept="image/*" onChange={(event) => setCoverFile(event.currentTarget.files?.[0] ?? null)} /></label>
+                {importError && <p role="alert">{importError}</p>}
+                <button type="submit" className="cooking-db__filter-action" disabled={importPending}>{importPending ? "Importing…" : "Import recipe"}</button>
+              </form>
+            )}
+          </div>
+        ) : recipes.length === 0 && !isPending ? (
+          <div className="cooking-db__empty cooking-db__no-results" role="status">
+            <h2>No recipes match these filters</h2>
+            <p>Try a different search or clear the active filters.</p>
+            <button
+              type="button"
+              className="cooking-db__filter-action"
+              onClick={() => {
+                setSearch("");
+                onStateChange({ ...state, search: "", marked: "all", scheduled: "all", added: "all", tags: [] });
+              }}
+            >
+              Clear filters
+            </button>
           </div>
         ) : (
           <div
-            ref={setGridEl}
             className="cooking-db__grid"
             style={{ "--cooking-db-card-size": `${cardMinWidth}px` } as React.CSSProperties}
           >
-            {recipes.map((recipe) => (
+            {renderedRecipes.map(({ recipe, coverPath }, index) => (
               <RecipeCard
                 key={recipe.path}
                 recipe={recipe}
-                coverPath={resolveCover(recipe.coverPath, recipe.path)}
-                getCoverState={getCoverState}
-                coverStore={coverStore}
+                coverPath={coverPath}
                 onOpenRecipe={onOpenRecipe}
+                isTransitionSource={transitionSourcePath === recipe.path}
+                onPointerDownRecipe={(path, url) => {
+                  setTransitionSourcePath(path);
+                  onPointerDownRecipe?.(path, url);
+                }}
+                onPointerLeaveRecipe={() => setTransitionSourcePath(null)}
+                onImageSettled={index < INITIAL_CARD_PREFIX ? settlePrefixImage : undefined}
                 onToggleMarked={onToggleMarked}
               />
             ))}
@@ -393,20 +576,15 @@ export const CookingDatabase = React.memo(function CookingDatabase({
 type RecipeCardProps = {
   recipe: RecipeIndexItem;
   coverPath: string | null;
-  getCoverState: (coverPath: string | null) => DatabaseCoverState;
-  coverStore: ImageResourceStore;
   onOpenRecipe: (path: string, split: boolean) => void;
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
+  onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
+  onPointerLeaveRecipe: () => void;
+  isTransitionSource: boolean;
+  onImageSettled?: (path: string) => void;
 };
 
-const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, getCoverState, coverStore, onOpenRecipe, onToggleMarked }) => {
-  // Subscribes to just this card's own key: React's useSyncExternalStore only re-renders when
-  // getSnapshot's *return value* changes, so a decode completing for any other card in the grid
-  // never touches this one -- the cascade that a grid-level subscription would cause.
-  const coverState = React.useSyncExternalStore(
-    React.useCallback((onStoreChange: () => void) => coverStore.subscribe(onStoreChange), [coverStore]),
-    React.useCallback(() => getCoverState(coverPath), [getCoverState, coverPath])
-  );
+const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onPointerLeaveRecipe, isTransitionSource, onImageSettled, onToggleMarked }) => {
   const [toggleDisabled, setToggleDisabled] = React.useState(false);
   const [optimisticMarked, setOptimisticMarked] = React.useState(recipe.marked);
 
@@ -428,53 +606,63 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, g
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey);
-    }
-  };
-
   return (
-    <div
+    <article
       className="cooking-db__card"
-      role="button"
-      aria-label={`Open recipe ${recipe.title}`}
       data-path={recipe.path}
-      data-has-cover={coverState.status === "none" ? "false" : "true"}
-      data-image-state={coverState.status}
-      tabIndex={0}
-      onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
-      onKeyDown={handleKeyDown}
+      data-has-cover={coverPath ? "true" : "false"}
     >
-      <div className={`cooking-db__cover ${coverState.status !== "ready" ? "cooking-db__cover--empty" : ""}`}>
-        {coverState.status === "ready" && (
-          // @ts-expect-error elementtiming is a valid Element Timing API attribute and is not
-          // declared in React's bundled HTML type definitions.
-          <img src={coverState.resource.url} alt={recipe.title} decoding="async" elementtiming={recipe.path} data-path={recipe.path} />
-        )}
-      </div>
-      <div className="cooking-db__body">
-        <div className="cooking-db__title">{recipe.title}</div>
-        <div className="cooking-db__meta">
-          {recipe.added ? `Added ${recipe.added}` : ""}
-        </div>
-        <div
-          className="cooking-db__actions"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <label className="cooking-db__toggle">
-            <input
-              type="checkbox"
-              checked={optimisticMarked}
-              onChange={handleToggle}
-              disabled={toggleDisabled}
+      <button
+        type="button"
+        className="cooking-db__card-open"
+        aria-label={`Open recipe ${recipe.title}`}
+        onPointerDown={() => onPointerDownRecipe?.(recipe.path, coverPath ?? undefined)}
+        onPointerLeave={onPointerLeaveRecipe}
+        onPointerCancel={onPointerLeaveRecipe}
+        onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
+      >
+        <div className={`cooking-db__cover ${coverPath ? "" : "cooking-db__cover--empty"}`}>
+          {coverPath && (
+            <img
+              {...({
+                src: coverPath,
+                alt: "",
+                decoding: "async",
+                elementtiming: recipe.path,
+                "data-path": recipe.path,
+                style: isTransitionSource ? { viewTransitionName: recipeViewTransitionName(recipe.path) } : undefined,
+                onLoad: () => onImageSettled?.(recipe.path),
+                onError: () => onImageSettled?.(recipe.path),
+              } as React.ImgHTMLAttributes<HTMLImageElement>)}
             />
-            <span>Marked</span>
-          </label>
+          )}
         </div>
+        <div className="cooking-db__body">
+          <div
+            {...({
+              className: "cooking-db__title",
+              elementtiming: `mep:database-card-title:${recipe.path}`,
+            } as React.HTMLAttributes<HTMLDivElement>)}
+          >
+            {recipe.title}
+          </div>
+          <div className="cooking-db__meta">
+            {recipe.added ? `Added ${recipe.added}` : ""}
+          </div>
+        </div>
+      </button>
+      <div className="cooking-db__actions">
+        <label className="cooking-db__toggle">
+          <input
+            type="checkbox"
+            checked={optimisticMarked}
+            onChange={handleToggle}
+            disabled={toggleDisabled}
+          />
+          <span>Marked</span>
+        </label>
       </div>
-    </div>
+    </article>
   );
 }, areRecipeCardsEqual);
 
@@ -485,9 +673,11 @@ function areRecipeCardsEqual(prev: RecipeCardProps, next: RecipeCardProps): bool
     prev.recipe.added === next.recipe.added &&
     prev.recipe.marked === next.recipe.marked &&
     prev.coverPath === next.coverPath &&
-    prev.getCoverState === next.getCoverState &&
-    prev.coverStore === next.coverStore &&
     prev.onOpenRecipe === next.onOpenRecipe &&
+    prev.onPointerDownRecipe === next.onPointerDownRecipe &&
+    prev.onPointerLeaveRecipe === next.onPointerLeaveRecipe &&
+    prev.isTransitionSource === next.isTransitionSource &&
+    prev.onImageSettled === next.onImageSettled &&
     prev.onToggleMarked === next.onToggleMarked
   );
 }

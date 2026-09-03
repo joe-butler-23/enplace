@@ -9,18 +9,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-# Personal residue + common secret key formats. One line must not match any.
-CONTENT_PATTERN='joebutler|joesdownloads|joeb\.92|minworker|tail23ee7b|Bridge Club|Grace|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{30,}|tskey-[A-Za-z0-9]|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
-# Lines matching this are legitimate technical usage, not residue.
-CONTENT_ALLOWLIST='modifierGraceMs|graceMs|grace_ms|gracePeriod|grace period|GRACE_|[Gg]raceful'
+# Personal deployment residue + common secret formats.
+CONTENT_PATTERN='/home/[A-Za-z0-9._-]+/|[A-Za-z0-9.-]+\.ts\.net|[A-Za-z0-9._%+-]+@(gmail|hotmail|outlook)\.com|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{30,}|tskey-[A-Za-z0-9]|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
+# Remove only stable synthetic fixture values before testing the remainder of
+# each matching line. Dropping a whole allowlisted line would let a real secret
+# hide beside a fixture path.
+CONTENT_ALLOWLIST='/home/(student|test|vault)/|[A-Za-z0-9.-]*example\.ts\.net'
 # Paths that must never leave the machine.
 PATH_DENY_PATTERN='(^|/)\.memory_tmp/|(^|/)backups/sync-backup|^\.beads/|^\.claude/|^\.codex/'
 
 hits=0
 
-check_paths() {
-  local bad
-  bad="$(grep -E "$PATH_DENY_PATTERN" <<<"$1" || true)"
+check_paths() { # remaining args = paths
+  local bad=""
+  if (($#)); then
+    bad="$(printf '%s\n' "$@" | grep -E "$PATH_DENY_PATTERN" || true)"
+  fi
   if [[ -n "$bad" ]]; then
     echo "RESIDUE: denied path(s) in push:" >&2
     echo "$bad" >&2
@@ -28,11 +32,20 @@ check_paths() {
   fi
 }
 
-scan_content() { # $1 = tree-ish, rest = pathspecs
+scan_content() { # $1 = tree-ish or --worktree, rest = paths
   local tree="$1"; shift
+  local pathspecs=()
+  local path
+  for path in "$@"; do
+    pathspecs+=(":(literal)${path}")
+  done
   local found
-  found="$(git grep -h -n -E "$CONTENT_PATTERN" "$tree" -- "$@" 2>/dev/null || true)"
-  found="$(grep -v -E "$CONTENT_ALLOWLIST" <<<"$found" || true)"
+  if [[ "$tree" == "--worktree" ]]; then
+    found="$(git grep -n -E "$CONTENT_PATTERN" -- "${pathspecs[@]}" 2>/dev/null || true)"
+  else
+    found="$(git grep -n -E "$CONTENT_PATTERN" "$tree" -- "${pathspecs[@]}" 2>/dev/null || true)"
+  fi
+  found="$(sed -E "s#${CONTENT_ALLOWLIST}##g" <<<"$found" | grep -E "$CONTENT_PATTERN" || true)"
   if [[ -n "$found" ]]; then
     echo "RESIDUE: forbidden content in pushed files ($tree):" >&2
     head -20 <<<"$found" >&2
@@ -41,36 +54,55 @@ scan_content() { # $1 = tree-ish, rest = pathspecs
 }
 
 if [[ "${1:-}" == "--pre-push" ]]; then
-  empty_tree="$(git hash-object -t tree /dev/null)"
-  while read -r local_ref remote_ref; do
-    if [[ "$local_ref" == *0000000000000000000000000000000000000000 ]]; then
+  changed_list="$(mktemp)"
+  trap 'rm -f "${changed_list}"' EXIT
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    [[ -n "${local_ref:-}" && -n "${local_sha:-}" && -n "${remote_ref:-}" && -n "${remote_sha:-}" ]] || {
+      echo "RESIDUE: malformed pre-push ref record" >&2
+      exit 2
+    }
+    if [[ "$local_sha" == "0000000000000000000000000000000000000000" ]]; then
       continue # branch deletion: nothing to scan
     fi
-    if [[ "$remote_ref" == *0000000000000000000000000000000000000000 ]]; then
-      base="$empty_tree"
+    commits=("$local_sha")
+    if [[ "$remote_sha" != "0000000000000000000000000000000000000000" ]]; then
+      commits+=("^$remote_sha")
     else
-      base="${remote_ref#refs/*/}"
-      base="$(git rev-parse "$remote_ref")"
+      # New remote ref: scan only commits not already published on a remote.
+      commits+=(--not --remotes)
     fi
-    mapfile -t changed < <(git diff --name-only "$base" "$local_ref")
-    ((${#changed[@]})) || continue
-    printf '%s\n' "${changed[@]}" | check_paths "$(printf '%s\n' "${changed[@]}")"
-    scan_content "$local_ref" "${changed[@]}"
+    if ! commit_list="$(git rev-list --reverse "${commits[@]}")"; then
+      echo "RESIDUE: cannot enumerate outgoing commits" >&2
+      exit 2
+    fi
+    while IFS= read -r commit; do
+      [[ -n "$commit" ]] || continue
+      changed=()
+      if ! git diff-tree --root --no-commit-id --name-only -r -m -z "$commit" >"$changed_list"; then
+        echo "RESIDUE: cannot inspect outgoing commit $commit" >&2
+        exit 2
+      fi
+      while IFS= read -r -d '' path; do
+        changed+=("$path")
+      done <"$changed_list"
+      ((${#changed[@]})) || continue
+      check_paths "${changed[@]}"
+      scan_content "$commit" "${changed[@]}"
+    done <<<"$commit_list"
   done
 else
-  bad="$(git ls-files | grep -E "$PATH_DENY_PATTERN" || true)"
-  if [[ -n "$bad" ]]; then
-    echo "RESIDUE: denied tracked path(s):" >&2
-    echo "$bad" >&2
-    hits=1
-  fi
-  scan_content HEAD .
+  tracked=()
+  while IFS= read -r -d '' path; do
+    tracked+=("$path")
+  done < <(git ls-files -z)
+  check_paths "${tracked[@]}"
+  scan_content --worktree .
 fi
 
 if ((hits)); then
   echo "" >&2
   echo "Push blocked: personal residue or secrets detected." >&2
-  echo "Fix the flagged files, or export SKIP_MEP_RESIDUE_SCAN=1 only with explicit approval." >&2
+  echo "Remove the flagged content before publishing." >&2
   exit 1
 fi
 

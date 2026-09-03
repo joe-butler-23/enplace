@@ -32,7 +32,7 @@ describe("resolveDropOutcome", () => {
 	});
 
 	it("passes the exact context through to the hook", () => {
-		const ctx = buildContext({ cardType: "reminder", targetLaneId: "marked" });
+		const ctx = buildContext({ targetLaneId: "marked" });
 		let received: ResolveDropContext | null = null;
 		resolveDropOutcome(ctx, (received_ctx) => {
 			received = received_ctx;
