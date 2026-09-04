@@ -135,11 +135,13 @@
 .cooking-db__filter-action:hover:not(:disabled) { background: var(--paper); }
 .cooking-db__filter-action.mod-warning { color: var(--danger); }
 .cooking-db__filter-action:disabled { cursor: not-allowed; opacity: 0.5; }
-.cooking-db__grid-container { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.cooking-db__grid-container:hover { scrollbar-color: var(--accent) transparent; }
-.cooking-db__grid-container::-webkit-scrollbar { width: 8px; }
-.cooking-db__grid-container::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 8px; }
-.cooking-db__grid-container:hover::-webkit-scrollbar-thumb { background-color: var(--accent); }
+.cooking-db__grid-container { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* Chromium ignores ::-webkit-scrollbar once scrollbar-color is set, so the standard properties are scoped to engines without the pseudo-elements. */
+.cooking-db__grid-container::-webkit-scrollbar { width: 10px; }
+.cooking-db__grid-container::-webkit-scrollbar-thumb { background-color: var(--line-strong); border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
+.cooking-db__grid-container::-webkit-scrollbar-thumb:hover,
+.cooking-db__grid-container::-webkit-scrollbar-thumb:active { background-color: var(--muted); }
+@supports not selector(::-webkit-scrollbar) { .cooking-db__grid-container { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; } }
 /* auto-fill with a bounded track: cards keep one size whether the grid holds one result
    or forty, and the 448px thumbnail is never asked to paint above its own resolution
    (224px at a device pixel ratio of 2). Leftover width stays at the end of the row. */
