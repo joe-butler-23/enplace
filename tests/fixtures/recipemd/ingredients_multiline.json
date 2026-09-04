@@ -1,0 +1,46 @@
+{
+  "title": "Multiline Ingredients",
+  "description": null,
+  "yields": [],
+  "tags": [],
+  "ingredients": [
+    {
+      "name": "This is a long ingredient\n\n  it spans multiple paragraphs\n  \n  this may be unusual but is valid",
+      "amount": null,
+      "link": null
+    },
+    {
+      "name": "this is a normal boring ingredient",
+      "amount": null,
+      "link": null
+    },
+    {
+      "name": "is an amount that\n\n  is the amount of *this* ingredient",
+      "amount": {
+        "factor": "5",
+        "unit": "ml"
+      },
+      "link": null
+    },
+    {
+      "name": "is an amount that stands alone on the first line",
+      "amount": {
+        "factor": "5",
+        "unit": "grams"
+      },
+      "link": null
+    },
+    {
+      "name": "this is a link",
+      "amount": null,
+      "link": "some_other_recipe"
+    },
+    {
+      "name": "[this is not a link](some_other_recipe)\n\n  since links must wrap the whole ingredient text",
+      "amount": null,
+      "link": null
+    }
+  ],
+  "ingredient_groups": [],
+  "instructions": null
+}

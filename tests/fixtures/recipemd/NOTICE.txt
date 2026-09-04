@@ -1,0 +1,4 @@
+Unmodified RecipeMD specification conformance fixtures from
+https://github.com/RecipeMD/RecipeMD/tree/90a8b776fc1bbca9ba8d4ad183b76e2da70684fe/testcases/cases
+RecipeMD authors and contributors; LGPL-3.0-or-later. Licence texts accompany these fixtures.
+These fixtures are test data only and are not bundled into the application.

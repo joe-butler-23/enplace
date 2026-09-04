@@ -1,4 +1,6 @@
+import { parseRecipeMD, flattenIngredients, ingredientText, type RecipeMD } from "./recipemd.js";
 export type ParsedRecipeDocument = {
+  recipeMD?: RecipeMD;
   path: string;
   markdown: string;
   /** Legacy Preact/editor body framing. Strict catalogue/CLI framing stays in the recipe projection. */
@@ -254,6 +256,18 @@ function viewMetadata(
 
 /** Parses the strict catalogue and historic display projections without conflating their policies. */
 export function parseRecipeDocument(path: string, markdown: string): ParsedRecipeDocument {
+  try {
+    const standard = parseRecipeMD(markdown);
+    const ingredients = flattenIngredients(standard).map(ingredientText);
+    const description = standard.description ?? "";
+    const lines = description.split(/\r?\n/);
+    const source = /(?:^|\n)Source:\s*(?:\[[^\]]*\]\(([^)]+)\)|([^\n]+))/.exec(description);
+    const added = /(?:^|\n)Added:\s*(\d{4}-\d{2}-\d{2})/.exec(description)?.[1] ?? null;
+    const view = viewMetadata(description, {}, lines);
+    return { path, markdown, body: markdown, rawFrontmatter: null, frontmatter: {}, recipeMD: standard,
+      recipe: { title: standard.title, ingredients, cover: recipeMetadata(path, description, {}, lines).cover, added, tags: standard.tags },
+      view: { ...view, title: standard.title, ingredients, directions: parseDisplayDirections(['## Method', ...(standard.instructions ?? '').replace(/^##\s+(Method|Directions)\s*\n/i, '').split(/\r?\n/)]), source: source?.[1] ?? source?.[2] ?? null, tags: standard.tags } };
+  } catch { /* Existing cookbooks remain readable until their explicit migration. */ }
   const recipeFrame = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   const displayFrame = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(markdown);
   const recipeBody = recipeFrame ? markdown.slice(recipeFrame[0].length) : markdown;

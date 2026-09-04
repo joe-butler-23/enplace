@@ -154,7 +154,7 @@ describe("Shopping.md", () => {
 describe("paste import", () => {
   it("writes plain ingredient and method lines with optional provenance", () => {
     expect(renderImportedRecipe({ title: "Soup", source: "https://example.com", ingredients: ["one onion"], method: ["1. Stir"] }))
-      .toContain("source: https://example.com\n---\n\n# Soup\n\n## Ingredients\n\n- one onion\n\n## Method\n\n1. Stir\n");
+      .toContain("# Soup\n\nSource: https://example.com\n\n---\n\n- one onion\n\n---\n\n1. Stir\n");
   });
 
   it("keeps an item whose box was doubled by a concurrent tick and repairs it on the next toggle", () => {

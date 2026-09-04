@@ -174,11 +174,11 @@ async function main() {
     const tarball = path.join(packDirectory, manifest.filename);
     await successful("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: consumer });
     const installedPackage = JSON.parse(await readFile(path.join(consumer, "node_modules/enplace/package.json"), "utf8"));
-    assert.deepEqual(installedPackage.dependencies, { "y-websocket": "^3.1.0", yjs: "^13.6.32" });
+    assert.deepEqual(installedPackage.dependencies, { marked: "^18.0.11", "y-websocket": "^3.1.0", yjs: "^13.6.32" });
     await assert.rejects(access(path.join(consumer, "node_modules/ws")));
     for (const browserOnly of [
       "@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities",
-      "fflate", "marked", "pikaday", "preact", "qrcode", "y-indexeddb",
+      "fflate", "pikaday", "preact", "qrcode", "y-indexeddb",
     ]) {
       await assert.rejects(access(path.join(consumer, "node_modules", ...browserOnly.split("/"))), `${browserOnly} leaked into the production install`);
     }
@@ -238,7 +238,7 @@ async function main() {
       const invalid = await cli.run(["check", path.relative(consumer, invalidInput), "--folder", fixtureFromConsumer]);
       assert.equal(invalid.code, 1);
       assert.equal(invalid.stdout, "");
-      assert.equal(invalid.stderr, "mep: recipe needs an ## Ingredients heading\n");
+      assert.equal(invalid.stderr, "mep: recipe needs valid RecipeMD (https://recipemd.org/specification.html) or an existing ## Ingredients section\n");
     } finally {
       for (const [source, destination] of blocked.reverse()) await rename(destination, source);
     }

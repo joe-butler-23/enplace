@@ -1,20 +1,24 @@
----
-cover: images/chicken-mushroom-risotto.webp
-title: Chicken and mushroom risotto
-tags: [weeknight, one-pan]
----
+# Chicken and mushroom risotto
+
+![Chicken and mushroom risotto](<images/chicken-mushroom-risotto.webp>)
+
 A creamy one-pan rice dinner that makes a little chicken go a long way.
 
-## Ingredients
-- 1 tbsp olive oil
-- 250 g chicken breast, cut into small pieces
-- 250 g chestnut mushrooms, sliced
-- 1 onion, finely chopped
-- 2 garlic cloves, crushed
-- 300 g risotto rice
-- 900 ml hot chicken stock
-- 50 g Parmesan, finely grated
-- 15 g butter
+*one-pan, weeknight*
+
+---
+
+- *1 tbsp* olive oil
+- *250 g* chicken breast, cut into small pieces
+- *250 g* chestnut mushrooms, sliced
+- *1* onion, finely chopped
+- *2* garlic cloves, crushed
+- *300 g* risotto rice
+- *900 ml* hot chicken stock
+- *50 g* Parmesan, finely grated
+- *15 g* butter
+
+---
 
 ## Method
 1. Brown the chicken and mushrooms in the oil, then lift them onto a plate.

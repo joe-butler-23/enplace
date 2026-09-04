@@ -48,7 +48,6 @@ async function copyLink(link: string): Promise<void> {
 function CookbookLinkSection({ id, routePath }: { id: string; routePath: string }): React.JSX.Element {
   const connection = currentCookbookConnection();
   const [status, setStatus] = React.useState<CookbookStatus>(() => connection?.status() ?? "offline");
-  const [showQr, setShowQr] = React.useState(false);
   const [qrUrl, setQrUrl] = React.useState("");
   const link = cookbookLink(window.location.origin, id, routePath);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -60,7 +59,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
   }, [connection]);
 
   React.useEffect(() => {
-    if (!showQr || !link) return;
+    if (!link) return;
     let current = true;
     void import("qrcode").then((qr) => qr.toDataURL(link, { margin: 1, width: 180 })).then((url) => {
       if (current) setQrUrl(url);
@@ -68,7 +67,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
       if (current) setQrUrl("");
     });
     return () => { current = false; };
-  }, [link, showQr]);
+  }, [link]);
 
   const share = async (): Promise<void> => {
     if (!canShare) {
@@ -93,16 +92,8 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
         <button className="mep-button" type="button" onClick={() => void share()}>
           {canShare ? "Share link" : "Copy link"}
         </button>
-        <button
-          className="mep-button mep-button--ghost"
-          type="button"
-          aria-pressed={showQr}
-          onClick={() => setShowQr((shown) => !shown)}
-        >
-          {showQr ? "Hide QR code" : "Show QR code"}
-        </button>
       </div>
-      {showQr && qrUrl ? <img className="mep-settings__qr" src={qrUrl} alt="QR code for this cookbook link" /> : null}
+      {qrUrl ? <img className="mep-settings__qr" src={qrUrl} alt="QR code for this cookbook link" /> : null}
       <p className="mep-settings__note">{statusMessage(status)}</p>
     </section>
   );

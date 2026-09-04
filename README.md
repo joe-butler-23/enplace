@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `b1c982ef99c7`, 2026-09-04.
+> Published snapshot of a private repository, refreshed at each release. Source commit `0d1b254ba69b`, 2026-09-04.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -58,3 +58,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making 
 The public repository at [github.com/joe-butler-23/enplace](https://github.com/joe-butler-23/enplace) is a snapshot of this one, refreshed at each release by `scripts/publish-public.sh`.
 
 Enplace is early, actively developed software. Licensed under the [MIT license](LICENSE).
+
+### Recipe files
+
+Enplace writes [RecipeMD](https://recipemd.org/specification.html), so you can give that specification to any recipe assistant and import the resulting `.md` file through Settings → Import files. Source links and covers remain ordinary Markdown in the description. Existing Enplace recipes remain readable during migration.
+
+`mep convert recipe.md` prints a RecipeMD conversion to stdout without altering the original file. Review the result before replacing the original. Conversion preserves existing prose and metadata; it does not infer ingredient densities or convert measurement systems.
+
+Shopping can be grouped by aisle, recipe, or not at all. Assign aisles in the aisle view; assignments sync with the list. Reset shopping list, under More actions, removes every checklist item after confirmation.

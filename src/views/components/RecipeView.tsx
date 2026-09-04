@@ -1,5 +1,6 @@
 import * as React from "react";
 import { mergeText, type MergeResult } from "@/cookbook/merge";
+import { type RecipeIngredientGroup } from "@/recipemd";
 import { parseRecipeDocument } from "@/recipe-document";
 import { formatCookLogDate, parseCookLog } from "@/modules/cooking/services/RecipeLogService";
 import {
@@ -105,22 +106,25 @@ function RecipeMasthead({ title, meta, hero, heroUrl, actions }: RecipeMastheadP
 }
 
 type RecipeReadContentProps = {
+  ingredientGroups?: Map<number, string>; yields?: string; instructions?: React.ReactNode;
   ingredients: string[]; directions: string[]; checkedIngredients: Set<number>; checkedSteps: Set<number>;
   toggleIngredient: (index: number) => void; toggleStep: (index: number) => void; resetAll: () => void;
   readMarkdown: string; editor: React.ReactNode; cookLog: ReturnType<typeof parseCookLog>; tags: string[];
 };
 function RecipeReadContent({ ingredients, directions, checkedIngredients, checkedSteps, toggleIngredient,
-  toggleStep, resetAll, readMarkdown, editor, cookLog, tags }: RecipeReadContentProps): React.ReactElement {
+  toggleStep, resetAll, readMarkdown, editor, cookLog, tags, ingredientGroups, yields, instructions }: RecipeReadContentProps): React.ReactElement {
   return <>
     <aside className="recipe-view__panel recipe-view__ingredients-panel">
       <div className="recipe-view__panel-heading"><h2>Ingredients</h2></div>
+      {yields ? <p>{yields}</p> : null}
       <ul className="recipe-view__checklist">
         {ingredients.map((ingredient, index) => (
           <li key={index}>
+            {ingredientGroups?.has(index) ? <h3>{ingredientGroups.get(index)}</h3> : null}
             <label>
               <input className="recipe-view__check" type="checkbox" checked={checkedIngredients.has(index)} onChange={() => toggleIngredient(index)} />
               <span className="checkbox-box" aria-hidden="true"><svg viewBox="0 0 12 12"><polyline points="2,6.4 4.7,9 10,3.2" /></svg></span>
-              <span className={checkedIngredients.has(index) ? "is-checked" : ""}>{ingredient}</span>
+              <span className={checkedIngredients.has(index) ? "is-checked" : ""}><StepText text={ingredient} /></span>
             </label>
           </li>
         ))}
@@ -131,7 +135,7 @@ function RecipeReadContent({ ingredients, directions, checkedIngredients, checke
         <h2>Method</h2>
         <button className="recipe-view__reset" type="button" onClick={resetAll}>Reset</button>
       </div>
-      <ol className="recipe-view__checklist recipe-view__checklist--steps">
+      {instructions ?? <ol className="recipe-view__checklist recipe-view__checklist--steps">
         {directions.map((step, index) => (
           <li key={index}>
             <button type="button" className="recipe-view__step-number" aria-pressed={checkedSteps.has(index)}
@@ -141,7 +145,7 @@ function RecipeReadContent({ ingredients, directions, checkedIngredients, checke
             <p className={`recipe-view__step-text${checkedSteps.has(index) ? " is-checked" : ""}`}><StepText text={step} /></p>
           </li>
         ))}
-      </ol>
+      </ol>}
     </article>
     {readMarkdown ? <div className="recipe-view__notes recipe-view__mdx recipe-view__mdx--full">{editor}</div> : null}
     {cookLog.length > 0 ? (
@@ -328,10 +332,25 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     setCheckedSteps(new Set());
   }, []);
 
-  const readMarkdown = React.useMemo(
-    () => (mode === "full" ? stripLeadingH1(stripStructuredSections(bodyWithoutHero)).trim() : body),
-    [mode, bodyWithoutHero, body]
-  );
+  const standard = parsed.recipeMD;
+  const standardMethod = standard?.instructions?.replace(/^##\s+(Method|Directions)\s*\n/i, '') ?? '';
+  const methodEnd = standardMethod.search(/^#{1,2}\s/m);
+  const methodText = methodEnd < 0 ? standardMethod : standardMethod.slice(0, methodEnd);
+  const standardHasSteps = Boolean(standard && /^\s*\d+[.)]\s/.test(methodText));
+  const ingredientGroups = new Map<number, string>();
+  let ingredientIndex = standard?.ingredients.length ?? 0;
+  const labelGroups = (groups: RecipeIngredientGroup[], parents: string[] = []) => {
+    for (const group of groups) {
+      const titles = [...parents, group.title];
+      if (group.ingredients.length) ingredientGroups.set(ingredientIndex, titles.join(' / '));
+      ingredientIndex += group.ingredients.length;
+      labelGroups(group.ingredient_groups, titles);
+    }
+  };
+  if (standard) labelGroups(standard.ingredient_groups);
+  const readMarkdown = mode !== 'full' ? body : standard
+    ? [standard.description?.replace(/!\[[^\]]*\]\([^)]*\)/, '').replace(/^Source:.*$/m, '').trim(), standardHasSteps && methodEnd >= 0 ? standardMethod.slice(methodEnd) : ''].filter(Boolean).join('\n\n')
+    : stripLeadingH1(stripStructuredSections(bodyWithoutHero)).trim();
   const readDocument = <PreparedRecipeDocument markdown={readMarkdown} path={path} resolveImage={resolveImage} />;
   const updateDraft = React.useCallback((nextMarkdown: string) => {
     setDraft(composeMarkdown(parsed.rawFrontmatter, nextMarkdown));
@@ -378,7 +397,9 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       <div className="recipe-view__content recipe-view__content--full">
         <RecipeMasthead title={resolvedTitle} meta={meta} hero={hero} heroUrl={heroUrl} actions={actions} />
         {isEditing ? <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div> : (
-          <RecipeReadContent ingredients={ingredients} directions={directions}
+          <RecipeReadContent ingredients={ingredients} directions={directions} ingredientGroups={ingredientGroups}
+            yields={standard?.yields.map((amount) => `${amount.factor}${amount.unit ? ` ${amount.unit}` : ''}`).join(', ')}
+            instructions={standard && !standardHasSteps ? <PreparedRecipeDocument markdown={standard.instructions ?? ''} path={path} resolveImage={resolveImage} /> : undefined}
             checkedIngredients={checkedIngredients} checkedSteps={checkedSteps}
             toggleIngredient={toggleIngredient} toggleStep={toggleStep} resetAll={resetAll}
             readMarkdown={readMarkdown} editor={editor} cookLog={cookLog} tags={meta.tags} />

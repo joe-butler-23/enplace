@@ -268,7 +268,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
       <div className="cooking-db__empty cooking-db__onboarding">
         <h2>No recipes yet</h2>
         <p>
-          A recipe is any Markdown file in this folder with a <code>## Ingredients</code> heading.
+          Recipes use <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>, a published Markdown format you can give to any recipe assistant.
           Your library stays readable in any text editor or Obsidian vault.
         </p>
         <p>Paste the title, ingredient lines, and method steps to import a recipe.</p>

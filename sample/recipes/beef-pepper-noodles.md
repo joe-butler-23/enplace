@@ -1,20 +1,24 @@
----
-cover: images/beef-pepper-noodles.webp
-title: Beef and pepper noodles
-tags: [weeknight, stir-fry]
----
+# Beef and pepper noodles
+
+![Beef and pepper noodles](<images/beef-pepper-noodles.webp>)
+
 Fast, glossy noodles for the night when only a hot stir-fry will do.
 
-## Ingredients
-- 250 g dried egg noodles
-- 1 tbsp vegetable oil
-- 300 g beef rump steak, thinly sliced
-- 1 red pepper, thinly sliced
-- 1 carrot, cut into matchsticks
-- 3 spring onions, sliced
-- 2 tbsp soy sauce
-- 1 tbsp lime juice
-- 1 tsp brown sugar
+*stir-fry, weeknight*
+
+---
+
+- *250 g* dried egg noodles
+- *1 tbsp* vegetable oil
+- *300 g* beef rump steak, thinly sliced
+- *1* red pepper, thinly sliced
+- *1* carrot, cut into matchsticks
+- *3* spring onions, sliced
+- *2 tbsp* soy sauce
+- *1 tbsp* lime juice
+- *1 tsp* brown sugar
+
+---
 
 ## Method
 1. Cook the noodles according to the packet, then drain.

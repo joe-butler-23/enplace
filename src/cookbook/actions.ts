@@ -1,6 +1,6 @@
 import {
   appendShoppingItem, buildShoppingMarkdown, parsePlan, recipePlanning, removeShoppingItem,
-  serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
+  resetShopping, setShoppingAisle, serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
   type Recipe, type RecipePlanning,
 } from "../core";
 import { readText, remove, updateText } from "../host-client/browser-storage";
@@ -36,6 +36,10 @@ const shoppingLine = (itemId: string): number => {
 };
 export const removeShopping = (itemText: string, itemId: string): Promise<string> => updateText(
   "Shopping.md", (text) => removeShoppingItem(text, shoppingLine(itemId), itemText),
+);
+export const resetShoppingList = (): Promise<string> => updateText("Shopping.md", resetShopping);
+export const updateShoppingAisle = (itemText: string, itemId: string, aisle: string): Promise<string> => updateText(
+  "Shopping.md", (text) => setShoppingAisle(text, shoppingLine(itemId), itemText, aisle),
 );
 export async function toggleShopping(itemText: string, itemId: string, checked: boolean): Promise<void> {
   await updateText("Shopping.md", (text) => toggleShoppingItem(text, shoppingLine(itemId), itemText, checked));

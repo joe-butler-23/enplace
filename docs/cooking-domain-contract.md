@@ -4,13 +4,16 @@ The shared cookbook document is the complete cooking data authority. Paths in th
 
 ## Recipes
 
-A recipe is any `.md` file in the cookbook whose body contains a level-two `## Ingredients` heading, matched case-insensitively.
+New recipes use [RecipeMD 2.4](https://recipemd.org/specification.html). `src/recipemd.ts` parses CommonMark structure and is checked against every upstream conformance fixture. Existing frontmatter/`## Ingredients` recipes remain readable during migration; new imports write RecipeMD.
 
-- Title: frontmatter `title`, otherwise the first level-one heading, otherwise the filename stem.
-- Ingredients: bullet text below `## Ingredients`, kept as opaque text. Pipe-delimited legacy lines have no special meaning.
-- Method: numbered or bulleted text below `## Method`, when present.
-- Cover: frontmatter `cover`, otherwise the first Markdown image in the body. Relative paths resolve from the recipe file and are read from the cookbook document.
-- Source: optional frontmatter `source`.
+- Title: first level-one heading.
+- Description: ordinary Markdown; a cover is an ordinary Markdown image and provenance is a `Source: ...` paragraph. An optional `Added: YYYY-MM-DD` paragraph preserves existing catalogue dates. Neither is required by RecipeMD.
+- Tags: one wholly italic paragraph; yields: one wholly bold paragraph.
+- Ingredients: lists between thematic breaks, with headings for groups. Explicit amounts are italic. Ingredient amounts and names project into readable shopping text; quantities are not automatically summed.
+- Instructions: Markdown after the second thematic break. Prose, groups and notes remain readable.
+- Relative images resolve from the recipe path in the cookbook document.
+
+Use UK ingredient names, g/kg, ml/l and °C for new UK recipes; tsp/tbsp remain useful. Source weights take precedence over volume conversions. Do not guess ingredient densities or silently change the kind of salt.
 
 Marking, planning, and shopping never rewrite recipe files. Nothing in the app writes a `## Cook Log` entry; the recipe view renders whatever entries a recipe file already carries.
 
@@ -24,7 +27,7 @@ The browser stores every imported cover as two WebP files. The recipe `cover` pa
 
 ## Shopping
 
-`Shopping.md` at the cookbook root is a Markdown checklist. Browser Build list processes the displayed week's distinct recipe paths in ascending path order; `mep shop` selects recipes by date and their order in each date section. Building writes one `## <recipe title>` section per contributing recipe and merges equal ingredient text after trimming and case folding. Existing checked state follows surviving text. Existing non-recipe headings and hand-written content remain unchanged. Checking an item changes only its checkbox marker. Copying strips checkbox markers without changing the file.
+`Shopping.md` at the cookbook root is a Markdown checklist. Browser Build list processes the displayed week's distinct recipe paths in ascending path order; `mep shop` selects recipes by date and their order in each date section. Building writes one `## <recipe title>` section per contributing recipe and merges equal ingredient text after trimming and case folding. Existing checked state follows surviving text. Existing non-recipe headings and hand-written content remain unchanged. Checking an item changes only its checkbox marker. Copying strips checkbox markers and aisle annotations without changing the file. The shopper can switch between recipe, aisle and ungrouped views without rewriting list order; that preference stays on the browser. Aisle assignments are explicit `<!-- aisle: Name -->` annotations on checklist lines, shared with the cookbook and retained on rebuild for equal ingredient text. Unassigned items appear under Other. Reset removes all checklist items, checked or unchecked, in one live-text transaction, after confirmation; notes and recipes are untouched.
 
 ## Writes and conflicts
 

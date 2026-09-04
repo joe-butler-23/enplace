@@ -24,7 +24,7 @@ const images = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const recipePath = (path: string): boolean => /\.md$/i.test(path) && path !== "Plan.md" && path !== "Shopping.md";
 const emit = (): void => listeners.forEach((listener) => listener());
 const shoppingList = (text: string): ShoppingList => ({ items: parseShopping(text).map((item) => ({
-  id: `line:${item.line}`, content: item.text, labels: item.heading ? [item.heading] : [],
+  id: `line:${item.line}`, content: item.text, labels: item.aisle ? [item.aisle] : [],
   sources: item.heading ? [item.heading] : [], checked: item.checked,
 })) });
 const sameReferences = <T,>(left: readonly T[], right: readonly T[]): boolean =>

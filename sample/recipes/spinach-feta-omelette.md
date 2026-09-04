@@ -1,17 +1,21 @@
----
-cover: images/spinach-feta-omelette.webp
-title: Spinach and feta omelette
-tags: [breakfast, vegetarian]
----
+# Spinach and feta omelette
+
+![Spinach and feta omelette](<images/spinach-feta-omelette.webp>)
+
 A quick, savoury breakfast that is also substantial enough for lunch.
 
-## Ingredients
-- 3 eggs
-- 1 tbsp milk
-- 1 tsp olive oil
-- 60 g spinach
-- 40 g feta, crumbled
-- 2 spring onions, thinly sliced
+*breakfast, vegetarian*
+
+---
+
+- *3* eggs
+- *1 tbsp* milk
+- *1 tsp* olive oil
+- *60 g* spinach
+- *40 g* feta, crumbled
+- *2* spring onions, thinly sliced
+
+---
 
 ## Method
 1. Beat the eggs with the milk and a pinch of salt and pepper.

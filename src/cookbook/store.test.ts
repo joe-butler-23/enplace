@@ -133,7 +133,7 @@ describe("cookbook app store", () => {
       ]);
       expect(value.plan).toEqual({ marked: ["a/foo"], days: new Map(), notes: new Map() });
       expect(value.shopping.items).toEqual([
-        { id: "line:1", content: "apple", labels: ["Shared"], sources: ["Shared"], checked: true },
+        { id: "line:1", content: "apple", labels: [], sources: ["Shared"], checked: true },
       ]);
       expect(value.files.map(({ path }) => path)).toEqual(["a/foo.md", "b/FOO.MD", "dish.webp", "Plan.md", "Shopping.md"]);
       expect(value.texts.size).toBe(4);

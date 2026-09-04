@@ -184,3 +184,7 @@ button.organiser-column-note,
 .cooking-db__paste-import input,
 .cooking-db__paste-import textarea { font: inherit; padding: 0.6rem; }
 .cooking-db__paste-import textarea { min-height: 6rem; resize: vertical; }
+
+.shopping-list-view__grouping { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1rem; }
+.shopping-list-view__grouping select { font: inherit; padding: 0.4rem; }
+.shopping-item > select { max-width: 40%; min-width: 0; font: inherit; font-size: 0.8rem; padding: 0.4rem 0.2rem; }

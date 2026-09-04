@@ -1,7 +1,6 @@
 import * as React from "react";
 import { CookbookPanel } from "@/cookbook/CookbookPanel";
 import { setIcon } from "@/platform-primitives";
-import type { StandaloneSettings } from "@/standalone/settings";
 
 export type Command = { id: string; label: string; action: () => void };
 export function CommandPalette({ commands, query, onQuery, onClose }: { commands: Command[]; query: string; onQuery: (value: string) => void; onClose: () => void }): React.JSX.Element {
@@ -29,8 +28,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }): React.JSX.Elem
     <div className="mep-help__section"><h4>Planner basics</h4><ul><li>Drag cards between columns to schedule or re-plan.</li><li>Hold <kbd>Shift</kbd> while dragging to duplicate instead of move.</li><li>Hold <kbd>Ctrl/Cmd</kbd> when clicking a card to open in a split.</li></ul></div>
   </dialog></div>;
 }
-type SettingsProps = { settings: StandaloneSettings; routePath: string; onChange: (updates: Partial<StandaloneSettings>) => void | Promise<void>; onClose: () => void };
-export function SettingsDialog({ settings, routePath, onChange, onClose }: SettingsProps): React.JSX.Element {
+type SettingsProps = { routePath: string; onClose: () => void };
+export function SettingsDialog({ routePath, onClose }: SettingsProps): React.JSX.Element {
   const ref = React.useRef<HTMLDialogElement>(null);
   React.useEffect(() => { if (ref.current && !ref.current.open) ref.current.showModal(); }, []);
   return <dialog className="mep-dialog" ref={ref} aria-label="Settings" onClose={onClose} onClick={(event) => { if (event.target === ref.current) ref.current?.close(); }}><div className="mep-dialog__body">
@@ -38,14 +37,6 @@ export function SettingsDialog({ settings, routePath, onChange, onClose }: Setti
       <h2>Settings</h2>
       <button className="mep-dialog__close" type="button" onClick={() => ref.current?.close()} title="Close settings" ref={(element) => { if (element) setIcon(element, "x"); }} />
     </div>
-    <section className="mep-settings__section">
-      <h3>Recipe database</h3>
-      <div className="mep-settings__fields">
-        <label><span>Sort</span><select value={settings.databaseSort} onChange={(event) => void onChange({ databaseSort: event.target.value as StandaloneSettings["databaseSort"] })}><option value="added-desc">Newest</option><option value="added-asc">Oldest</option><option value="title-asc">Title (A-Z)</option><option value="title-desc">Title (Z-A)</option><option value="scheduled-desc">Scheduled (latest)</option><option value="scheduled-asc">Scheduled (oldest)</option></select></label>
-        <label><span>Marked recipes</span><select value={settings.databaseMarkedFilter} onChange={(event) => void onChange({ databaseMarkedFilter: event.target.value as StandaloneSettings["databaseMarkedFilter"] })}><option value="all">All</option><option value="marked">Marked</option><option value="unmarked">Unmarked</option></select></label>
-        <label><span>Scheduled recipes</span><select value={settings.databaseScheduledFilter} onChange={(event) => void onChange({ databaseScheduledFilter: event.target.value as StandaloneSettings["databaseScheduledFilter"] })}><option value="all">All</option><option value="scheduled">Scheduled</option><option value="unscheduled">Unscheduled</option></select></label>
-      </div>
-    </section>
     <CookbookPanel routePath={routePath} />
   </div></dialog>;
 }

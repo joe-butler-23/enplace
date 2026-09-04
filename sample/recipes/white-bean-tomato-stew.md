@@ -1,20 +1,24 @@
----
-cover: images/white-bean-tomato-stew.webp
-title: White bean and tomato stew
-tags: [weeknight, vegetarian]
----
+# White bean and tomato stew
+
+![White bean and tomato stew](<images/white-bean-tomato-stew.webp>)
+
 A warm cupboard supper for evenings when you want dinner without much chopping.
 
-## Ingredients
-- 1 tbsp olive oil
-- 1 onion, finely chopped
-- 2 garlic cloves, crushed
-- 1 tsp smoked paprika
-- 400 g tin chopped tomatoes
-- 400 g tin cannellini beans, drained
-- 100 ml water
-- 100 g spinach
-- 1 tbsp lemon juice
+*vegetarian, weeknight*
+
+---
+
+- *1 tbsp* olive oil
+- *1* onion, finely chopped
+- *2* garlic cloves, crushed
+- *1 tsp* smoked paprika
+- *400 g* tin chopped tomatoes
+- *400 g* tin cannellini beans, drained
+- *100 ml* water
+- *100 g* spinach
+- *1 tbsp* lemon juice
+
+---
 
 ## Method
 1. Soften the onion in the oil for 6 minutes, then stir in the garlic and paprika.

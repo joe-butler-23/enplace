@@ -32,7 +32,7 @@ describe("paste recipe import covers", () => {
     expect(entries.map(([path]: readonly [string, Uint8Array]) => path)).toEqual([
       "tomato-soup.md", "images/tomato-soup.webp", "images/tomato-soup.card.webp",
     ]);
-    expect(new TextDecoder().decode(entries[0][1])).toContain("cover: images/tomato-soup.webp");
+    expect(new TextDecoder().decode(entries[0][1])).toContain("![Tomato Soup](<images/tomato-soup.webp>)");
     expect(entries[1][1]).toEqual(new Uint8Array([4, 5]));
     expect(entries[2][1]).toEqual(new Uint8Array([6]));
     expect(entries.some(([, bytes]: readonly [string, Uint8Array]) => bytes === raw)).toBe(false);

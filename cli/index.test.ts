@@ -45,15 +45,15 @@ describe("mep CLI", () => {
       "# Soup\n\n### Ingredients\n- lentils\n",
       "# Soup\n\n## Ingredients deluxe\n- lentils\n",
     ]) {
-      await expect(check(stdin)).rejects.toThrow("recipe needs an ## Ingredients heading");
+      await expect(check(stdin)).rejects.toThrow("recipe needs valid RecipeMD (https://recipemd.org/specification.html) or an existing ## Ingredients section");
     }
     await expect(check("---\ntitle: Display Only\n---junk\n# Strict Title\n## Ingredients\n- lentils"))
       .resolves.toBe("OK: Strict Title -> strict-title.md\n");
   });
 
   it.each([
-    { argv: [], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
-    { argv: ["unknown"], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
+    { argv: [], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
+    { argv: ["unknown"], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
     { argv: ["--"], error: "unknown option: --" },
     { argv: ["list", "--other"], error: "unknown option: --other" },
     { argv: ["list", "--folder"], error: "--folder needs a value" },

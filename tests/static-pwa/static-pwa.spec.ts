@@ -208,12 +208,22 @@ test("browser back and forward always mount the cookbook the URL names", async (
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`#k=${firstId}$`));
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem("enplace-current-kitchen"))).toBe(firstId);
+  await expect(async () => {
+    await expect(page).toHaveURL(new RegExp(`#k=${firstId}$`));
+    await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("enplace-current-kitchen"))).toBe(firstId);
+  }).toPass({ timeout: 15_000 });
 
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`#k=${secondId}$`));
   await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem("enplace-current-kitchen"))).toBe(secondId);
+  // A restored BFCache page can paint before its pageshow-owned reload completes.
+  // Reconcile the screen, URL and stored identity together across that navigation.
+  await expect(async () => {
+    await expect(page).toHaveURL(new RegExp(`#k=${secondId}$`));
+    await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("enplace-current-kitchen"))).toBe(secondId);
+  }).toPass({ timeout: 15_000 });
 });
 
 test("the cookbook app shell reloads offline after its first visit", async ({ page, context }) => {

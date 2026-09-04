@@ -18,11 +18,18 @@ type ShoppingListViewProps = {
   onAdd?: (content: string) => void | Promise<void>;
   onRemove?: (itemId: string) => void;
   onCopyLink?: () => void;
+  onReset?: () => void;
+  onAisle?: (itemId: string, aisle: string) => void;
 };
 
 export type ShoppingListGrouping = "none" | "section" | "recipe";
 
 const OTHER_GROUP = "Other";
+export const SHOPPING_AISLES = ['Fruit & vegetables', 'Bakery', 'Meat & fish', 'Dairy & eggs', 'Chilled', 'Frozen', 'Tins & jars', 'Rice, pasta & grains', 'Baking', 'Herbs, spices & oils', 'Drinks', 'Household'];
+const GROUPING_KEY = 'enplace.shopping-grouping';
+function savedGrouping(): ShoppingListGrouping {
+  try { const saved = localStorage.getItem(GROUPING_KEY); return saved === 'section' || saved === 'none' ? saved : 'recipe'; } catch { return 'recipe'; }
+}
 
 export type ShoppingGroup = { label: string; items: ShoppingList["items"] };
 
@@ -72,12 +79,13 @@ function ShoppingItemRow({
   item,
   busy,
   onCheck,
-  onRemove
+  onRemove, onAisle
 }: {
   item: ShoppingList["items"][number];
   busy: boolean;
   onCheck: (itemId: string, checked: boolean) => void;
   onRemove?: (itemId: string) => void;
+  onAisle?: (itemId: string, aisle: string) => void;
 }): React.JSX.Element {
   return (
     <li className={`shopping-item ${item.checked ? "is-checked" : ""}`}>
@@ -100,6 +108,10 @@ function ShoppingItemRow({
           {item.content}
         </span>
       </label>
+      {onAisle ? <select aria-label={`Aisle for ${item.content}`} value={item.labels[0] ?? ''} disabled={busy} onChange={(event) => onAisle(item.id, event.currentTarget.value)}>
+        <option value="">Other</option>
+        {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
+      </select> : null}
       {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.id)}>×</button> : null}
     </li>
   );
@@ -138,8 +150,9 @@ function useShoppingSyncMessage(): string | null {
 }
 
 export function ShoppingListView({
-  list, busy, error, onCheck, onAdd, onRemove, onCopyLink
+  list, busy, error, onCheck, onAdd, onRemove, onCopyLink, onReset, onAisle
 }: ShoppingListViewProps): React.JSX.Element {
+  const [grouping, setGrouping] = React.useState<ShoppingListGrouping>(savedGrouping);
   const [hideDone, setHideDone] = React.useState(false);
   const [draft, setDraft] = React.useState("");
   const [composerOpen, setComposerOpen] = React.useState(false);
@@ -156,7 +169,7 @@ export function ShoppingListView({
     else closeComposer();
   };
   const items = list.items;
-  const groups = visibleGroups(groupShoppingItems(items, "recipe"), hideDone);
+  const groups = visibleGroups(groupShoppingItems(items, grouping), hideDone);
 
   return <section className="shopping-list-view">
     <header className="shopping-list-view__header">
@@ -165,14 +178,20 @@ export function ShoppingListView({
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" focusable="false"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
       </button> : null}
       <details className="shopping-menu"><summary className="shopping-menu__trigger" aria-label="More actions"/><div className="shopping-menu__panel">
+        {onReset ? <button type="button" disabled={busy || items.length === 0} onClick={() => { if (window.confirm('Reset shopping list? This removes every item, including checked items, for everyone sharing this cookbook.')) onReset(); }}>Reset shopping list</button> : null}
         {onCopyLink ? <button type="button" onClick={onCopyLink}>Copy list</button> : null}
       </div></details>
     </header>
+    <label className="shopping-list-view__grouping">Group by <select aria-label="Group shopping list" value={grouping} onChange={(event) => {
+      const next = event.currentTarget.value as ShoppingListGrouping;
+      setGrouping(next);
+      try { localStorage.setItem(GROUPING_KEY, next); } catch { /* View still works without preferences storage. */ }
+    }}><option value="section">Aisle</option><option value="none">No grouping</option><option value="recipe">Recipe</option></select></label>
     {syncMessage ? <p className="shopping-list-view__sync-status" role="status">{syncMessage}</p> : null}
     {error ? <div className="shopping-list-view__error" role="alert" aria-live="assertive"><span>{shoppingErrorText(error)}</span></div> : null}
     {items.length === 0 ? <p className="shopping-list-view__empty">Your list is empty — add an item below.</p> : null}
     {items.length > 0 ? <div className="shopping-list-view__scroll">
-      {groups.map((group) => <section key={group.label || "ungrouped"} className="shopping-group">{group.label ? <div className="shopping-group__label">{group.label}</div> : null}<ul className="shopping-items">{group.items.map((item) => <ShoppingItemRow key={item.id} item={item} busy={busy} onCheck={onCheck} onRemove={onRemove} />)}</ul></section>)}
+      {groups.map((group) => <section key={group.label || "ungrouped"} className="shopping-group">{group.label ? <div className="shopping-group__label">{group.label}</div> : null}<ul className="shopping-items">{group.items.map((item) => <ShoppingItemRow key={item.id} item={item} busy={busy} onCheck={onCheck} onRemove={onRemove} onAisle={grouping === "section" ? onAisle : undefined} />)}</ul></section>)}
       {groups.length === 0 ? <p className="shopping-list-view__cleared">Everything is picked up.</p> : null}
     </div> : null}
     {onAdd ? composerOpen ? (

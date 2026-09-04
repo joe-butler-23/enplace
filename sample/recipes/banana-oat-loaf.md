@@ -1,20 +1,24 @@
----
-cover: images/banana-oat-loaf.webp
-title: Banana oat loaf
-tags: [bake, vegetarian]
----
+# Banana oat loaf
+
+![Banana oat loaf](<images/banana-oat-loaf.webp>)
+
 A soft, not-too-sweet loaf for breakfast slices or an afternoon snack.
 
-## Ingredients
-- 3 ripe bananas
-- 2 eggs
-- 80 ml vegetable oil
-- 100 g light brown sugar
-- 150 g plain flour
-- 100 g porridge oats
-- 2 tsp baking powder
-- 1 tsp ground cinnamon
-- 50 ml milk
+*bake, vegetarian*
+
+---
+
+- *3* ripe bananas
+- *2* eggs
+- *80 ml* vegetable oil
+- *100 g* light brown sugar
+- *150 g* plain flour
+- *100 g* porridge oats
+- *2 tsp* baking powder
+- *1 tsp* ground cinnamon
+- *50 ml* milk
+
+---
 
 ## Method
 1. Heat the oven to 180°C and line a 900 g loaf tin.

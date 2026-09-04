@@ -17,7 +17,7 @@ import {
 import type { RecipePlanning } from "./core";
 import {
   addShoppingItem, applyShoppingPlan, clearMarkedRecipes, copyShoppingList, deleteRecipe, removeShopping,
-  saveRecipe, toggleShopping, updatePlanRecipe,
+  resetShoppingList, updateShoppingAisle, saveRecipe, toggleShopping, updatePlanRecipe,
 } from "./cookbook/actions";
 import { setDayNote } from "./cookbook/plan-notes";
 import { cardCoverUrl } from "./cookbook/covers";
@@ -375,9 +375,12 @@ function App(): React.JSX.Element | null {
       <h1 className="mep-sr-only">Enplace</h1>
       {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
-      {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} /> : null}
+      {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
+        const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content;
+        if (text) void shoppingWork(() => updateShoppingAisle(text, id, aisle)).catch(() => undefined);
+      }} /> : null}
       {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
-      {settingsOpen ? <SettingsDialog settings={settings} routePath={pathnameForView(activeView)} onChange={updateSettings} onClose={closeSettings} /> : null}
+      {settingsOpen ? <SettingsDialog routePath={pathnameForView(activeView)} onClose={closeSettings} /> : null}
     </main>
     {previewFile ? <PreviewCookbookView file={previewFile} isRecipe={previewIsRecipe} width={previewWidth} recipeRef={previewRecipeRef} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
     <Notices notices={notices} />

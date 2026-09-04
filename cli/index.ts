@@ -12,6 +12,8 @@ import {
   scanRecipes,
 } from "../src/core.js";
 
+import { migrateRecipe } from "../src/recipe-migration.js";
+
 export type ExecuteOptions = {
   cwd?: string;
   stdin?: string;
@@ -21,11 +23,11 @@ export type ExecuteOptions = {
 };
 
 const valueOptions = new Set(["--folder", "--week", "--cookbook", "--relay"]);
-const recipeCommands = new Set(["check", "add"]);
+const recipeCommands = new Set(["check", "add", "convert"]);
 
 function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
-  if (!command || !["check", "add", "list", "shop", "mirror"].includes(command)) {
-    throw new Error("usage: mep <check|add|list|shop|mirror> [options]\n"
+  if (!command || !["check", "add", "convert", "list", "shop", "mirror"].includes(command)) {
+    throw new Error("usage: mep <check|add|convert|list|shop|mirror> [options]\n"
       + "       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]");
   }
   if (recipeCommands.has(command) && positional.length !== 1) throw new Error(`${command} needs one <file|->`);
@@ -116,7 +118,7 @@ async function recipeInput(file: string, stdin: string | undefined): Promise<{ s
 async function checkedRecipe(folder: string, file: string, stdin: string | undefined) {
   const input = await recipeInput(file, stdin);
   const recipe = parseRecipe(input.sourcePath, input.markdown);
-  if (!recipe) throw new Error("recipe needs an ## Ingredients heading");
+  if (!recipe) throw new Error("recipe needs valid RecipeMD (https://recipemd.org/specification.html) or an existing ## Ingredients section");
   if (file === "-" && recipe.title === "-") throw new Error("recipe needs a frontmatter title or # heading");
   const recipes = path.join(folder, "recipes");
   const prefix = await exists(recipes) && (await stat(recipes)).isDirectory() ? "recipes/" : "";
@@ -160,6 +162,11 @@ async function saveShopping(file: string, initial: Buffer | null, markdown: stri
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 
 async function runRecipeCommand(args: Arguments, stdin: string | undefined): Promise<string> {
+  if (args.command === 'convert') {
+    const input = await recipeInput(args.positional[0], stdin);
+    const markdown = migrateRecipe(input.markdown, input.sourcePath);
+    return args.json ? json({ markdown }) : markdown;
+  }
   const checked = await checkedRecipe(args.folder, args.positional[0], stdin);
   if (args.command === "add") {
     const output = path.join(args.folder, checked.destination);

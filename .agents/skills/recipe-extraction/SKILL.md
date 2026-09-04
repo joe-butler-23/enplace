@@ -8,9 +8,9 @@ description: Extract one recipe from a URL, supplied text, or an image into plai
 Create one faithful recipe in the user's selected Enplace folder.
 
 1. Read the supplied URL, text, or image. Treat it as the only factual source.
-2. Draft plain Markdown with a title and an exact `## Ingredients` heading. Use `- ` ingredient lines. Add numbered steps under `## Method` when the source gives a method.
+2. Draft [RecipeMD 2.4](https://recipemd.org/specification.html): level-one title, optional description, italic tags, bold yields, thematic break, ingredient lists with italic amounts, thematic break, instructions.
 3. Preserve quantities, units, ordering, and useful preparation notes. Do not invent missing ingredients, steps, times, yields, tags, covers, or provenance.
-4. Add YAML frontmatter only for useful known values. Record `source` only when the user supplied or the agent actually read that URL. Never guess a source URL.
+4. Record provenance in a `Source: ...` paragraph in the description only when supplied or actually read. Covers are ordinary Markdown images. Use UK names and g/kg, ml/l, °C, tsp/tbsp; prefer source weights, never guess density or salt equivalence.
 5. Pass the identical draft on stdin to both commands, in order:
 
 ```bash
@@ -23,20 +23,19 @@ Stop if `mep check` fails. Stop if `mep add` reports an existing file; never ove
 Use this shape:
 
 ```markdown
----
-title: Recipe title
-source: https://actual.example/source
----
-
 # Recipe title
 
-## Ingredients
+Source: https://actual.example/source
 
-- 2 tbsp olive oil
+**2 servings**
 
-## Method
+---
+
+- *2 tbsp* olive oil
+
+---
 
 1. Follow the source instruction.
 ```
 
-Omit `source` and `## Method` when the source does not provide them.
+Omit source, yields and instructions when unavailable. Do not invent them. The linked specification is the format authority; the app does not require proprietary frontmatter.

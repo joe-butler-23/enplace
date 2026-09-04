@@ -1,3 +1,4 @@
+import { formatIngredient } from "./recipe-migration.js";
 import { parseRecipeDocument } from "./recipe-document.js";
 export { parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
 
@@ -22,11 +23,8 @@ export type ShoppingLine = {
   text: string;
   checked: boolean;
   heading: string | null;
+  aisle?: string;
 };
-
-function frontmatterScalar(value: string): string {
-  return /^[\w./:@%?&=+-]+$/.test(value) && !/^[-?:,\[\]{}#&*!|>'"%@`]/.test(value) ? value : JSON.stringify(value);
-}
 
 export function parseRecipe(path: string, markdown: string): Recipe | null {
   const parsed = parseRecipeDocument(path, markdown);
@@ -170,7 +168,10 @@ export function parseShopping(markdown: string): ShoppingLine[] {
     const nextHeading = /^##\s+(.+?)\s*$/.exec(line);
     if (nextHeading) heading = nextHeading[1];
     const item = checklistText(line);
-    if (item) result.push({ line: index, heading, ...item });
+    if (item) {
+      const aisle = /\s*<!-- aisle: ([^<>\r\n]+) -->$/.exec(item.text);
+      result.push({ line: index, heading, ...item, ...(aisle ? { text: item.text.slice(0, aisle.index), aisle: aisle[1] } : {}) });
+    }
   });
   return result;
 }
@@ -191,9 +192,11 @@ export function buildShoppingMarkdown(
   allRecipes: readonly Recipe[],
 ): string {
   const checked = new Map<string, boolean>();
+  const aisles = new Map<string, string>();
   for (const item of parseShopping(current)) {
     const key = item.text.trim().toLowerCase();
     checked.set(key, item.checked || checked.get(key) === true);
+    if (item.aisle) aisles.set(key, item.aisle);
   }
   const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLowerCase()));
   const preserved = removeRecipeBlocks(current, titles);
@@ -209,7 +212,7 @@ export function buildShoppingMarkdown(
       const key = text.toLowerCase();
       if (!text || seenIngredients.has(key)) continue;
       seenIngredients.add(key);
-      lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}`);
+      lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}${aisles.has(key) ? ` <!-- aisle: ${aisles.get(key)} -->` : ""}`);
     }
     if (lines.length) blocks.push(`## ${recipe.title}\n${lines.join("\n")}`);
   }
@@ -261,8 +264,21 @@ export function removeShoppingItem(markdown: string, itemLine: number, itemText:
   return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
 }
 
+export function setShoppingAisle(markdown: string, itemLine: number, itemText: string, aisle: string): string {
+  const label = aisle.trim();
+  if (/[<>\r\n]/.test(label) || label.includes('--')) throw new Error('Invalid aisle name');
+  const item = resolveShoppingItem(markdown, itemLine, itemText);
+  const lines = markdown.split(/\r?\n/);
+  lines[item.line] = lines[item.line].replace(/\s*<!-- aisle: [^<>\r\n]+ -->$/, '') + (label ? ` <!-- aisle: ${label} -->` : '');
+  return lines.join('\n');
+}
+
+export function resetShopping(markdown: string): string {
+  return markdown.split(/\r?\n/).filter((line) => !checklistText(line)).join('\n');
+}
+
 export function shoppingPlainText(markdown: string): string {
-  return markdown.replace(/^(\s*)-\s+\[[ xX]*\]\s+/gm, "$1");
+  return markdown.replace(/\s*<!-- aisle: [^<>\r\n]+ -->/g, "").replace(/^(\s*)-\s+\[[ xX]*\]\s+/gm, "$1");
 }
 
 export function resolveRelativePath(documentPath: string, reference: string): string | null {
@@ -287,11 +303,8 @@ export function renderImportedRecipe(input: {
   source?: string;
   cover?: string;
 }): string {
-  const values: Record<string, string> = { title: input.title.trim() };
-  if (input.source?.trim()) values.source = input.source.trim();
-  if (input.cover?.trim()) values.cover = input.cover.trim();
-  const yaml = Object.entries(values).map(([key, value]) => `${key}: ${frontmatterScalar(value)}`).join("\n");
-  const ingredients = input.ingredients.map((line) => `- ${line.trim()}`).join("\n");
+  const description = [input.cover?.trim() ? `![${input.title.trim()}](<${input.cover.trim()}>)` : '', input.source?.trim() ? `Source: ${input.source.trim()}` : ''].filter(Boolean).join("\n\n");
+  const ingredients = input.ingredients.map((line) => `- ${formatIngredient(line)}`).join("\n");
   const method = input.method.map((line, index) => `${index + 1}. ${line.trim().replace(/^\d+[.)]\s*/, "")}`).join("\n");
-  return `---\n${yaml}\n---\n\n# ${input.title.trim()}\n\n## Ingredients\n\n${ingredients}\n\n## Method\n\n${method}\n`;
+  return `# ${input.title.trim()}\n\n${description ? description + '\n\n' : ''}---\n\n${ingredients}\n\n---\n\n${method}\n`;
 }

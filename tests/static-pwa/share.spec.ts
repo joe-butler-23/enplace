@@ -20,7 +20,10 @@ test("Settings states the access contract and links back to the active route", a
   await expect(dialog.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
   // The dialog's own /settings route must never leak into the link a partner receives.
   await expect(dialog.getByLabel("Cookbook link")).toHaveValue(`${new URL(page.url()).origin}/shopping#k=${id}`);
-  await dialog.getByRole("button", { name: "Show QR code" }).click();
+  await expect(dialog.getByRole("button", { name: /Show QR|Hide QR/ })).toHaveCount(0);
+  await expect(dialog.getByText('Marked recipes', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText('Scheduled recipes', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('combobox')).toHaveCount(0);
   await expect(dialog.getByRole("img", { name: "QR code for this cookbook link" })).toBeVisible();
 
   await page.getByTitle("Close settings").click();

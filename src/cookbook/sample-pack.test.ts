@@ -41,7 +41,7 @@ describe("sample cookbook packs", () => {
     for (const entryPath of SAMPLE_RECIPE_PATHS) {
       const bytes = readCookbookBytes(doc, entryPath);
       expect(bytes).toEqual(new Uint8Array(await readFile(path.resolve("sample/recipes", entryPath))));
-      expect(new TextDecoder().decode(bytes ?? new Uint8Array())).toMatch(/^cover: images\/[a-z-]+\.webp$/m);
+      expect(new TextDecoder().decode(bytes ?? new Uint8Array())).toMatch(/^!\[[^\]]+\]\(<images\/[a-z-]+\.webp>\)$/m);
     }
   });
 
