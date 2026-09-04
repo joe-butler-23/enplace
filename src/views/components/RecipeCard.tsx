@@ -6,7 +6,7 @@ type RecipeCardProps = {
   coverPath: string | null;
   onOpenRecipe: (path: string, split: boolean) => void;
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
-  onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
+  onPointerDownRecipe?: (path: string) => void;
 };
 
 const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, onOpenRecipe, onPointerDownRecipe, onToggleMarked }) => {
@@ -45,7 +45,7 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
         type="button"
         className="cooking-db__card-open"
         aria-label={`Open recipe ${recipe.title}`}
-        onPointerDown={() => onPointerDownRecipe?.(recipe.path, coverPath ?? undefined)}
+        onPointerDown={() => onPointerDownRecipe?.(recipe.path)}
         onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
       >
         <div className={`cooking-db__cover ${coverPath ? "" : "cooking-db__cover--empty"}`}>

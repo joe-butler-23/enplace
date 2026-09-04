@@ -1,24 +1,19 @@
 import { describe, expect, it } from "vitest";
-import {
-  appendCookLogEntryToContent,
-  formatCookLogDate,
-  formatCookLogEntry,
-  parseCookLog
-} from "./RecipeLogService";
+import { formatCookLogDate, parseCookLog } from "./RecipeLogService";
 
-describe("cook log round trip", () => {
-  it("reads back exactly what the writer wrote", () => {
-    const written = appendCookLogEntryToContent(
-      "# Soup\n\n## Cook Log\n",
-      formatCookLogEntry({
-        cookedDate: "2026-08-14",
-        rating: 4,
-        makeAgain: true,
-        notes: "Halved the onion.\nStill needs more vinegar."
-      })
-    );
+describe("cook log reading", () => {
+  it("reads a full entry with a wrapped note", () => {
+    const content = [
+      "# Soup",
+      "",
+      "## Cook Log",
+      "",
+      "- 2026-08-14 | rating: 4 | make again: yes",
+      "  - Notes: Halved the onion.",
+      "    Still needs more vinegar."
+    ].join("\n");
 
-    expect(parseCookLog(written)).toEqual([
+    expect(parseCookLog(content)).toEqual([
       {
         date: "2026-08-14",
         rating: 4,
@@ -28,11 +23,8 @@ describe("cook log round trip", () => {
     ]);
   });
 
-  it("keeps the writer's newest-first order across several cooks", () => {
-    let content = "# Soup\n\n## Cook Log\n";
-    for (const date of ["2026-08-03", "2026-08-14"]) {
-      content = appendCookLogEntryToContent(content, formatCookLogEntry({ cookedDate: date }));
-    }
+  it("keeps newest-first order across several cooks", () => {
+    const content = ["## Cook Log", "", "- 2026-08-14", "", "- 2026-08-03", ""].join("\n");
     expect(parseCookLog(content).map((entry) => entry.date)).toEqual(["2026-08-14", "2026-08-03"]);
   });
 

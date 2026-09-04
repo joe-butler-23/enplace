@@ -4,8 +4,7 @@ import { createWeeklyOrganiserConfig } from "../boards/weeklyOrganiserConfig";
 import { buildBoardEntries, type BoardEntry } from "../kanban/buildBoardsData";
 import type { OrganiserItem } from "../types";
 import { resolveFilePathFromItemId } from "../utils/item-id";
-import { MIN_WEEKLY_COLUMN_WIDTH_PX } from "../utils/weekly-layout";
-import { comparePlannerItems, type PlannerOrderStore } from "../utils/planner-order";
+import type { PlannerOrderStore } from "../utils/planner-order";
 import { selectWeeklyShoppingRecipePaths } from "../utils/weekly-shopping-selection";
 import { useWeeklyBoardLayout } from "../hooks/useWeeklyBoardLayout";
 import { OrganiserToolbar, useWeeklyToolbarState } from "./OrganiserToolbar";
@@ -18,7 +17,6 @@ import {
   usePlannerEntries,
   usePlannerInteractions,
 } from "./WeeklyPlannerDnd";
-import { WeeklyReviewPanel, useWeeklyReview } from "./WeeklyReviewPanel";
 
 interface WeeklyOrganiserBoardProps {
   recipes: readonly Recipe[];
@@ -30,8 +28,6 @@ interface WeeklyOrganiserBoardProps {
   onSendShoppingList?: (recipePaths: string[]) => void;
   onSaveDayNote?: (date: string, note: string) => void;
   onOpenFile: (filePath: string, options: { split: boolean }) => void;
-  markedWidth?: number;
-  onSaveMarkedWidth?: (width: number) => void;
   onUnmarkRecipe: (path: string) => Promise<void>;
   plannerOrderStore?: PlannerOrderStore;
 }
@@ -47,8 +43,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   onSendShoppingList,
   onSaveDayNote,
   onOpenFile,
-  markedWidth = 240,
-  onSaveMarkedWidth,
   onUnmarkRecipe,
   plannerOrderStore,
 }: WeeklyOrganiserBoardProps): React.JSX.Element {
@@ -57,7 +51,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     () => createWeeklyOrganiserConfig(toolbar.weekOffset, dayNotes),
     [toolbar.weekOffset, dayNotes],
   );
-  const layout = useWeeklyBoardLayout(markedWidth, onSaveMarkedWidth);
+  const layout = useWeeklyBoardLayout();
   const resolveKanbanImageSrc = React.useCallback(
     (item: OrganiserItem) => resolveCover(item.coverImage ?? null, item.path) ?? "",
     [resolveCover],
@@ -67,40 +61,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     [resolveKanbanImageSrc],
   );
 
-  const review = useWeeklyReview({
-    recipes,
-    plan,
-    config,
-    resolveCover: resolveKanbanImageSrc,
-    updatePlanning,
-    notify,
-    weekRangeDisplay: toolbar.weekRangeDisplay,
-    advanceWeek: toolbar.advanceWeek,
-  });
-
-  const deferredSearchQuery = React.useDeferredValue(toolbar.searchQuery);
-  const normalizedSearch = React.useMemo(
-    () => deferredSearchQuery.trim().toLowerCase(),
-    [deferredSearchQuery],
-  );
-  const runtimeFilter = React.useCallback((item: OrganiserItem) => {
-    if (!normalizedSearch) return true;
-    return item.title.toLowerCase().includes(normalizedSearch)
-      || item.path.toLowerCase().includes(normalizedSearch);
-  }, [normalizedSearch]);
-  const runtimeSort = React.useCallback(
-    (a: OrganiserItem, b: OrganiserItem) => comparePlannerItems(toolbar.sortBy, a, b),
-    [toolbar.sortBy],
-  );
-  const plannerEntries = usePlannerEntries({
-    recipes,
-    plan,
-    config,
-    plannerOrderStore,
-    runtimeFilter,
-    runtimeSort,
-    sortBy: toolbar.sortBy,
-  });
+  const plannerEntries = usePlannerEntries({ recipes, plan, config, plannerOrderStore });
   const planner = usePlannerInteractions({
     recipes,
     config,
@@ -110,7 +71,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     onUnmarkRecipe,
     plannerOrderStore,
     renderedEntriesByColumn: plannerEntries.renderedEntriesByColumn,
-    sortBy: toolbar.sortBy,
     refreshOrder: plannerEntries.refreshOrder,
   });
 
@@ -172,29 +132,12 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
       <OrganiserToolbar
         {...toolbar.toolbarProps}
         onSendShoppingList={onSendShoppingList ? handleSendShoppingList : undefined}
-        isReviewOpen={review.isOpen}
-        onToggleReview={review.toggle}
       />
-      {review.isOpen && (
-        <WeeklyReviewPanel
-          entries={review.entries}
-          isSaving={review.isSaving}
-          weekRangeDisplay={toolbar.weekRangeDisplay}
-          panelRef={review.panelRef}
-          onClose={review.close}
-          onCompleteWeek={review.complete}
-          onUpdateEntry={review.updateEntry}
-        />
-      )}
       <div
         className="weekly-organiser-kanban"
         role="region"
         aria-label="Weekly organiser board"
         ref={layout.kanbanRef}
-        style={{
-          position: "relative",
-          "--col-min-width": `${layout.currentMarkedWidth}px`,
-        } as React.CSSProperties}
         onClickCapture={handleKanbanClickCapture}
         onKeyDownCapture={handleKanbanKeyDownCapture}
       >
@@ -236,18 +179,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
             </DragOverlay>
           </DndContext>
         </div>
-        <div
-          className={`marked-col-resizer${layout.isResizingMarked ? " is-resizing" : ""}`}
-          role="separator"
-          aria-label="Resize marked column"
-          aria-orientation="vertical"
-          aria-valuemin={MIN_WEEKLY_COLUMN_WIDTH_PX}
-          aria-valuenow={layout.currentMarkedWidth}
-          aria-valuetext={`${layout.currentMarkedWidth} pixels`}
-          tabIndex={0}
-          onMouseDown={layout.startResize}
-          onKeyDown={layout.resizeWithKeyboard}
-        />
       </div>
     </div>
   );

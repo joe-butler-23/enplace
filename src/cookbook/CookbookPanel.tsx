@@ -31,9 +31,6 @@ function statusMessage(status: CookbookStatus): string {
   return "Offline. Changes will sync when the relay reconnects.";
 }
 
-
-
-
 async function copyLink(link: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(link);
@@ -43,18 +40,18 @@ async function copyLink(link: string): Promise<void> {
   }
 }
 
-export function ShareCookbookDialog({ onClose }: { onClose: () => void }): React.JSX.Element | null {
+/**
+ * The link section of the settings dialog. One button, not two: where the platform has a
+ * share sheet it opens that, and everywhere else it copies — so the label states which.
+ * The link names the view behind the dialog, never the dialog's own /settings route.
+ */
+function CookbookLinkSection({ id, routePath }: { id: string; routePath: string }): React.JSX.Element {
   const connection = currentCookbookConnection();
-  const ref = React.useRef<HTMLDialogElement>(null);
   const [status, setStatus] = React.useState<CookbookStatus>(() => connection?.status() ?? "offline");
   const [showQr, setShowQr] = React.useState(false);
   const [qrUrl, setQrUrl] = React.useState("");
-  const link = connection ? cookbookLink(window.location.origin, connection.id, window.location.pathname) : "";
-
-  React.useEffect(() => {
-    ref.current?.showModal();
-    return () => { if (ref.current?.open) ref.current.close(); };
-  }, []);
+  const link = cookbookLink(window.location.origin, id, routePath);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   React.useEffect(() => {
     if (!connection) return;
@@ -73,50 +70,45 @@ export function ShareCookbookDialog({ onClose }: { onClose: () => void }): React
     return () => { current = false; };
   }, [link, showQr]);
 
-  if (!connection) return null;
-
   const share = async (): Promise<void> => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ url: link });
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          notify(error instanceof Error ? error.message : "Could not share the cookbook link.");
-        }
-      }
+    if (!canShare) {
+      await copyLink(link);
       return;
     }
-    await copyLink(link);
+    try {
+      await navigator.share({ url: link });
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        notify(error instanceof Error ? error.message : "Could not share the cookbook link.");
+      }
+    }
   };
 
-
-  return <dialog
-    ref={ref}
-    className="mep-dialog"
-    aria-labelledby="mep-share-cookbook-title"
-    onClose={onClose}
-    onClick={(event) => { if (event.target === ref.current) ref.current?.close(); }}
-  >
-    <div className="mep-dialog__body">
-      <button className="mep-dialog__close" type="button" onClick={() => ref.current?.close()} aria-label="Close share cookbook">×</button>
-      <h2 id="mep-share-cookbook-title">Share cookbook</h2>
-      <p>Anyone with this private link can view and change this cookbook.</p>
-      <label>
-        Cookbook link
-        <input type="url" readOnly value={link} />
-      </label>
-      <div className="mep-cookbook-panel__actions">
-        <button className="mep-button" type="button" onClick={() => void share()}>Share</button>
-        <button className="mep-button mep-button--ghost" type="button" onClick={() => void copyLink(link)}>Copy link</button>
-        <button className="mep-button mep-button--ghost" type="button" onClick={() => setShowQr(true)}>Show QR code</button>
+  return (
+    <section className="mep-settings__section">
+      <h3>Cookbook link</h3>
+      <p className="mep-settings__note">Anyone with this private link can view and change this cookbook.</p>
+      <input className="mep-settings__link" type="url" readOnly aria-label="Cookbook link" value={link} />
+      <div className="mep-settings__actions">
+        <button className="mep-button" type="button" onClick={() => void share()}>
+          {canShare ? "Share link" : "Copy link"}
+        </button>
+        <button
+          className="mep-button mep-button--ghost"
+          type="button"
+          aria-pressed={showQr}
+          onClick={() => setShowQr((shown) => !shown)}
+        >
+          {showQr ? "Hide QR code" : "Show QR code"}
+        </button>
       </div>
-      {showQr && qrUrl ? <img className="mep-cookbook-panel__qr" src={qrUrl} alt="QR code for this cookbook link" /> : null}
-      <p className="mep-cookbook-panel__status">{statusMessage(status)}</p>
-    </div>
-  </dialog>;
+      {showQr && qrUrl ? <img className="mep-settings__qr" src={qrUrl} alt="QR code for this cookbook link" /> : null}
+      <p className="mep-settings__note">{statusMessage(status)}</p>
+    </section>
+  );
 }
 
-export function CookbookPanel(): React.JSX.Element | null {
+export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.Element | null {
   const connection = currentCookbookConnection();
   const [busy, setBusy] = React.useState(false);
   const [hasSamples, setHasSamples] = React.useState(false);
@@ -246,16 +238,16 @@ export function CookbookPanel(): React.JSX.Element | null {
   };
 
   return (
-    <section className="mep-cookbook-panel">
-      <h3>Cookbook</h3>
+    <>
+      <CookbookLinkSection id={connection.id} routePath={routePath} />
 
-      <div className="mep-cookbook-panel__section">
-        <h4>Your files</h4>
-        <div className="mep-cookbook-panel__actions">
+      <section className="mep-settings__section">
+        <h3>Your files</h3>
+        <div className="mep-settings__actions">
           <button className="mep-button" type="button" disabled={busy} onClick={() => void downloadCookbook()}>
             Download cookbook (.zip)
           </button>
-          <label className="mep-button mep-button--ghost mep-cookbook-panel__file-button">
+          <label className="mep-button mep-button--ghost mep-settings__file-button">
             Import files
             <input
               type="file"
@@ -269,17 +261,19 @@ export function CookbookPanel(): React.JSX.Element | null {
           </label>
           {hasSamples ? <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={() => void removeSamples()}>Remove sample recipes</button> : null}
         </div>
-      </div>
+      </section>
 
-      <div className="mep-cookbook-panel__section">
-        <h4>Cookbooks</h4>
-        <button className="mep-button" type="button" disabled={busy} onClick={() => void startCookbook()}>
-          Start a new cookbook
-        </button>
-        <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={pasteCookbookLink}>
-          Paste a link
-        </button>
-      </div>
-    </section>
+      <section className="mep-settings__section">
+        <h3>Cookbooks</h3>
+        <div className="mep-settings__actions">
+          <button className="mep-button" type="button" disabled={busy} onClick={() => void startCookbook()}>
+            Start a new cookbook
+          </button>
+          <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={pasteCookbookLink}>
+            Paste a link
+          </button>
+        </div>
+      </section>
+    </>
   );
 }

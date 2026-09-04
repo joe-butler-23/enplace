@@ -26,7 +26,7 @@ test("a used cookbook remains useful and exportable after both origins disappear
   const beforeImport = await persistedUpdateCount(page, id);
 
   await openSettings(page);
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles([
     {
       name: "Plan.md",

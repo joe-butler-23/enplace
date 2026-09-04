@@ -12,7 +12,7 @@ A recipe is any `.md` file in the cookbook whose body contains a level-two `## I
 - Cover: frontmatter `cover`, otherwise the first Markdown image in the body. Relative paths resolve from the recipe file and are read from the cookbook document.
 - Source: optional frontmatter `source`.
 
-Marking, planning, and shopping never rewrite recipe files. Completing a planned week appends a Cook Log entry to each completed recipe.
+Marking, planning, and shopping never rewrite recipe files. Nothing in the app writes a `## Cook Log` entry; the recipe view renders whatever entries a recipe file already carries.
 
 ## Covers
 

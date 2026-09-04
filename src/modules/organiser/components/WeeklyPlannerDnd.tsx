@@ -165,9 +165,6 @@ type PlannerEntriesOptions = {
   plan: Plan;
   config: BoardConfig;
   plannerOrderStore?: PlannerOrderStore;
-  runtimeFilter: (item: OrganiserItem) => boolean;
-  runtimeSort: (a: OrganiserItem, b: OrganiserItem) => number;
-  sortBy: string;
 };
 
 type UsePlannerInteractionsOptions = {
@@ -179,7 +176,6 @@ type UsePlannerInteractionsOptions = {
   onUnmarkRecipe: (path: string) => Promise<void>;
   plannerOrderStore?: PlannerOrderStore;
   renderedEntriesByColumn: Map<string, BoardEntry<OrganiserItem>[]>;
-  sortBy: string;
   refreshOrder: () => void;
 };
 
@@ -260,12 +256,11 @@ export function usePlannerEntries(options: PlannerEntriesOptions) {
     const { entriesByColumn } = buildBoardEntries(options.recipes, options.plan, options.config, {
       plannerOrderStore: options.plannerOrderStore,
       plannerOrderPresetId: "weekly",
-      manualOrder: options.sortBy === "default",
+      manualOrder: true,
     });
     const rendered = new Map<string, BoardEntry<OrganiserItem>[]>();
     for (const column of options.config.columns) {
-      const filtered = (entriesByColumn.get(column.id) ?? []).filter(({ item }) => options.runtimeFilter(item));
-      rendered.set(column.id, [...filtered].sort((a, b) => options.runtimeSort(a.item, b.item)));
+      rendered.set(column.id, entriesByColumn.get(column.id) ?? []);
     }
     return rendered;
   }, [
@@ -273,9 +268,6 @@ export function usePlannerEntries(options: PlannerEntriesOptions) {
     options.plan,
     options.plannerOrderStore,
     options.recipes,
-    options.runtimeFilter,
-    options.runtimeSort,
-    options.sortBy,
     orderRevision,
   ]);
   const refreshOrder = React.useCallback(() => setOrderRevision((value) => value + 1), []);
@@ -385,7 +377,7 @@ export function usePlannerInteractions(options: UsePlannerInteractionsOptions) {
       if (result?.deleted === true) {
         orders.targetIds = orders.targetIds.filter((id) => id !== orders.targetEntryId);
       }
-      if (options.sortBy === "default" && options.plannerOrderStore) {
+      if (options.plannerOrderStore) {
         const updates = new Map<string, readonly string[]>();
         updates.set(plannerOrderKey(options.config.id, "weekly", drag.sourceColumnId), orders.sourceIds);
         updates.set(plannerOrderKey(options.config.id, "weekly", targetColumnId), orders.targetIds);
@@ -406,7 +398,6 @@ export function usePlannerInteractions(options: UsePlannerInteractionsOptions) {
     options.notify,
     options.plannerOrderStore,
     options.refreshOrder,
-    options.sortBy,
     renderedEntriesByColumn,
   ]);
 

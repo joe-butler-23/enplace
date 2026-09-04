@@ -27,15 +27,17 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .mep-loading__error,
 .mep-loading__trace { margin: 12px 0 0; padding: 10px 12px; background: var(--danger-tint); border: 1px solid var(--line); border-radius: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.77rem; line-height: 1.4; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
 .mep-loading__actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
-.mep-sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 10px 6px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
-.mep-sidebar__back { border: none; background: transparent; border-radius: 8px; padding: 0; cursor: pointer; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
-.mep-sidebar__back svg { width: 18px; height: 18px; stroke-width: 2.2; }
+/* Every child centres on the rail's own axis, so the back arrow, the nav icons and the
+   mark share one vertical line in the column layout and one baseline in the row layout. */
+.mep-sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: hidden; }
+.mep-sidebar__back { box-sizing: border-box; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 0; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.mep-sidebar__back svg { width: 16px; height: 16px; stroke-width: 2.2; }
 .mep-sidebar__back:hover:not(:disabled) { background: var(--hover-strong); }
 .mep-sidebar__back.is-disabled,
 .mep-sidebar__back:disabled { opacity: 0.55; cursor: default; }
 .mep-sr-only { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
-.mep-nav { display: flex; flex-direction: column; gap: 8px; }
-.mep-nav__item { width: 32px; height: 32px; box-sizing: border-box; margin: 0 auto; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.mep-nav { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mep-nav__item { width: 32px; height: 32px; box-sizing: border-box; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .mep-nav__icon { width: 16px; flex: 0 0 16px; text-align: center; }
 .mep-nav__item:hover { border-color: var(--line); background: var(--hover); }
 .mep-nav__item:active { transform: scale(0.94); }
@@ -64,27 +66,33 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .mep-notice { background: var(--hover); border: 1px solid var(--danger-line); padding: 10px 16px; border-radius: 12px; box-shadow: var(--shadow); }
 .mep-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); overflow: hidden; }
 .mep-dialog::backdrop { background: color-mix(in srgb, var(--ink) 28%, transparent); }
-.mep-dialog__body { position: relative; max-height: calc(100vh - 64px); overflow-y: auto; padding: 24px 26px 26px; }
-.mep-dialog__close { position: absolute; top: 18px; right: 18px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+/* One gutter and one rhythm. Every row in the dialog - title, close, section, control -
+   aligns to this padding box; nothing is positioned against the dialog edge on its own. */
+.mep-dialog__body { box-sizing: border-box; max-height: calc(100vh - 64px); overflow-y: auto; padding: 28px; display: flex; flex-direction: column; gap: 28px; }
+.mep-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mep-dialog__header h2 { margin: 0; font-size: 1.31rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+.mep-dialog__close { flex: none; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .mep-dialog__close:hover { background: var(--hover-strong); color: var(--ink); }
 .mep-dialog__close svg { width: 16px; height: 16px; stroke-width: 2.2; }
-.mep-settings h2 { margin: 0 0 22px; font-size: 1.31rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
-.mep-settings__grid { display: grid; gap: 14px; }
-.mep-settings label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
-.mep-settings input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font: inherit; color: var(--ink); }
-.mep-settings input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.mep-settings input[readonly] { background: var(--hover); color: var(--muted); }
-.mep-cookbook-panel { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
-.mep-cookbook-panel h3,
-.mep-cookbook-panel h4 { margin: 0; }
-.mep-cookbook-panel h3 { font-size: 1.08rem; }
-.mep-cookbook-panel h4 { font-family: var(--font-sans); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.mep-cookbook-panel__section { display: grid; gap: 10px; margin-top: 18px; }
-.mep-cookbook-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.mep-cookbook-panel__qr { width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 10px; }
-.mep-cookbook-panel__status { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
-.mep-cookbook-panel__file-button { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 0 !important; font-size: inherit !important; }
-.mep-cookbook-panel__file-button input { display: none; }
+.mep-dialog__body :is(input, select, button, label):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mep-settings__section { display: flex; flex-direction: column; gap: 12px; }
+/* Section labels use the app's small-label voice, the same one the recipe view uses. */
+.mep-settings__section h3 { margin: 0; font-family: var(--font-sans); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.mep-settings__fields { display: grid; gap: 8px; }
+.mep-settings__fields label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 200px); align-items: center; gap: 12px; font-size: 0.9rem; }
+.mep-settings__fields select,
+.mep-settings__link { box-sizing: border-box; width: 100%; min-height: 34px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: 0.9rem; color: var(--ink); }
+.mep-settings__link { background: var(--hover); color: var(--muted); }
+.mep-settings__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mep-settings__file-button { display: inline-flex; align-items: center; }
+.mep-settings__file-button input { display: none; }
+.mep-settings__note { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+.mep-settings__qr { width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 10px; }
+/* Below the dialog's own 520px the label column cannot hold its text, so the pair stacks
+   and every control keeps one left edge instead of a squeezed second column. */
+@media (max-width: 560px) {
+.mep-settings__fields label { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
 .mep-modal-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 28%, transparent); display: grid; place-items: center; z-index: 20; }
 .mep-modal { background: var(--surface); border-radius: 16px; padding: 20px; min-width: 320px; max-width: 90vw; box-shadow: var(--shadow); }
 .mep-command { background: var(--surface); border: 0; color: inherit; border-radius: 16px; padding: 16px; width: min(520px, 90vw); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; }
@@ -179,8 +187,11 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 /* No cover: the title takes the measure rather than leaving a placeholder box. */
 .recipe-view__masthead--textonly { grid-template-columns: minmax(0, 1fr); }
 .recipe-view--full .recipe-view__masthead h1 { margin: 0; font-size: clamp(2.2rem, 4vw, 3.06rem); font-weight: 600; line-height: 1.04; letter-spacing: -0.022em; }
-/* Provenance left, the one page action right. Nothing else earns a line here. */
-.recipe-view__meta { display: flex; align-items: baseline; gap: 32px; margin-top: 20px; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+/* Provenance left, the page actions right. Nothing else earns a line here, and the
+   actions hold that right edge whether or not the recipe carries a source. */
+.recipe-view__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.recipe-view__masthead .recipe-view__meta { margin-top: 20px; }
+.recipe-view__source { min-width: 0; }
 .recipe-view__source a { color: var(--accent); text-decoration: none; }
 .recipe-view__source a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; }
 /* Every cover is the same shape at the same size, so no recipe page is laid out
@@ -236,13 +247,13 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .recipe-view__notes a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
 .recipe-view__checklist a:hover,
 .recipe-view__notes a:hover { color: var(--accent-hover); border-bottom-color: var(--accent-hover); }
-.recipe-view__edit-action { border: 0; background: none; padding: 0; font: inherit; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); white-space: nowrap; cursor: pointer; }
-.recipe-view__edit-action:hover { color: var(--accent); }
-.recipe-view__rendered-content { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
-.recipe-view__rendered-content.is-editing .recipe-view__mdx { grid-column: 1 / -1; }
+/* Edit, Delete and Done are one control shape in the app's small-label voice. There is
+   no second button style for the editing state: the same row changes what it offers. */
+.recipe-view__actions { flex: none; display: flex; align-items: baseline; gap: 24px; }
+.recipe-view__action { border: 0; background: none; padding: 0; font: inherit; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); white-space: nowrap; cursor: pointer; }
+.recipe-view__action:hover { color: var(--accent); }
 .recipe-view__ingredients-panel { position: static; max-height: none; overflow: visible; }
-.recipe-view__editor { display: flex; flex-direction: column; gap: 10px; }
-.recipe-view__editor-actions { align-self: flex-end; }
+.recipe-view__editor { display: flex; flex-direction: column; }
 .recipe-view__editor textarea { box-sizing: border-box; width: 100%; min-height: 62vh; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: inherit; padding: 12px; font: inherit; font-family: var(--font-sans); line-height: 1.5; resize: vertical; }
 .recipe-view__editor textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .recipe-view--rendered { gap: 10px; }

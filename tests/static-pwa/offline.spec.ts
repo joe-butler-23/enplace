@@ -9,11 +9,11 @@ async function ensureServiceWorkerControl(page: Page): Promise<void> {
 }
 
 async function expectConnected(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Share cookbook", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Share cookbook" })).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close share cookbook" }).click();
-  await expect(page.getByRole("dialog", { name: "Share cookbook" })).toHaveCount(0);
+  await page.getByTitle("Close settings").click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 }
 
 test("an offline tick survives an immediate reload after IndexedDB persists it", async ({ page, context }) => {

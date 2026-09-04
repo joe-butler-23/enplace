@@ -21,7 +21,7 @@ describe("database query projection", () => {
   it("maps every other owned field and the cap", () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 10, 15, 30));
     expect(databaseQuery({ ...initialDatabaseState(SETTINGS), search: "aubergine", sort: "title-desc", added: "last-7-days",
-      tags: ["quick", "vegan"] })).toEqual({ sortBy: "title-desc", filter: { marked: undefined, scheduled: undefined,
+      tags: ["quick", "vegan"] })).toEqual({ sort: "title-desc", filter: { marked: undefined, scheduled: undefined,
         tags: ["quick", "vegan"], addedAfter: new Date(2026, 8, 3).getTime() }, search: "aubergine", limit: 500 });
   });
   it("requires all tags without help from another filter", () => {
@@ -41,10 +41,10 @@ describe("database query projection", () => {
   it.each([["title-asc", ["Alpha", "Beta", "Missing"]], ["title-desc", ["Missing", "Beta", "Alpha"]],
     ["added-asc", ["Missing", "Alpha", "Beta"]], ["added-desc", ["Beta", "Alpha", "Missing"]],
     ["scheduled-asc", ["Alpha", "Missing", "Beta"]], ["scheduled-desc", ["Beta", "Missing", "Alpha"]]] as const)(
-    "preserves %s ordering including missing dates", (sortBy, titles) => {
+    "preserves %s ordering including missing dates", (sort, titles) => {
       const recipes = [recipe(1, { title: "Beta", added: "2026-02-02", link: "Beta" }),
         recipe(2, { title: "Alpha", added: "2026-01-01", link: "Alpha" }), recipe(3, { title: "Missing", link: "Missing" })];
-      const result = buildDatabaseView(recipes, plan({ days: new Map([["2026-03-02", ["Beta"]], ["2026-03-01", ["Missing"]]]) }), { sortBy });
+      const result = buildDatabaseView(recipes, plan({ days: new Map([["2026-03-02", ["Beta"]], ["2026-03-01", ["Missing"]]]) }), { sort });
       expect(result.items.map(({ title }) => title)).toEqual(titles);
     });
   it("reports pre-limit total but global tags and marked count", () => {

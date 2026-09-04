@@ -100,15 +100,27 @@ describe("recipe read/edit boundary", () => {
     expect(markup).toContain("<h1>Soup</h1>");
   });
 
-  it("keeps the sole full-view Edit action on the masthead meta line", () => {
+  it("keeps the sole full-view Edit action in the masthead action group", () => {
     const markup = renderToStaticMarkup(
       <RecipeView path="recipes/soup.md" title="Soup" mode="full" content="# Soup\n\nMethod" />
     );
 
     expect((markup.match(/>Edit<\/button>/g) ?? [])).toHaveLength(1);
     expect(markup).toContain('class="recipe-view__meta"');
-    expect(markup).toContain('class="recipe-view__edit-action"');
+    expect(markup).toContain('class="recipe-view__actions"');
+    expect(markup).toContain('class="recipe-view__action"');
     expect(markup).not.toContain("recipe-view__toolbar");
+  });
+
+  it("offers Done from the same action group while editing, and no second Edit", () => {
+    const markup = renderToStaticMarkup(
+      <RecipeView path="recipes/soup.md" title="Soup" mode="rendered" content="# Soup\n" />
+    );
+
+    // Both modes render the one group; only its contents differ with the editing state.
+    expect((markup.match(/class="recipe-view__actions"/g) ?? [])).toHaveLength(1);
+    expect(markup).not.toContain("recipe-view__editor-actions");
+    expect(markup).not.toContain("recipe-view__edit-action");
   });
 
   it("retains the preview action without a renderer placeholder", () => {

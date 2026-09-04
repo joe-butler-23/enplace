@@ -96,7 +96,7 @@ test("partner join waits for first sync without showing a false empty cookbook",
   test.skip(browserName !== "chromium", "CDP network emulation is a Chromium-only proof");
   const id = await openFreshCookbook(page);
   await addShoppingItem(page, "sync proof");
-  await page.getByRole("button", { name: "Share cookbook" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
 
   const partnerContext = await browser.newContext();

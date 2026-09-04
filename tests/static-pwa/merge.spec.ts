@@ -19,7 +19,7 @@ async function createCookbookWithRecipe(page: Page): Promise<void> {
   await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Settings" }).click();
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(recipeFile);
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
   await page.getByTitle("Close settings").click();
@@ -32,7 +32,7 @@ async function joinCookbook(browser: Browser, url: string, owner: Page): Promise
   await page.goto(url);
   await expect(page.getByText("Merge Soup", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).dispatchEvent("click");
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(relayReadyFile);
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
   await page.getByTitle("Close settings").click();

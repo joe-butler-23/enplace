@@ -69,11 +69,27 @@ function RecipeSaveNotices({ enabled, state, mergeConflict, deleteError = false 
   </>;
 }
 
+type RecipeActionsProps = { isEditing: boolean; onEdit: () => void; onDone: () => void; onDelete?: () => Promise<void>; deleteRecipe: () => void };
+/**
+ * The recipe's page actions. One group, one style, one place in the layout: reading offers
+ * Edit and Delete, editing offers Done, and the row never changes shape underneath them.
+ */
+function RecipeActions({ isEditing, onEdit, onDone, onDelete, deleteRecipe }: RecipeActionsProps): React.ReactElement {
+  return <div className="recipe-view__actions">
+    {isEditing
+      ? <button className="recipe-view__action" type="button" onClick={onDone}>Done</button>
+      : <>
+        <button className="recipe-view__action" type="button" onClick={onEdit}>Edit</button>
+        {onDelete ? <button className="recipe-view__action" type="button" onClick={deleteRecipe}>Delete recipe</button> : null}
+      </>}
+  </div>;
+}
+
 type RecipeMastheadProps = {
   title: string; meta: ReturnType<typeof buildRecipeMeta>; hero: ReturnType<typeof extractHeroImage>["hero"];
-  heroUrl: string | null; isEditing: boolean; onEdit: () => void; onDelete?: () => Promise<void>; deleteRecipe: () => void;
+  heroUrl: string | null; actions: React.ReactNode;
 };
-function RecipeMasthead({ title, meta, hero, heroUrl, isEditing, onEdit, onDelete, deleteRecipe }: RecipeMastheadProps): React.ReactElement {
+function RecipeMasthead({ title, meta, hero, heroUrl, actions }: RecipeMastheadProps): React.ReactElement {
   return <header className={`recipe-view__masthead${hero ? "" : " recipe-view__masthead--textonly"}`}>
     <div className="recipe-view__masthead-text">
       <h1>{title}</h1>
@@ -81,8 +97,7 @@ function RecipeMasthead({ title, meta, hero, heroUrl, isEditing, onEdit, onDelet
         <span className="recipe-view__source">
           {meta.source?.href ? <a href={meta.source.href} target="_blank" rel="noopener noreferrer">{meta.source.label}</a> : meta.source?.label}
         </span>
-        {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={onEdit}>Edit</button> : null}
-        {onDelete && !isEditing ? <button className="recipe-view__edit-action" type="button" onClick={deleteRecipe}>Delete recipe</button> : null}
+        {actions}
       </div>
     </div>
     {hero && heroUrl ? <RecipeHero url={heroUrl} alt={hero.alt} /> : null}
@@ -326,7 +341,6 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     && draft.includes("\n>>>>>>>>");
   const editor = isEditing ? (
     <div className="recipe-view__editor">
-      <div className="recipe-view__editor-actions"><button type="button" onClick={() => setIsEditing(false)}>Done</button></div>
       <textarea
         className="recipe-view__text-editor"
         aria-label={hasConflictMarkers ? "Recipe markdown with merge conflicts" : "Recipe markdown"}
@@ -336,6 +350,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     </div>
   ) : readDocument;
   const editRecipe = () => setIsEditing(true);
+  const finishEditing = () => setIsEditing(false);
   const deleteRecipe = () => {
     if (!onDelete || !window.confirm(`Delete ${resolvedTitle.trim()}?`)) return;
     setDeleteError(false);
@@ -345,15 +360,15 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     });
   };
   const notices = <RecipeSaveNotices enabled={Boolean(onSave)} state={saveState} mergeConflict={mergeConflict} />;
+  const actions = <RecipeActions isEditing={isEditing} onEdit={editRecipe} onDone={finishEditing}
+    onDelete={onDelete} deleteRecipe={deleteRecipe} />;
 
   if (mode === "rendered") {
     return (
       <section className="recipe-view recipe-view--rendered">
-        <div className={`recipe-view__rendered-content ${isEditing ? "is-editing" : ""}`}>
-          <div className="recipe-view__mdx">{editor}</div>
-          {notices}
-          {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={editRecipe}>Edit</button> : null}
-        </div>
+        <div className="recipe-view__meta">{actions}</div>
+        <div className="recipe-view__mdx">{editor}</div>
+        {notices}
       </section>
     );
   }
@@ -361,8 +376,7 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   return (
     <section className="recipe-view recipe-view--full">
       <div className="recipe-view__content recipe-view__content--full">
-        <RecipeMasthead title={resolvedTitle} meta={meta} hero={hero} heroUrl={heroUrl}
-          isEditing={isEditing} onEdit={editRecipe} onDelete={onDelete} deleteRecipe={deleteRecipe} />
+        <RecipeMasthead title={resolvedTitle} meta={meta} hero={hero} heroUrl={heroUrl} actions={actions} />
         {isEditing ? <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div> : (
           <RecipeReadContent ingredients={ingredients} directions={directions}
             checkedIngredients={checkedIngredients} checkedSteps={checkedSteps}

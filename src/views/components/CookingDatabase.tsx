@@ -28,7 +28,7 @@ interface CookingDatabaseProps {
   onToggleMarked: (path: string, marked: boolean) => Promise<void>;
   onClearMarked: () => Promise<void>;
   resolveCover: (path: string | null, source: string) => string | null;
-  onPointerDownRecipe?: (path: string, coverUrl?: string) => void;
+  onPointerDownRecipe?: (path: string) => void;
 }
 
 function formatVisibleCount(recipes: RecipeIndexItem[], totalCount: number): string {

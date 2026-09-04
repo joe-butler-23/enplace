@@ -1,23 +1,7 @@
-import type { OrganiserItem } from "../types";
 import type { BaseKanbanItem } from "../types/kanban-config";
 import type { BoardEntry } from "../kanban/buildBoardsData";
 
 type PlannerOrderEntries = Record<string, string[]>;
-
-export function comparePlannerItems(sortBy: string, a: OrganiserItem, b: OrganiserItem): number {
-	if (sortBy === "title-asc") return a.title.localeCompare(b.title);
-	if (sortBy === "title-desc") return b.title.localeCompare(a.title);
-	if (sortBy !== "added-asc" && sortBy !== "added-desc") return 0;
-	const aDate = a.added ?? "";
-	const bDate = b.added ?? "";
-	if (!aDate && !bDate) return 0;
-	if (!aDate) return 1;
-	if (!bDate) return -1;
-	if (aDate === bDate) return 0;
-	return sortBy === "added-desc"
-		? (aDate > bDate ? -1 : 1)
-		: (aDate < bDate ? -1 : 1);
-}
 
 export function plannerOrderKey(boardId: string, presetId: string, columnId: string): string {
 	return `${boardId}/${presetId}/${columnId}`;

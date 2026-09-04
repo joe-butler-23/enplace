@@ -24,6 +24,28 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
+test("the covers pack loads once after seeding and never on a return visit", async ({ page }) => {
+  const packs: string[] = [];
+  page.on("request", (request) => {
+    const file = new URL(request.url()).pathname.split("/").pop() ?? "";
+    if (!file.endsWith(".pack")) return;
+    // Built names carry a content hash; record the pack each one is a build of.
+    packs.push(file.startsWith("sample-covers-") ? "sample-covers.pack" : "sample-pack.pack");
+  });
+
+  await openFreshCookbook(page);
+  // The grid paints from the seed pack; the covers follow it without holding anything up.
+  expect(packs[0]).toBe("sample-pack.pack");
+  await expect.poll(() => packs).toEqual(["sample-pack.pack", "sample-covers.pack"]);
+  await expect(page.locator(".cooking-db__cover img").first()).toBeVisible();
+
+  packs.length = 0;
+  await page.reload();
+  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+  await expect(page.locator(".cooking-db__cover img").first()).toBeVisible();
+  expect(packs).toEqual([]);
+});
+
 test("fresh visit creates and persists a seeded cookbook", async ({ page }) => {
   const id = await openFreshCookbook(page);
   const databases = await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name));
@@ -138,21 +160,19 @@ test("two separate browser contexts converge through the relay in both direction
   }
 });
 
-test("an untouched cookbook is local-only in the share dialog and exportable from Settings", async ({ page }) => {
+test("an untouched cookbook reads local-only in Settings and is exportable from there", async ({ page }) => {
   await openFreshCookbook(page);
-  await page.getByRole("button", { name: "Share cookbook" }).click();
-  const share = page.getByRole("dialog", { name: "Share cookbook" });
-  await expect(share.getByText("This cookbook lives only on this device.", { exact: false })).toBeVisible();
-  await expect(share.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
   await openSettings(page);
-  await expect(page.getByRole("button", { name: "Download cookbook (.zip)" })).toBeVisible();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings.getByText("This cookbook lives only on this device.", { exact: false })).toBeVisible();
+  await expect(settings.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Download cookbook (.zip)" })).toBeVisible();
 });
 
 test("Settings imports a synthetic recipe file", async ({ page }) => {
   await openFreshCookbook(page);
   await openSettings(page);
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles({
     name: "browser-soup.md",
     mimeType: "text/markdown",

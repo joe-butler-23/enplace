@@ -5,8 +5,7 @@ const SETTINGS_KEY = "enplace.preferences";
 const persistedKeys = [
   "databaseSort",
   "databaseMarkedFilter",
-  "databaseScheduledFilter",
-  "weeklyOrganiserMarkedWidth"
+  "databaseScheduledFilter"
 ] as const satisfies ReadonlyArray<keyof StandaloneSettings>;
 
 export async function loadSettings(): Promise<StandaloneSettings> {

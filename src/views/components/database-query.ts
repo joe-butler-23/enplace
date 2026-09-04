@@ -38,7 +38,7 @@ function resolveAddedAfter(added: DatabaseState["added"]): number | undefined {
 
 export function databaseQuery(state: DatabaseState): RecipeIndexQuery {
   return {
-    sortBy: state.sort,
+    sort: state.sort,
     filter: {
       marked: resolveMarkedFilter(state.marked),
       scheduled: resolveScheduledFilter(state.scheduled),
@@ -93,7 +93,7 @@ export function buildDatabaseView(
   if (filter.addedAfter !== undefined) items = items.filter((item) => (item.addedTimestamp ?? 0) >= filter.addedAfter!);
   const search = query.search?.trim().toLowerCase();
   if (search) items = items.filter((item) => `${item.title} ${item.path}`.toLowerCase().includes(search));
-  const sort = query.sortBy ?? "added-desc";
+  const sort = query.sort ?? "added-desc";
   items.sort((left, right) => {
     if (sort === "title-asc") return left.title.localeCompare(right.title);
     if (sort === "title-desc") return right.title.localeCompare(left.title);

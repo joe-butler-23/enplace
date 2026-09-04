@@ -70,12 +70,27 @@ describe("browser-local preferences", () => {
     window.localStorage.setItem("enplace.preferences", JSON.stringify({
       ...DEFAULT_STANDALONE_SETTINGS,
       recipesFolder: "recipes",
-      imagesFolder: "images"
+      imagesFolder: "images",
+      // The marked column is fixed in CSS now; a browser that stored its old width still boots.
+      weeklyOrganiserMarkedWidth: 320
     }));
     await saveSettings(await loadSettings());
     const stored = JSON.parse(window.localStorage.getItem("enplace.preferences") ?? "{}");
     expect(stored).not.toHaveProperty("recipesFolder");
     expect(stored).not.toHaveProperty("imagesFolder");
+    expect(stored).not.toHaveProperty("weeklyOrganiserMarkedWidth");
+  });
+
+  it("loads preferences that still carry the retired marked-column width", async () => {
+    window.localStorage.setItem("enplace.preferences", JSON.stringify({
+      databaseSort: "title-asc",
+      weeklyOrganiserMarkedWidth: 320
+    }));
+
+    await expect(loadSettings()).resolves.toEqual({
+      ...DEFAULT_STANDALONE_SETTINGS,
+      databaseSort: "title-asc"
+    });
   });
 
   it("reports malformed preferences instead of silently replacing them", async () => {

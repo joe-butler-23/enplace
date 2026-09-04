@@ -38,7 +38,7 @@ async function openSettings(page: Page): Promise<void> {
 
 async function importFiles(page: Page, files: string | string[] | FilePayload | FilePayload[], count: number): Promise<void> {
   await openSettings(page);
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(files);
   await expect(page.locator(".mep-notices")).toContainText(`Imported ${count} file${count === 1 ? "" : "s"}; skipped 0 existing files.`);
   await page.getByTitle("Close settings").click();

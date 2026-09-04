@@ -7,7 +7,11 @@ import {
 
 export const COVER_LONGEST_SIDE = 1280;
 export const COVER_THUMBNAIL_SIZE = 448;
-const WEBP_QUALITY = 0.82;
+// Measured on the eleven sample covers at 448px, which is a 224px card at DPR 2: 0.70 is
+// indistinguishable from 0.82 there and 28% smaller. The display cover is shown far larger,
+// was not measured at that size, and keeps its own quality.
+const COVER_QUALITY = 0.82;
+const THUMBNAIL_QUALITY = 0.70;
 export const COVER_BACKFILL_ORIGIN = Symbol("enplace-cookbook-cover-backfill");
 
 export type CoverFiles = { cover: Uint8Array; thumbnail: Uint8Array };
@@ -54,7 +58,7 @@ function canvas(width: number, height: number): { element: HTMLCanvasElement; co
   return { element, context };
 }
 
-function webpBytes(element: HTMLCanvasElement): Promise<Uint8Array> {
+function webpBytes(element: HTMLCanvasElement, quality: number): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     element.toBlob((blob) => {
       // toBlob silently falls back to PNG where WebP encoding is unsupported; never store that under a .webp name.
@@ -63,7 +67,7 @@ function webpBytes(element: HTMLCanvasElement): Promise<Uint8Array> {
         return;
       }
       void blob.arrayBuffer().then((bytes) => resolve(new Uint8Array(bytes)), reject);
-    }, "image/webp", WEBP_QUALITY);
+    }, "image/webp", quality);
   });
 }
 
@@ -83,7 +87,7 @@ export async function createCoverFiles(source: Blob): Promise<CoverFiles> {
       0, 0, COVER_THUMBNAIL_SIZE, COVER_THUMBNAIL_SIZE,
     );
     const [cover, thumbnailBytes] = await Promise.all([
-      webpBytes(capped.element), webpBytes(thumbnail.element),
+      webpBytes(capped.element, COVER_QUALITY), webpBytes(thumbnail.element, THUMBNAIL_QUALITY),
     ]);
     return { cover, thumbnail: thumbnailBytes };
   } finally {

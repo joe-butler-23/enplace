@@ -1,6 +1,7 @@
 import "./fonts.css";
 import "../styles.css";
 import "./standalone.css";
+import type * as Y from "yjs";
 import { openCookbook } from "./host-client/cookbook-storage";
 import { setCurrentCookbookConnection } from "./cookbook/current";
 import {
@@ -13,7 +14,7 @@ import {
   currentCookbookId,
   setCurrentCookbookId,
 } from "./cookbook/registry";
-import { seedSamplePack } from "./cookbook/sample-pack";
+import { seedSampleCovers, seedSamplePack } from "./cookbook/sample-pack";
 import { backfillCookbookCovers } from "./cookbook/covers";
 import { preserveCookbookHash } from "./standalone/pwa-route";
 
@@ -67,7 +68,9 @@ function showCookbookGate({ title, retry = false }: CookbookGate): void {
   container.replaceChildren(main);
 }
 
-async function openSharedCookbook(): Promise<boolean> {
+type CookbookSession = { doc: Y.Doc; seededHere: boolean };
+
+async function openSharedCookbook(): Promise<CookbookSession | null> {
   const linkedId = cookbookIdFromUrl(window.location.href);
   const rememberedId = currentCookbookId();
   const createdHere = linkedId === null && rememberedId === null;
@@ -97,7 +100,7 @@ async function openSharedCookbook(): Promise<boolean> {
           title: "This device hasn't downloaded this cookbook yet. Connect to the internet once to open it.",
           retry: true,
         });
-        return false;
+        return null;
       }
     }
     void backfillCookbookCovers(connection.doc).then(async () => {
@@ -105,7 +108,7 @@ async function openSharedCookbook(): Promise<boolean> {
     }).catch((error) => {
       console.warn("Could not finish automatic cover optimization:", error);
     });
-    return true;
+    return { doc: connection.doc, seededHere: createdHere };
   } catch (error) {
     if (createdHere) {
       clearCurrentCookbookId();
@@ -118,8 +121,16 @@ async function openSharedCookbook(): Promise<boolean> {
 async function start(): Promise<void> {
   // Ask the browser to keep this site's storage; no prompt, no setting, just less eviction risk.
   if (navigator.storage?.persist) void navigator.storage.persist();
-  const [{ mountApp }, opened] = await Promise.all([import("./mount"), openSharedCookbook()]);
-  if (opened) mountApp();
+  const [{ mountApp }, session] = await Promise.all([import("./mount"), openSharedCookbook()]);
+  if (!session) return;
+  mountApp();
+  // Only a cookbook this visit seeded is missing its full covers, so no existing-cookbook
+  // visit ever fetches this pack. Nothing on screen waits for it.
+  if (session.seededHere) {
+    void seedSampleCovers(session.doc).catch((error) => {
+      console.warn("Could not finish loading the sample cover images:", error);
+    });
+  }
 }
 
 function showStartupFailure(reason: unknown): void {

@@ -1,35 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-	computeWeeklyTrackWidth,
-	MIN_WEEKLY_COLUMN_WIDTH_PX,
-	normalizeWeeklyColumnMinWidth,
-} from "../utils/weekly-layout";
 import { addCalendarDays, calendarWeekOffset, formatIsoDate, formatPlannerDate, formatPlannerDay, normalizeFrontmatterDate, startOfIsoWeek } from "../utils/scheduled-dates";
 import { generateWeekColumns } from "../boards/weeklyOrganiserConfig";
 import { clampHorizontalScroll } from "../hooks/useWeeklyBoardLayout";
 
-describe("weekly layout sizing", () => {
-	it("clamps the persisted minimum width to 200px+", () => {
-		expect(normalizeWeeklyColumnMinWidth(120)).toBe(MIN_WEEKLY_COLUMN_WIDTH_PX);
-		expect(normalizeWeeklyColumnMinWidth(Number.NaN)).toBe(MIN_WEEKLY_COLUMN_WIDTH_PX);
-		expect(normalizeWeeklyColumnMinWidth(240.4)).toBe(240);
-	});
-
-	it("uses the minimum width when viewport is too narrow", () => {
-		const minWidth = 220;
-		// (900 - 48) / 5 = 170.4, so tracks should stay at min width.
-		expect(computeWeeklyTrackWidth(900, minWidth)).toBe(minWidth);
-	});
-
-	it("expands all columns equally when there is extra space", () => {
-		// (1508 - 48) / 5 = 292
-		expect(computeWeeklyTrackWidth(1508, 200)).toBe(292);
-	});
-
-	it("falls back to minimum width when host width is unavailable", () => {
-		expect(computeWeeklyTrackWidth(0, 260)).toBe(260);
-	});
-
+describe("weekly board dates, columns, and scroll clamping", () => {
 	it("keeps ISO week dates and labels stable without Moment", () => {
     const monday = startOfIsoWeek(new Date(2026, 7, 5));
     expect(formatIsoDate(monday)).toBe("2026-08-03");

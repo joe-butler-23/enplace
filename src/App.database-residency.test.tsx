@@ -18,7 +18,6 @@ vi.mock("@/views/components/CookingDatabase", () => ({ CookingDatabase: () => <d
 vi.mock("./views/components/ShoppingListView", () => ({ ShoppingListView: () => <div data-testid="shopping">Shopping content</div> }));
 vi.mock("./views/components/AppOverlays", () => ({ CommandPalette: () => null, HelpDialog: () => null, Notices: () => null,
   SettingsDialog: () => null, StartupFailure: () => null }));
-vi.mock("./cookbook/CookbookPanel", () => ({ ShareCookbookDialog: () => null }));
 vi.mock("./views/components/PreviewPane", () => ({ PreviewPane: () => null }));
 vi.mock("./views/components/RecipeView", () => ({ RecipeView: () => null }));
 import { PlannerOrderStore } from "./modules/organiser/utils/planner-order";

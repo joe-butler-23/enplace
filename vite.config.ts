@@ -78,11 +78,11 @@ function appShellServiceWorker(): Plugin {
         source: `${trackedHeaders}\n\n# Generated from this build's navigation-shell assets.\n${navigationHeaders}\n`,
       });
 
-      // Precache only what launch and offline reading need. The sample pack and large icon
-      // are cached on first use instead. Cache the canonical root so hosts that redirect
+      // Precache only what launch and offline reading need. Both sample packs and the large
+      // icon are cached on first use instead. Cache the canonical root so hosts that redirect
       // /index.html never leave a redirected response that Chromium rejects for navigation.
       const files = new Set(["/", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png"]);
-      const deferred = /(?:^|\/)sample-pack-[^/]+\.pack$|(?:^|\/)browser-[^/]+\.js$/;
+      const deferred = /(?:^|\/)sample-(?:pack|covers)-[^/]+\.pack$|(?:^|\/)browser-[^/]+\.js$/;
       for (const output of outputs) {
         if (output.fileName !== "index.html" && !deferred.test(output.fileName)) files.add(`/${output.fileName}`);
       }

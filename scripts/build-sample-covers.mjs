@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDirectory = path.join(root, "sample", "images");
 const sourceRevision = "1291067";
-const quality = "82";
+// Mirrors COVER_QUALITY and THUMBNAIL_QUALITY in src/cookbook/covers.ts: a sample cover is
+// encoded exactly as the browser would encode the same image on import.
+const coverQuality = "82";
+const thumbnailQuality = "70";
 const names = [
   "banana-oat-loaf.webp",
   "beef-pepper-noodles.webp",
@@ -54,12 +57,13 @@ try {
     const thumbnailPng = path.join(workingDirectory, `${stem}.card.png`);
     await mustRun("magick", [original, "-auto-orient", "-resize", "1280x1280>", cappedPng]);
     await mustRun("magick", [original, "-auto-orient", "-resize", "448x448^", "-gravity", "center", "-extent", "448x448", thumbnailPng]);
-    await mustRun("cwebp", ["-quiet", "-q", quality, cappedPng, "-o", path.join(outputDirectory, name)]);
-    await mustRun("cwebp", ["-quiet", "-q", quality, thumbnailPng, "-o", path.join(outputDirectory, `${stem}.card.webp`)]);
+    await mustRun("cwebp", ["-quiet", "-q", coverQuality, cappedPng, "-o", path.join(outputDirectory, name)]);
+    await mustRun("cwebp", ["-quiet", "-q", thumbnailQuality, thumbnailPng, "-o", path.join(outputDirectory, `${stem}.card.webp`)]);
   }
   const files = await Promise.all((await readdir(outputDirectory)).sort()
     .map(async (name) => ({ name, bytes: (await readFile(path.join(outputDirectory, name))).length })));
-  console.log(JSON.stringify({ status: "generated", longestSide: 1280, thumbnail: 448, quality: Number(quality), files }));
+  console.log(JSON.stringify({ status: "generated", longestSide: 1280, thumbnail: 448,
+    coverQuality: Number(coverQuality), thumbnailQuality: Number(thumbnailQuality), files }));
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

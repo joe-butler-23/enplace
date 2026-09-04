@@ -1,56 +1,9 @@
 /* src/styles.css */
 .weekly-organiser-container { height: 100%; width: 100%; box-sizing: border-box; padding: 0 40px 12px 12px; position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-x: auto; overflow-y: auto; background: linear-gradient(180deg, var(--surface) 0%, var(--paper) 100%); }
 .organiser-topbar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 8px 6px; background: var(--surface); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.weekly-review-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.weekly-review-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.weekly-review-title { font-size: 0.95em; font-weight: 600; }
-.weekly-review-meta { font-size: 0.8em; color: var(--muted); }
-.weekly-review-hint { font-size: 0.8em; color: var(--muted); }
-.weekly-review-empty { font-size: 0.85em; color: var(--muted); padding: 6px 0; }
-.weekly-review-list { display: flex; flex-direction: column; gap: 10px; }
-.weekly-review-row { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.weekly-review-row.is-disabled { opacity: 0.7; }
-.weekly-review-row-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: nowrap; }
-.weekly-review-row-info { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
-.weekly-review-row-controls { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 0 1 auto; flex-wrap: nowrap; margin: 0 auto; }
-.weekly-review-thumb { width: 44px; height: 44px; border-radius: 6px; overflow: hidden; background: var(--surface); flex-shrink: 0; }
-.weekly-review-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.weekly-review-row-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.weekly-review-row-name { font-weight: 600; font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.weekly-review-row-meta { font-size: 0.75em; color: var(--muted); }
-.weekly-review-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: var(--ink); white-space: nowrap; }
-.weekly-review-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8em; color: var(--muted); white-space: nowrap; }
-.weekly-review-inline span { text-transform: none; letter-spacing: 0.02em; }
-.weekly-review-inline input,
-.weekly-review-inline select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; color: var(--ink); font-size: 0.88em; }
-.weekly-review-inline--date input { width: 128px; }
-.weekly-review-inline--rating select { width: 64px; }
-.weekly-review-inline--again select { width: 86px; }
-.weekly-review-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.75em; color: var(--muted); }
-.weekly-review-field span { text-transform: uppercase; letter-spacing: 0.08em; }
-.weekly-review-field input,
-.weekly-review-field select,
-.weekly-review-field textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; color: var(--ink); font-size: 0.85em; }
-.weekly-review-field textarea { resize: vertical; min-height: 60px; }
-.weekly-review-field--notes { width: 100%; }
-.weekly-review-actions { display: flex; justify-content: flex-end; gap: 8px; }
-@media (max-width: 720px) {
-.weekly-review-row-header { flex-wrap: wrap; align-items: flex-start; }
-.weekly-review-row-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; margin: 0; }
-}
-.topbar-input { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; color: var(--ink); font-size: 0.8em; flex: 1 1 160px; min-width: 100px; max-width: 240px; }
-.topbar-input::placeholder { color: var(--muted); }
-.topbar-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-.topbar-action { position: relative; }
 .topbar-icon-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 4px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
 .topbar-icon-btn:hover { background: var(--hover); color: var(--ink); }
-.topbar-icon-btn.is-active { background: var(--hover); color: var(--ink); }
-.topbar-popover { position: absolute; top: calc(100% + 6px); right: 0; z-index: 10; min-width: 160px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; gap: 4px; }
-.topbar-option { all: unset; cursor: pointer; display: block; width: 100%; padding: 6px 8px; border-radius: 6px; color: var(--ink); font-size: 0.9em; }
-.topbar-option:hover { background: var(--hover); }
-.topbar-option.is-active { font-weight: 600; background: var(--hover); }
-.topbar-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.85em; color: var(--ink); cursor: pointer; }
-.week-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.week-nav { display: flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
 .week-nav-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 3px 6px; color: var(--muted); font-size: 0.75em; display: flex; align-items: center; justify-content: center; }
 .week-nav-btn:hover { background: var(--hover); color: var(--ink); }
 .week-range { margin-left: 4px; font-size: 0.8em; color: var(--muted); white-space: nowrap; }
@@ -95,20 +48,13 @@
 .pika-footer { display: flex; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--line); order: 2; }
 .calendar-popover .pika-footer-btn { all: unset; cursor: pointer; padding: 2px 0; font-size: 12px; color: var(--muted); }
 .calendar-popover .pika-footer-btn:hover { color: var(--ink); }
-@media (max-width: 1080px) {
-.organiser-topbar { gap: 8px; }
-.topbar-input { flex: 1 1 220px; min-width: 180px; max-width: none; }
-.topbar-actions { margin-left: 0; }
-.week-nav { order: 4; flex: 1 1 100%; flex-wrap: wrap; }
-}
 @media (max-width: 760px) {
-.topbar-input { flex: 1 1 100%; min-width: 0; }
-.topbar-actions { width: 100%; justify-content: flex-end; }
+.week-nav { flex-wrap: wrap; }
 }
 .weekly-organiser-kanban { flex: 1 1 auto; display: flex; height: 100%; min-height: 0; overflow-x: auto; overflow-y: auto; overscroll-behavior-x: contain; overscroll-behavior-y: contain; }
 .weekly-organiser-kanban-host { display: flex; flex: 1 1 auto; min-height: 100%; width: 100%; min-width: 100%; }
 .kanban-container { position: relative; box-sizing: border-box; display: grid !important;
-/* Marked + 4 day tracks. All columns share one minimum width variable. */ grid-template-columns: repeat(5, minmax(var(--col-min-width, 200px), 1fr)) !important; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 100%; width: 100% !important; min-width: calc(var(--col-min-width, 200px) * 5 + 12px * 4); align-items: stretch; align-content: stretch; justify-content: start; }
+/* Marked + 4 day tracks, all one width. Not adjustable: five equal lanes is the layout. */ grid-template-columns: repeat(5, minmax(240px, 1fr)) !important; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 100%; width: 100% !important; min-width: calc(240px * 5 + 12px * 4); align-items: stretch; align-content: stretch; justify-content: start; }
 .kanban-container * { box-sizing: border-box; }
 .kanban-item { contain: layout style paint; }
 .kanban-item.is-dragging { backface-visibility: hidden; will-change: transform; }
@@ -190,7 +136,15 @@
 .cooking-db__filter-action.mod-warning { color: var(--danger); }
 .cooking-db__filter-action:disabled { cursor: not-allowed; opacity: 0.5; }
 .cooking-db__grid-container { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.cooking-db__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--cooking-db-card-size, 220px)), 1fr)); gap: 12px; align-items: start; padding: 1px; }
+/* auto-fill with a bounded track: cards keep one size whether the grid holds one result
+   or forty, and the 448px thumbnail is never asked to paint above its own resolution
+   (224px at a device pixel ratio of 2). Leftover width stays at the end of the row. */
+.cooking-db__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 224px)); gap: 12px; align-items: start; padding: 1px; }
+/* A phone is too narrow for a 200px track to fit twice, and one column would blow a 448px
+   thumbnail up on a 338px card. Two columns keep it above 2x and show twice the shelf. */
+@media (max-width: 760px) {
+.cooking-db__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .cooking-db__card { box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--hover); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; contain: layout paint style; width: 100%; height: auto; }
 .cooking-db__card:hover { border-color: var(--accent); background: var(--paper); }
 .cooking-db__card-open { all: unset; display: block; width: 100%; cursor: pointer; }
@@ -219,12 +173,6 @@ button.organiser-column-note,
 .organiser-column-note.has-note { color: var(--ink); background-color: var(--surface); border: 1px solid var(--line); }
 .organiser-column-note.is-empty { opacity: 0.5; text-align: center; font-weight: bold; }
 .organiser-column-note.is-empty:hover { opacity: 1; }
-.marked-col-resizer { position: absolute; left: calc(max(var(--col-min-width, 200px), (100% - 48px) / 5) - 12px); top: 0; bottom: 0; width: 24px;
-/* Generous hit target */ cursor: col-resize; z-index: 100; display: flex; justify-content: center; align-items: center; touch-action: none; }
-.marked-col-resizer::after { content: ''; width: 2px;
-/* Thin subtle line */ height: 100%; background-color: var(--accent); opacity: 0; }
-.marked-col-resizer:hover::after,
-.marked-col-resizer.is-resizing::after { opacity: 1; }
 .cooking-db__paste-import { display: grid; gap: 0.75rem; margin: 1rem auto; max-width: 36rem; text-align: left; }
 .cooking-db__paste-import label { display: grid; gap: 0.25rem; }
 .cooking-db__paste-import input,

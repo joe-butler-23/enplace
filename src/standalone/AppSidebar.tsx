@@ -8,7 +8,6 @@ type AppSidebarProps = {
   canGoBack: boolean;
   onBack: () => void;
   onNavigate: (view: Exclude<SidebarView, "recipe">) => void;
-  onShare?: () => void;
   onPreparePlanner?: () => void;
 };
 
@@ -29,7 +28,6 @@ export function AppSidebar({
   canGoBack,
   onBack,
   onNavigate,
-  onShare,
   onPreparePlanner,
 }: AppSidebarProps): React.JSX.Element {
   return (
@@ -69,10 +67,6 @@ export function AppSidebar({
             <span className="mep-sr-only">{item.label}</span>
           </button>
         ))}
-        <button className="mep-nav__item" type="button" title="Share cookbook" onClick={onShare}>
-          <span aria-hidden="true">↗</span>
-          <span className="mep-sr-only">Share cookbook</span>
-        </button>
       </nav>
       {/* Decorative: the app is already named by the page h1, so this adds no second label. */}
       <img className="mep-sidebar__mark" src="/enplace-mark.png" alt="" width={128} height={100} />

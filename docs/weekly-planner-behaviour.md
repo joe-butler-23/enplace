@@ -1,6 +1,6 @@
 # Weekly Planner Behaviour
 
-Planning and marking read and write `Plan.md` in the shared cookbook document. Build list writes `Shopping.md`. Complete Week appends Cook Log entries to the scheduled recipe files.
+Planning and marking read and write `Plan.md` in the shared cookbook document. Build list writes `Shopping.md`. The planner never writes a recipe file.
 
 ## Marked recipes
 
@@ -22,4 +22,4 @@ The planner displays Monday through Sunday. Scheduling adds the recipe wikilink 
 
 Build list selects the distinct scheduled recipe paths from the displayed week and currently processes them in ascending path order. It rebuilds recipe-owned sections in `Shopping.md` without writing any recipe.
 
-Each planner write transforms the relevant shared cookbook text inside one Yjs transaction. Marking and scheduling change only `Plan.md`; Complete Week appends one Cook Log entry to each completed recipe.
+Each planner write transforms the relevant shared cookbook text inside one Yjs transaction. Marking and scheduling change only `Plan.md`.

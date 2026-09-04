@@ -1,6 +1,5 @@
 import * as React from "react";
 import { PlannerOrderStore } from "@/modules/organiser/utils/planner-order";
-import { normalizeWeeklyColumnMinWidth } from "@/modules/organiser/utils/weekly-layout";
 import { WeeklyOrganiserBoard } from "@/modules/organiser/components/WeeklyOrganiserBoard";
 import { resolveDatabaseCoverPath } from "@/modules/cooking/utils/databaseCover";
 import { CookingDatabase } from "@/views/components/CookingDatabase";
@@ -22,7 +21,6 @@ import {
 } from "./cookbook/actions";
 import { setDayNote } from "./cookbook/plan-notes";
 import { cardCoverUrl } from "./cookbook/covers";
-import { ShareCookbookDialog } from "./cookbook/CookbookPanel";
 import { getCookbookSnapshot, useCookbookSlice, useCookbookText, type CookbookFile } from "./cookbook/store";
 import { CommandPalette, HelpDialog, Notices, SettingsDialog, StartupFailure, type Command } from "./views/components/AppOverlays";
 import { PreviewPane } from "./views/components/PreviewPane";
@@ -166,7 +164,6 @@ function App(): React.JSX.Element | null {
   const [activeView, setActiveViewState] = React.useState<ViewId>(initialView);
   const activeViewRef = React.useRef(activeView); activeViewRef.current = activeView;
   const [settingsOpen, setSettingsOpen] = React.useState(initialSettingsOpen);
-  const [shareOpen, setShareOpen] = React.useState(false);
   const settingsOpenRef = React.useRef(settingsOpen); settingsOpenRef.current = settingsOpen;
   const [history, setHistory] = React.useState<ViewId[]>([activeView]);
   const recipeRequest = React.useRef(0);
@@ -327,9 +324,17 @@ function App(): React.JSX.Element | null {
     if (!await closePreview()) return;
     setActiveFile(file); void setActiveView("recipe");
   }, [closePreview, openPreview, setActiveView]);
-  const prepareRecipe = React.useCallback((_path: string, cardUrl?: string) => {
-    if (cardUrl) { const image = new Image(); image.src = cardUrl; void image.decode().catch(() => undefined); }
-  }, []);
+  const { resolveImage } = useCookbookImages();
+  // The card thumbnail is already decoded and on screen. What the recipe page still has to
+  // decode is its full-size cover, so press warms exactly that one image and nothing else.
+  const prepareRecipe = React.useCallback((path: string) => {
+    const cover = getCookbookSnapshot().recipes.find((recipe) => recipe.path === path)?.cover;
+    const url = cover ? resolveImage(cover, path) : null;
+    if (!url) return;
+    const image = new Image();
+    image.src = url;
+    void image.decode().catch(() => undefined);
+  }, [resolveImage]);
 
   const [notices, setNotices] = React.useState<{ id: string; message: string }[]>([]);
   React.useEffect(() => {
@@ -365,15 +370,14 @@ function App(): React.JSX.Element | null {
   if (!runtime) return startupError ? <StartupFailure phase={startupPhase} error={startupError} events={startupEvents} onRetry={() => void initialize()} /> : null;
   const { settings } = runtime;
   return <div className="mep-root"><div className={`mep-shell ${previewFile ? "mep-shell--preview-open" : "mep-shell--preview-closed"} ${activeView === "shopping" ? "mep-shell--shopping" : ""}`} style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
-    <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onShare={() => setShareOpen(true)} onPreparePlanner={preparePlannerNavigation} />
+    <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} />
     <main className={`mep-main ${activeView === "planner" ? "mep-main--planner" : ""} ${activeView === "database" ? "mep-main--database" : ""} ${activeView === "shopping" ? "mep-main--shopping" : ""}`}>
       <h1 className="mep-sr-only">Enplace</h1>
-      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} markedWidth={settings.weeklyOrganiserMarkedWidth} onSaveMarkedWidth={(width) => updateSettings({ weeklyOrganiserMarkedWidth: normalizeWeeklyColumnMinWidth(width) })} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
+      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
       {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} /> : null}
       {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
-      {settingsOpen ? <SettingsDialog settings={settings} onChange={updateSettings} onClose={closeSettings} /> : null}
-      {shareOpen ? <ShareCookbookDialog onClose={() => setShareOpen(false)} /> : null}
+      {settingsOpen ? <SettingsDialog settings={settings} routePath={pathnameForView(activeView)} onChange={updateSettings} onClose={closeSettings} /> : null}
     </main>
     {previewFile ? <PreviewCookbookView file={previewFile} isRecipe={previewIsRecipe} width={previewWidth} recipeRef={previewRecipeRef} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
     <Notices notices={notices} />

@@ -10,19 +10,21 @@ async function confirmNextDialog(page: Page): Promise<void> {
   page.once("dialog", (dialog) => dialog.accept());
 }
 
-test("share dialog states the access contract and keeps the active route", async ({ page }) => {
+test("Settings states the access contract and links back to the active route", async ({ page }) => {
   const id = await openFreshCookbook(page);
   await page.getByRole("button", { name: "Shopping List" }).click();
   await expect(page).toHaveURL(new RegExp(`/shopping#k=${id}$`));
 
-  await page.getByRole("button", { name: "Share cookbook" }).click();
-  const dialog = page.getByRole("dialog", { name: "Share cookbook" });
-  await expect(dialog).toBeVisible();
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
+  // The dialog's own /settings route must never leak into the link a partner receives.
   await expect(dialog.getByLabel("Cookbook link")).toHaveValue(`${new URL(page.url()).origin}/shopping#k=${id}`);
-  await expect(dialog.getByRole("button", { name: "Copy link" })).toBeVisible();
   await dialog.getByRole("button", { name: "Show QR code" }).click();
   await expect(dialog.getByRole("img", { name: "QR code for this cookbook link" })).toBeVisible();
+
+  await page.getByTitle("Close settings").click();
+  await expect(page).toHaveURL(new RegExp(`/shopping#k=${id}$`));
 });
 
 
@@ -41,7 +43,7 @@ test("sample removal empties the cookbook", async ({ page }) => {
 test("a javascript Markdown link renders inert", async ({ page }) => {
   await openFreshCookbook(page);
   await openSettings(page);
-  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles({
     name: "unsafe-link.md",
     mimeType: "text/markdown",

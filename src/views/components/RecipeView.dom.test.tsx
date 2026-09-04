@@ -127,12 +127,28 @@ describe("RecipeView interactive behaviour (bd mise-en-place-fuy)", () => {
     renderInto(root, <RecipeView path="recipes/soup.md" title="Soup" mode="full" content={content} onSave={vi.fn()} resolveImage={() => "blob:soup"} />);
 
     act(() => {
-      container.querySelector<HTMLButtonElement>("button.recipe-view__edit-action")!.click();
+      container.querySelector<HTMLButtonElement>("button.recipe-view__action")!.click();
     });
 
     const editor = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Recipe markdown"]');
     expect(editor).not.toBeNull();
     expect(editor!.value).toContain("![Soup](images/soup.png)");
+  });
+
+  it("swaps Edit for Done inside the one action group and back again", () => {
+    renderInto(root, <RecipeView path="recipes/soup.md" title="Soup" mode="full" content={"# Soup\n"} onSave={vi.fn()} />);
+    const actions = () => container.querySelectorAll(".recipe-view__actions");
+    const labels = () => [...container.querySelectorAll(".recipe-view__action")].map((node) => node.textContent);
+
+    expect(actions()).toHaveLength(1);
+    expect(labels()).toEqual(["Edit"]);
+
+    act(() => { container.querySelector<HTMLButtonElement>("button.recipe-view__action")!.click(); });
+    expect(actions()).toHaveLength(1);
+    expect(labels()).toEqual(["Done"]);
+
+    act(() => { container.querySelector<HTMLButtonElement>("button.recipe-view__action")!.click(); });
+    expect(labels()).toEqual(["Edit"]);
   });
 
   it("confirms before deleting a recipe", async () => {
@@ -142,7 +158,7 @@ describe("RecipeView interactive behaviour (bd mise-en-place-fuy)", () => {
     renderInto(root, <RecipeView path="recipes/soup.md" title="Soup" mode="full" content={"# Soup\n"} onDelete={onDelete} />);
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("button.recipe-view__edit-action:last-child")!.click();
+      container.querySelector<HTMLButtonElement>("button.recipe-view__action:last-child")!.click();
       await Promise.resolve();
     });
 

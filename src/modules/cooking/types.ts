@@ -14,7 +14,7 @@ export type RecipeIndexFilter = {
 };
 
 export type RecipeIndexQuery = {
-  sortBy?: RecipeIndexSort;
+  sort?: RecipeIndexSort;
   filter?: RecipeIndexFilter;
   search?: string;
   limit?: number;

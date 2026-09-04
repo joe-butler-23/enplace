@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parsePlan, scanRecipes } from "@/core";
 import { createWeeklyOrganiserConfig } from "../boards/weeklyOrganiserConfig";
-import { comparePlannerItems, PlannerOrderStore } from "../utils/planner-order";
+import { PlannerOrderStore } from "../utils/planner-order";
 import { buildBoardEntries } from "./buildBoardsData";
 
 describe("weekly board data", () => {
@@ -52,21 +52,6 @@ describe("weekly board data", () => {
     expect([...board.entriesByFile.keys()].sort()).toEqual(["Recipes/Pie.md", "Recipes/Soup.md"]);
     expect([...board.entriesByItemId.keys()].sort()).toEqual(ordered.map((entry) => entry.entryId).sort());
     expect([...board.entryIdsByFilePath.get("Recipes/Soup.md")!]).toEqual([`Recipes/Soup.md::${date}`]);
-  });
-
-  it.each([
-    ["default", "Apple", "2026-02-01", "Banana", "2026-01-01", 0],
-    ["title-asc", "Apple", undefined, "Banana", undefined, -1],
-    ["title-desc", "Apple", undefined, "Banana", undefined, 1],
-    ["added-asc", "Apple", "2026-01-01", "Banana", "2026-02-01", -1],
-    ["added-desc", "Apple", "2026-01-01", "Banana", "2026-02-01", 1],
-    ["added-asc", "Apple", undefined, "Banana", "2026-02-01", 1],
-    ["added-desc", "Apple", "2026-01-01", "Banana", undefined, -1],
-    ["added-asc", "Apple", undefined, "Banana", undefined, 0],
-    ["added-desc", "Apple", "2026-01-01", "Banana", "2026-01-01", 0],
-  ] as const)("orders %s with dated and undated items", (sortBy, aTitle, aAdded, bTitle, bAdded, expected) => {
-    const item = (id: string, title: string, added?: string) => ({ id, path: `${id}.md`, title, added });
-    expect(Math.sign(comparePlannerItems(sortBy, item("a", aTitle, aAdded), item("b", bTitle, bAdded)))).toBe(expected);
   });
 
 });

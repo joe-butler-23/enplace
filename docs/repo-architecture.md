@@ -11,7 +11,7 @@ Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs d
 - `src/host-client/browser-storage.ts` defines the storage adapter contract and the storage helpers used by the application.
 - `src/host-client/cookbook-storage.ts` implements the contract over the cookbook document with `y-indexeddb` persistence and a `y-websocket` provider.
 - `src/cookbook/store.ts` is the one live read model: parsed recipes, plan, shopping list, paths, and cover URLs, published from every cookbook transaction through `observeCookbook` and read by React with `useSyncExternalStore`. `src/cookbook/actions.ts` holds every domain write as a pure function applied to the live text.
-- `src/cookbook/registry.ts`, `sample-pack.ts`, `current.ts`, and `CookbookPanel.tsx` own the current-cookbook record, first-run seeding, and the Settings panel for sharing, export, import, and switching cookbooks.
+- `src/cookbook/registry.ts`, `sample-pack.ts`, `current.ts`, and `CookbookPanel.tsx` own the current-cookbook record, first-run seeding, and the Settings panel for sharing, export, import, and switching cookbooks. Seeding is two packs: `sample-pack.pack` (recipes and card thumbnails) is awaited before the app mounts, and `sample-covers.pack` (full-size covers) is fetched after mount, only by the visit that seeded the cookbook.
 - `src/entry.tsx` boots the cookbook id from the link or the registry, otherwise a new seeded cookbook.
 - `src/App.tsx` is routing, planner wiring, settings, the command palette, and view composition; views under `src/views/` render from the store.
 - `src/pwa/` owns the offline app shell.
