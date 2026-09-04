@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
-const OFFLINE_RELOAD_TITLES = new Set(["cached shell offline rejects an unknown kitchen without mounting an editor", "returning device opens its local kitchen offline without a first-sync gate"]);
+const OFFLINE_RELOAD_TITLES = new Set([
+  "cached shell offline rejects an unknown kitchen without mounting an editor",
+  "a persisted kitchen emptied before close reopens offline without a first-sync gate",
+  "a linked device persists successful first sync for offline reopen",
+]);
 test.beforeEach(async ({ browserName }, testInfo) => {
   if (browserName === "webkit" && OFFLINE_RELOAD_TITLES.has(testInfo.title)) testInfo.skip(true, "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 });
@@ -38,6 +42,35 @@ async function cacheControlledShell(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+}
+
+async function precreateIncompatibleKitchenDatabase(page: Page, id: string): Promise<void> {
+  await page.evaluate(async (name) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("updates", { autoIncrement: true });
+      request.result.createObjectStore("custom", { keyPath: "key" });
+    };
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("Kitchen database creation was blocked."));
+    request.onsuccess = () => { request.result.close(); resolve(); };
+  }), `enplace-kitchen-${id}`);
+}
+
+async function kitchenPersistenceCounts(page: Page, id: string): Promise<{ updates: number; markers: number }> {
+  return page.evaluate(async (name) => new Promise<{ updates: number; markers: number }>((resolve, reject) => {
+    const request = indexedDB.open(name);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction(["updates", "custom"], "readonly");
+      const updates = transaction.objectStore("updates").count();
+      const markers = transaction.objectStore("custom").count();
+      transaction.oncomplete = () => { db.close(); resolve({ updates: updates.result, markers: markers.result }); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
+      transaction.onabort = () => { db.close(); reject(transaction.error); };
+    };
+  }), `enplace-kitchen-${id}`);
 }
 
 async function recordFalseEmpty(page: Page): Promise<void> {
@@ -80,8 +113,8 @@ test("partner join waits for first sync without showing a false empty kitchen", 
       connectionType: "wifi",
     });
     await partner.goto(`/#k=${id}`, { waitUntil: "domcontentloaded" });
-    await expect(partner.getByRole("heading", { name: "Opening your shared kitchen…" })).toBeVisible();
     await expect(partner.getByText("11 recipes", { exact: true })).toBeVisible();
+    expect(await partner.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(true);
     expect(await partner.evaluate(() => (window as typeof window & { __sawFalseEmpty?: boolean }).__sawFalseEmpty)).toBe(false);
   } finally {
     await partnerContext.close();
@@ -98,17 +131,75 @@ test("cached shell offline rejects an unknown kitchen without mounting an editor
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No recipes yet" })).toHaveCount(0);
   await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText(NOT_DOWNLOADED, { exact: true })).toBeVisible();
+  await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
 });
 
-test("returning device opens its local kitchen offline without a first-sync gate", async ({ page, context }) => {
+test("a persisted kitchen emptied before close reopens offline without a first-sync gate", async ({ page, context }) => {
   const id = await openFreshKitchen(page);
   await cacheControlledShell(page);
-  await recordFalseEmpty(page);
+  const beforeRemoval = (await kitchenPersistenceCounts(page, id)).updates;
   await goOffline(context);
+  await page.getByRole("button", { name: "Settings" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove sample recipes" }).click();
+  await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
+  await expect.poll(async () => (await kitchenPersistenceCounts(page, id)).updates).toBeGreaterThan(beforeRemoval);
 
-  await page.goto(`/?offline-return=1#k=${id}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+  const url = page.url();
+  await page.close();
+  page = await context.newPage();
+  await recordFalseEmpty(page);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
   expect(await page.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(false);
+});
+
+test("a linked device persists successful first sync for offline reopen", async ({ page, browser }) => {
+  const id = await openFreshKitchen(page);
+  await addShoppingItem(page, "linked sync proof");
+
+  const linkedContext = await browser.newContext();
+  let linked = await linkedContext.newPage();
+  try {
+    await linked.goto(`/shopping#k=${id}`);
+    await expect(linked.getByRole("checkbox", { name: "linked sync proof" })).toBeVisible();
+    await cacheControlledShell(linked);
+    const url = linked.url();
+    await linked.close();
+    await linkedContext.setOffline(true);
+    linked = await linkedContext.newPage();
+    await recordFalseEmpty(linked);
+    await linked.goto(url, { waitUntil: "domcontentloaded" });
+    await expect(linked.getByRole("checkbox", { name: "linked sync proof" })).toBeVisible();
+    expect(await linked.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(false);
+  } finally {
+    await linkedContext.close();
+  }
+});
+
+test("first-sync marker transaction failure fails closed without browser errors", async ({ page }) => {
+  await page.goto("/");
+  const id = newKitchenId();
+  await precreateIncompatibleKitchenDatabase(page, id);
+  await page.addInitScript(() => {
+    const state = window as typeof window & { __unhandledRejections?: string[] };
+    state.__unhandledRejections = [];
+    window.addEventListener("unhandledrejection", (event) => {
+      state.__unhandledRejections!.push(String(event.reason));
+    });
+  });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/#k=${id}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Enplace could not open your kitchen" })).toBeVisible();
+  await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
+  await expect(kitchenPersistenceCounts(page, id)).resolves.toEqual({ updates: 1, markers: 0 });
+  expect(pageErrors).toEqual([]);
+  expect(await page.evaluate(() => (window as typeof window & { __unhandledRejections?: string[] }).__unhandledRejections)).toEqual([]);
 });
 
 test("fresh sample kitchen reaches the relay only after its first edit", async ({ page, browser }) => {

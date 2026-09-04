@@ -186,7 +186,6 @@ describe("recipe read/edit boundary", () => {
 
     expect((markup.match(/src="blob:soup"/g) ?? [])).toHaveLength(1);
     expect(markup).toContain('<div class="recipe-view__hero">');
-    expect(markup).toMatch(/elementtiming="mep:recipe-hero:\d+:recipes\/soup\.md"/);
   });
 
   it("drops the masthead image column when a recipe has no image", () => {

@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { WebSocket } from "ws";
 import { startRelay } from "../../scripts/kitchen-relay.mjs";
 import { openKitchen, type KitchenConnection, type KitchenStatus } from "./kitchen-storage";
-import { observeKitchen, readKitchenBytes, readKitchenText, writeKitchenText, newKitchenId } from "../kitchen/doc";
+import { listKitchenPaths, observeKitchen, readKitchenBytes, readKitchenText, writeKitchenText, newKitchenId } from "../kitchen/doc";
 
 const WebSocketPolyfill = WebSocket as unknown as typeof globalThis.WebSocket;
 
@@ -62,24 +62,30 @@ describe("kitchen storage adapter", () => {
     expect(seed).toHaveBeenCalledOnce();
     await expect(connection.adapter.readBytes("recipes/soup.md"))
       .resolves.toEqual(new TextEncoder().encode("# Soup\n"));
-    await expect(connection.adapter.pathExists("recipes")).resolves.toBe(true);
     expect((await connection.adapter.walkFiles()).map(({ path }) => path)).toEqual(["recipes/soup.md"]);
     expect(connection.status()).toBe("local-only");
   });
 
-  it("matches folder adapter errors and mutation semantics", async () => {
+  it("enumerates sorted export bytes without changing text or binary content", async () => {
+    const { adapter } = await open();
+    await adapter.writeBytes("notes.md", new Uint8Array([0xff, 0x0a]));
+    await adapter.writeBytes("images/dish.webp", new Uint8Array([0x00, 0xff, 0x7f]));
+
+    const files = await adapter.walkFiles();
+
+    expect(files.map(({ path }) => path)).toEqual(["images/dish.webp", "notes.md"]);
+    expect(files[0].bytes).toEqual(new Uint8Array([0x00, 0xff, 0x7f]));
+    expect(files[1].bytes).toEqual(new TextEncoder().encode("�\n"));
+  });
+
+  it("exposes file-like errors and mutation semantics", async () => {
     const { adapter } = await open();
     await expect(adapter.readBytes("missing.md")).rejects.toThrow("File not found: missing.md");
-    await expect(adapter.writeBytes("/", new Uint8Array())).rejects.toThrow("Cannot write the folder root.");
+    await expect(adapter.writeBytes("/", new Uint8Array())).rejects.toThrow("Invalid folder path");
 
     await adapter.writeBytes("recipes/a.md", new TextEncoder().encode("# A"));
-    await expect(adapter.writeNewBytes("recipes/a.md", new Uint8Array()))
-      .rejects.toThrow("A file already exists at recipes/a.md.");
-    await expect(adapter.writeNewBytes("recipes", new Uint8Array()))
-      .rejects.toThrow("A file already exists at recipes.");
     await expect(adapter.remove("recipes")).rejects.toThrow("Directory is not empty: recipes");
     await adapter.remove("recipes", true);
-    await expect(adapter.pathExists("recipes/a.md")).resolves.toBe(false);
   });
 
   it("writes a multi-file import in one transaction and skips existing paths", async () => {
@@ -101,26 +107,24 @@ describe("kitchen storage adapter", () => {
     expect(readKitchenText(connection.doc, "recipes/existing.md")).toBe("# Existing");
     expect(readKitchenText(connection.doc, "recipes/a.md")).toBe("# A");
     expect(readKitchenBytes(connection.doc, "images/a.webp")).toEqual(new Uint8Array([1, 2, 3]));
+    await expect(connection.adapter.writeNewBytesBatch([
+      ["partial.bin", new Uint8Array([9])], ["recipes/a.md", new Uint8Array([8])],
+    ], "reject")).rejects.toThrow("already exists");
+    expect(listKitchenPaths(connection.doc)).not.toContain("partial.bin");
   });
 
-  it("rejects an invalid batch before writing any entry", async () => {
+  it.each([
+    ["file then child", ["node", "node/child"]],
+    ["child then file", ["node/child", "node"]],
+  ])("rejects an atomic %s batch", async (_name, paths) => {
     const connection = await open();
     await expect(connection.adapter.writeNewBytesBatch([
-      ["recipes/a.md", new TextEncoder().encode("# A")],
-      ["../escape.md", new TextEncoder().encode("escape")],
-    ])).rejects.toThrow("Invalid folder path");
-    await expect(connection.adapter.pathExists("recipes/a.md")).resolves.toBe(false);
+      ["unrelated.bin", new Uint8Array([9])],
+      [paths[0], new Uint8Array([1])], [paths[1], new Uint8Array([2])],
+    ])).rejects.toThrow("conflicts with file");
+    expect(listKitchenPaths(connection.doc)).toEqual([]);
   });
 
-  it("creates file URLs without adapter-level cache state", async () => {
-    const { adapter } = await open();
-    await adapter.writeBytes("image.webp", new Uint8Array([1, 2, 3]));
-    const first = await adapter.fileUrl("image.webp");
-    const second = await adapter.fileUrl("image.webp");
-    expect(first).not.toBe(second);
-    URL.revokeObjectURL(first);
-    URL.revokeObjectURL(second);
-  });
 
   it("applies text update functions to live content in one transaction", async () => {
     const connection = await open();

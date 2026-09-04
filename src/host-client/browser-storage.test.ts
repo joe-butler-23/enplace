@@ -1,86 +1,61 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { openKitchen, type KitchenConnection } from "./kitchen-storage";
+import { readKitchenText, writeKitchenText } from "../kitchen/doc";
+import { setCurrentKitchenConnection } from "../kitchen/current";
 import {
   readText,
   updateText,
-  useVaultStorage,
-  pathExists,
-  writeNewText,
-  writeText,
-  type VaultStorageAdapter,
 } from "./browser-storage";
 
-function memoryAdapter(initial: Record<string, string> = {}): VaultStorageAdapter & { writes: string[] } {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const files = new Map(Object.entries(initial).map(([path, text]) => [path, encoder.encode(text)]));
-  const writes: string[] = [];
-  return {
-    writes,
-    async readBytes(path) {
-      const bytes = files.get(path);
-      if (!bytes) throw new Error(`File not found: ${path}`);
-      return bytes.slice();
-    },
-    async writeBytes(path, bytes) { files.set(path, bytes.slice()); writes.push(path); },
-    async writeNewBytes(path, bytes) {
-      if (files.has(path)) throw new Error("exists");
-      files.set(path, bytes.slice());
-      writes.push(path);
-    },
-    async writeNewBytesBatch(entries) {
-      let imported = 0;
-      for (const [path, bytes] of entries) {
-        if (files.has(path)) continue;
-        files.set(path, bytes.slice()); writes.push(path); imported += 1;
-      }
-      return imported;
-    },
-    async updateText(path, update) {
-      const current = decoder.decode(files.get(path) ?? new Uint8Array());
-      const next = update(current);
-      if (next !== current) { files.set(path, encoder.encode(next)); writes.push(path); }
-      return next;
-    },
-    async remove(path) { files.delete(path); },
-    async pathExists(path) { return files.has(path); },
-    async walkFiles() { return []; },
-    async fileUrl(path) { return `memory:${path}`; },
-  };
+const connections: KitchenConnection[] = [];
+
+async function selectKitchen(initial: Record<string, string> = {}): Promise<KitchenConnection> {
+  const connection = await openKitchen({
+    id: `abcdefghijklmnopqrstuvwxyz${connections.length}`,
+    relayUrl: null,
+    persist: false,
+  });
+  connection.doc.transact(() => {
+    for (const [path, text] of Object.entries(initial)) writeKitchenText(connection.doc, path, text);
+  });
+  connections.push(connection);
+  setCurrentKitchenConnection(connection);
+  return connection;
 }
 
-afterEach(() => useVaultStorage(null));
+afterEach(async () => {
+  setCurrentKitchenConnection(null);
+  await Promise.all(connections.splice(0).map((connection) => connection.close()));
+});
 
 describe("vault storage adapter contract", () => {
-  it("fails clearly when no adapter is selected", async () => {
-    useVaultStorage(null);
-    await expect(readText("Plan.md")).rejects.toThrow("No vault storage adapter is selected");
-    expect(() => updateText("Plan.md", (text) => text)).toThrow("No vault storage adapter is selected");
+  it("fails clearly when no kitchen connection is active", async () => {
+    setCurrentKitchenConnection(null);
+    await expect(readText("Plan.md")).rejects.toThrow("No kitchen connection is active");
+    expect(() => updateText("Plan.md", (text) => text)).toThrow("No kitchen connection is active");
   });
 
-  it("delegates byte and text helpers to the selected adapter", async () => {
-    const storage = memoryAdapter({ "a.md": "one" });
-    useVaultStorage(storage);
+  it("delegates live text helpers to the current kitchen adapter", async () => {
+    const connection = await selectKitchen({ "a.md": "one" });
     expect(await readText("a.md")).toBe("one");
-    await writeText("a.md", "two");
-    await writeNewText("b.md", "new");
-    expect(await readText("a.md")).toBe("two");
-    expect(await readText("b.md")).toBe("new");
-    expect(await pathExists("b.md")).toBe(true);
+    expect(readKitchenText(connection.doc, "a.md")).toBe("one");
   });
 
   it("delegates live text updates and does not write an unchanged result", async () => {
-    const storage = memoryAdapter({ "Shopping.md": "milk\n" });
-    const update = vi.spyOn(storage, "updateText");
-    useVaultStorage(storage);
+    const connection = await selectKitchen({ "Shopping.md": "milk\n" });
+    const update = vi.spyOn(connection.adapter, "updateText");
+    const documentUpdates = vi.fn();
+    connection.doc.on("update", documentUpdates);
     await expect(updateText("Shopping.md", (current) => `${current}eggs\n`)).resolves.toBe("milk\neggs\n");
-    const writes = storage.writes.length;
+    expect(documentUpdates).toHaveBeenCalledOnce();
     await expect(updateText("Shopping.md", (current) => current)).resolves.toBe("milk\neggs\n");
-    expect(storage.writes).toHaveLength(writes);
+    expect(documentUpdates).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the public surface limited to live app operations", async () => {
     const contract = await import("./browser-storage");
+    expect(contract).not.toHaveProperty("useVaultStorage");
     expect(contract).not.toHaveProperty("openDocument");
     expect(contract).not.toHaveProperty("digestText");
     expect(contract).not.toHaveProperty("stat");

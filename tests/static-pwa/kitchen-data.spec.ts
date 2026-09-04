@@ -1,21 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
-
-async function openFreshKitchen(page: Page): Promise<void> {
-  await page.goto("/");
-  await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-}
+import { openFreshKitchen, openShopping, persistedUpdateCount } from "./helpers";
 
 async function openPlanner(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Planner" }).click();
   await expect(page.locator(".organiser-column-note").first()).toBeVisible();
-}
-
-async function openShopping(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Shopping List" }).click();
-  await expect(page.getByRole("heading", { name: "Shopping list" })).toBeVisible();
 }
 
 async function addShoppingItem(page: Page, item: string): Promise<void> {
@@ -89,4 +79,28 @@ test("duplicate shopping items keep independent line identity", async ({ page })
   await page.getByText("milk", { exact: true }).nth(0).click();
   await expect(milk.nth(0)).toBeChecked();
   await expect(milk.nth(1)).toBeChecked();
+});
+
+test("planner keyboard movement persists the card in the adjacent date lane", async ({ page }) => {
+  const id = await openFreshKitchen(page);
+  const title = "Banana oat loaf";
+  const marked = page.locator(".cooking-db__card", { hasText: title }).getByRole("checkbox", { name: "Marked" });
+  await marked.check();
+  await expect(marked).toBeChecked();
+  await expect(marked).toBeEnabled();
+
+  await openPlanner(page);
+  const sourceLane = page.locator('.kanban-board[data-id="marked"]');
+  const targetLane = page.locator(".kanban-board").nth(1);
+  const targetDate = await targetLane.getAttribute("data-id");
+  expect(targetDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const card = sourceLane.getByRole("button", { name: `Open ${title}` });
+  await card.focus();
+  const beforeMove = await persistedUpdateCount(page, id);
+  await card.press("ArrowRight");
+  await expect(targetLane.getByRole("button", { name: `Open ${title}` })).toBeVisible();
+  await expect.poll(() => persistedUpdateCount(page, id)).toBeGreaterThan(beforeMove);
+
+  await page.reload();
+  await expect(page.locator(`.kanban-board[data-id="${targetDate}"]`).getByRole("button", { name: `Open ${title}` })).toBeVisible();
 });

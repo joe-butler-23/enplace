@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
-import { readText, useVaultStorage, type VaultStorageAdapter } from "../host-client/browser-storage";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readText } from "../host-client/browser-storage";
+import { openKitchen, type KitchenConnection } from "../host-client/kitchen-storage";
+import { setCurrentKitchenConnection } from "../kitchen/current";
 import { DEFAULT_STANDALONE_SETTINGS } from "./settings";
 import { loadSettings, prepareStandaloneStartup, saveSettings } from "./storage";
 
@@ -17,40 +19,18 @@ const storage: Storage = {
 beforeEach(() => {
   values.clear();
   Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
-  useVaultStorage(null);
+  setCurrentKitchenConnection(null);
 });
 
-function textAdapter(): VaultStorageAdapter {
-  const files = new Map<string, Uint8Array>();
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  return {
-    async readBytes(path) {
-      const value = files.get(path);
-      if (!value) throw new Error(`File not found: ${path}`);
-      return value;
-    },
-    async writeBytes(path, bytes) { files.set(path, bytes); },
-    async writeNewBytes(path, bytes) { files.set(path, bytes); },
-    async writeNewBytesBatch(entries) {
-      let imported = 0;
-      for (const [path, bytes] of entries) if (!files.has(path)) { files.set(path, bytes); imported += 1; }
-      return imported;
-    },
-    async updateText(path, update) {
-      const next = update(decoder.decode(files.get(path) ?? new Uint8Array()));
-      files.set(path, encoder.encode(next));
-      return next;
-    },
-    async remove(path) { files.delete(path); },
-    async pathExists(path) { return files.has(path); },
-    async walkFiles() { return []; },
-    async fileUrl() { return ""; },
-  };
-}
+let connection: KitchenConnection | null = null;
+afterEach(async () => {
+  setCurrentKitchenConnection(null);
+  await connection?.close();
+  connection = null;
+});
 
 describe("browser-local preferences", () => {
-  it("loads defaults without writing to the selected folder or browser storage", async () => {
+  it("loads defaults without writing browser-local state", async () => {
     await expect(loadSettings()).resolves.toEqual(DEFAULT_STANDALONE_SETTINGS);
     expect(window.localStorage.length).toBe(0);
   });
@@ -59,13 +39,11 @@ describe("browser-local preferences", () => {
     await saveSettings({
       ...DEFAULT_STANDALONE_SETTINGS,
       databaseSort: "title-asc",
-      databaseMarkedFilter: "marked",
-      vaultPath: "/ignored"
+      databaseMarkedFilter: "marked"
     });
 
     const stored = JSON.parse(window.localStorage.getItem("enplace.preferences") ?? "{}");
     expect(stored).toMatchObject({ databaseSort: "title-asc", databaseMarkedFilter: "marked" });
-    expect(stored).not.toHaveProperty("vaultPath");
     await expect(loadSettings()).resolves.toMatchObject({
       databaseSort: "title-asc",
       databaseMarkedFilter: "marked"
@@ -73,7 +51,8 @@ describe("browser-local preferences", () => {
   });
 
   it("moves legacy day notes into Plan.md once and removes them from preferences", async () => {
-    useVaultStorage(textAdapter());
+    connection = await openKitchen({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
+    setCurrentKitchenConnection(connection);
     window.localStorage.setItem("enplace.preferences", JSON.stringify({
       ...DEFAULT_STANDALONE_SETTINGS,
       dayNotes: { "2026-09-04": "Grandma visiting, cook early" },

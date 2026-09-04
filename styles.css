@@ -110,11 +110,8 @@
 .kanban-container { position: relative; box-sizing: border-box; display: grid !important;
 /* Marked + 4 day tracks. All columns share one minimum width variable. */ grid-template-columns: repeat(5, minmax(var(--col-min-width, 200px), 1fr)) !important; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 100%; width: 100% !important; min-width: calc(var(--col-min-width, 200px) * 5 + 12px * 4); align-items: stretch; align-content: stretch; justify-content: start; }
 .kanban-container * { box-sizing: border-box; }
-.kanban-item,
-.organiser-card { contain: layout style paint; }
-.kanban-item.is-dragging,
-.kanban-item.is-moving,
-.gu-mirror.kanban-item { backface-visibility: hidden; will-change: transform; }
+.kanban-item { contain: layout style paint; }
+.kanban-item.is-dragging { backface-visibility: hidden; will-change: transform; }
 .kanban-item.is-drag-overlay { transform: translateZ(0); will-change: transform; backface-visibility: hidden; contain: layout style paint; }
 /* Containment on boards to prevent layout thrashing */
 .kanban-board { contain: style; }
@@ -127,11 +124,8 @@
 /* Create separate compositor layers for columns */ display: grid !important;
 /* Avoid expensive horizontal repaints caused by forced compositor promotion */ transform: none; }
 
-.kanban-item,
-.organiser-card {
+.kanban-item {
 /* Clip to bounds to reduce paint area */ overflow: hidden; }
-/* Group headers are lightweight */
-.kanban-item.kanban-group-header { content-visibility: visible; contain: none; }
 .kanban-board { float: none !important; background-color: var(--paper); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; padding: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); min-width: 0; min-height: 0; height: auto; max-height: none; align-self: stretch; overflow: hidden; contain: style; }
 .kanban-container > .kanban-board { margin: 0 !important; width: auto !important; min-height: 0; }
 .kanban-board header { margin: 4px 8px 6px; font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; border: none; padding: 0; pointer-events: auto !important; }
@@ -142,18 +136,9 @@
 .kanban-board .kanban-drag::-webkit-scrollbar { width: 4px; }
 .kanban-board .kanban-drag::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 4px; }
 .kanban-board .kanban-drag:hover::-webkit-scrollbar-thumb { background-color: var(--line-strong); }
-.kanban-item.kanban-group-header { background: transparent; border: none; box-shadow: none; padding: 2px 6px; font-size: 0.65em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: default; pointer-events: none; }
-.kanban-item,
-.organiser-card { background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: grab; user-select: none; flex-shrink: 0; contain: layout style paint; }
-.kanban-item:active,
-.organiser-card:active { cursor: grabbing; transform: scale(0.985); }
+.kanban-item { background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: grab; user-select: none; flex-shrink: 0; contain: layout style paint; }
+.kanban-item:active { cursor: grabbing; transform: scale(0.985); }
 .kanban-item.is-drag-overlay { opacity: 1; box-shadow: none; cursor: grabbing; contain: layout style paint; }
-.gu-mirror,
-.gu-mirror.kanban-item { position: fixed !important; top: 0; left: 0; z-index: 9999 !important; pointer-events: none !important; opacity: 1; transform: none; box-shadow: none; cursor: grabbing; }
-.gu-mirror .organiser-card-content { opacity: 1; }
-.gu-transit,
-.gu-transit.kanban-item { opacity: 0.3; }
-.gu-transit .card-cover img { visibility: hidden; }
 .organiser-card-content { padding: 6px 8px; position: relative; }
 .card-cover { margin-bottom: 6px; border-radius: 6px; overflow: hidden; aspect-ratio: 1 / 1; background-color: var(--paper); }
 .card-remove-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: var(--surface); color: var(--muted); cursor: pointer; opacity: 0; display: flex; align-items: center; justify-content: center; z-index: 5; }

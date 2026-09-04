@@ -5,10 +5,9 @@ A kitchen syncs between devices through a y-websocket relay: a small server that
 ## Configuration
 
 - Build-time default: `.env.static` carries the production relay URL, so `npm run build:static` always bakes it in; a `VITE_ENPLACE_RELAY_URL` in the environment overrides it, which the browser suite uses for its local relay.
-- Per-device override: Settings → Kitchen → Relay. Stored in the browser only.
 - CLI: `mep mirror --relay wss://…` or `ENPLACE_RELAY_URL`.
 
-When a mirror folder is a symlink, the CLI resolves it once, logs the physical directory, and uses that physical directory as the configured root for descendant path and symlink checks.
+When a mirror folder is a symlink, the CLI resolves it once, logs the physical directory, and uses that physical directory as the configured root for descendant path and symlink checks. Mirror filesystem safety assumes the caller owns that physical root and its ancestors: no hostile process may exchange an ancestor symlink or mount while an operation is awaiting Node filesystem calls. Pre-existing symlinks are still refused, and ordinary concurrent file writers are handled by atomic quarantine, no-clobber publication, and recovery. This is a local concurrency contract, not a security boundary against a hostile same-user process or mount administrator.
 
 With no relay configured, a kitchen lives only on the device that made it. The app says so in the Settings panel.
 
@@ -16,7 +15,7 @@ A kitchen created on this device stays local until its first non-seed edit, so a
 
 ## The hosted relay
 
-Production runs `relay/`: a Cloudflare Worker with one Durable Object per kitchen (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<kitchen-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each kitchen is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. The hosted Worker limits each WebSocket frame to 4 MiB and each stored Yjs document to 16 MiB; an oversized frame or document closes only its sending socket. A Durable Object deletes its stored room after 180 days with no connection. Deploy the relay with `npm run deploy` inside `relay/`, and the site with `scripts/deploy-site.sh`, which builds against `.env.static` and uploads `dist-static` (both need a logged-in `wrangler`); the free plan covers it.
+Production runs `relay/`: a Cloudflare Worker with one Durable Object per kitchen (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<kitchen-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each kitchen is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. The hosted Worker limits each WebSocket frame to 4 MiB and each stored Yjs document to 16 MiB; an oversized frame or document closes only its sending socket. A Durable Object deletes its stored room after 180 days with no connection. After the one root `npm ci`, deploy the relay with `npm run deploy --workspace=enplace-relay`, and the site with `scripts/deploy-site.sh`, which builds against `.env.static` and uploads `dist-static` (both need a logged-in `wrangler`); the free plan covers it.
 
 ## Running one yourself
 

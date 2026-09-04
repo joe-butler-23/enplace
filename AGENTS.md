@@ -30,7 +30,7 @@ Success means the kitchen document remains the sole authority; recipe provenance
 
 ## Working Contract
 
-- Use Node 22 and `npm ci` for a clean dependency install. Build the optional CLI with `npm run build:cli`; run TypeScript checks directly and use the configured Playwright command for browser work.
+- Use the exact Node 22 release pinned in `.nvmrc`. Run `npm ci` only at the repository root; that one workspace install owns the app, optional CLI, and production relay. `npm run typecheck` checks the app and relay, while `npm run build:release` builds the static app, CLI, and relay dry-run bundle. Use the configured Playwright command for browser work.
 - Never use the live vault as a test fixture. Use isolated data for importer, browser, and file-write tests.
 - Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` for planner work, and `docs/engineering-guardrails.md` for verification.
 
@@ -56,4 +56,4 @@ clai validate skill recipe-qa --scope project --project-root .
 clai validate all --scope project --project-root .
 ```
 
-For a release boundary, run `nix-shell --run './scripts/preflight-release.sh'` and complete the static-PWA checks printed by that script. A release is not finished until `scripts/publish-public.sh` has pushed the snapshot to the public repository (`joe-butler-23/enplace`, a squashed projection of this private repository) and the static site has been redeployed.
+For a release boundary under the pinned Node 22, run `npm run preflight:release`; this is the clean-checkout app/CLI/relay gate. Complete the static-PWA checks printed by that script. A release is not finished until `scripts/publish-public.sh` has pushed the snapshot to the public repository (`joe-butler-23/enplace`, a squashed projection of this private repository) and the static site has been redeployed.

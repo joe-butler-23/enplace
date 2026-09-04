@@ -31,9 +31,7 @@ async function joinKitchen(browser: Browser, url: string, owner: Page): Promise<
   const page = await context.newPage();
   await page.goto(url);
   await expect(page.getByText("Merge Soup", { exact: true })).toBeVisible();
-  if (!await page.getByRole("dialog", { name: "Settings" }).isVisible()) {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-  }
+  await page.getByRole("button", { name: "Settings", exact: true }).dispatchEvent("click");
   const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(relayReadyFile);
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");

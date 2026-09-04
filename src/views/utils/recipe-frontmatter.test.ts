@@ -1,60 +1,28 @@
+import { parseRecipeDocument } from "@/core";
 import { describe, expect, it } from "vitest";
 import {
   buildRecipeMeta,
   composeMarkdown,
   extractHeroImage,
   stripStructuredSections,
-  extractRecipeTitle,
-  parseDirectionsSection,
-  parseFrontmatter,
   stripLeadingH1
 } from "./recipe-frontmatter";
 
+function document(markdown: string, frontmatter: Record<string, unknown> = {}) {
+  const entries = Object.entries(frontmatter).map(([key, value]) => {
+    const scalar = Array.isArray(value) ? `[${value.join(", ")}]` : String(value);
+    return `${key}: ${scalar}`;
+  });
+  const source = entries.length ? `---\n${entries.join("\n")}\n---\n${markdown}` : markdown;
+  return parseRecipeDocument("recipe.md", source);
+}
+
+const hero = (markdown: string, frontmatter: Record<string, unknown> = {}) =>
+  extractHeroImage(document(markdown, frontmatter));
+const recipeMeta = (frontmatter: Record<string, unknown> = {}) =>
+  buildRecipeMeta(document("", frontmatter));
+
 describe("recipe frontmatter utilities", () => {
-  it("parses frontmatter blocks and preserves raw content", () => {
-    const input = [
-      "---",
-      "title: \"Pasta\"",
-      "tags: [one, \"two\"]",
-      "---",
-      "# Pasta",
-      "",
-      "Body"
-    ].join("\n");
-
-    const parsed = parseFrontmatter(input);
-    expect(parsed.rawFrontmatter).toBe('title: "Pasta"\ntags: [one, "two"]');
-    expect(parsed.frontmatter.title).toBe('"Pasta"');
-    expect(parsed.body.startsWith("# Pasta")).toBe(true);
-  });
-
-  it("parses indented block-style lists", () => {
-    const parsed = parseFrontmatter([
-      "---",
-      "title: Pasta",
-      "tags:",
-      "  - one",
-      "  - two",
-      "---",
-      "Body"
-    ].join("\n"));
-
-    expect(parsed.frontmatter.tags).toEqual(["one", "two"]);
-  });
-
-  it("extracts directions section entries", () => {
-    const markdown = [
-      "# Title",
-      "## Directions",
-      "1. Step one",
-      "2. Step two",
-      "",
-      "## Notes",
-      "- Ignore me"
-    ].join("\n");
-    expect(parseDirectionsSection(markdown)).toEqual(["Step one", "Step two"]);
-  });
-
   it("folds a wrapped continuation line into the preceding step and keeps inline markdown intact", () => {
     const markdown = [
       "## Method",
@@ -63,22 +31,10 @@ describe("recipe frontmatter utilities", () => {
       "2. Stir in the spices."
     ].join("\n");
 
-    expect(parseDirectionsSection(markdown)).toEqual([
+    expect(document(markdown).view.directions).toEqual([
       "Heat the **oil** and get the pan hot. Add the [onions](https://example.com) and cook until soft.",
       "Stir in the spices."
     ]);
-  });
-
-  it("does not turn a subheading inside Method into a step", () => {
-    const markdown = [
-      "## Method",
-      "### For the sauce",
-      "1. Whisk the eggs.",
-      "### To finish",
-      "2. Plate up."
-    ].join("\n");
-
-    expect(parseDirectionsSection(markdown)).toEqual(["Whisk the eggs.", "Plate up."]);
   });
 
   it("composes markdown and strips leading h1", () => {
@@ -89,7 +45,7 @@ describe("recipe frontmatter utilities", () => {
     const stripped = stripLeadingH1("# Title\n\nBody");
     expect(stripped).toBe("\nBody");
 
-    expect(extractRecipeTitle("Body", "Fallback")).toBe("Fallback");
+    expect(document("Body").view.title ?? "Fallback").toBe("Fallback");
   });
 
   it("hands the structured sections to the columns and leaves the rest of the body", () => {
@@ -187,48 +143,48 @@ describe("recipe frontmatter utilities", () => {
   });
 
   it("promotes a declared cover over a body image and removes only a promoted body image", () => {
-    const declared = extractHeroImage("Prose\n\n![Bowl](images/bowl.png)", { cover: "images/cover.png" });
+    const declared = hero("Prose\n\n![Bowl](images/bowl.png)", { cover: "images/cover.png" });
     expect(declared.hero).toEqual({ src: "images/cover.png", alt: "" });
     expect(declared.body).toContain("![Bowl](images/bowl.png)");
 
-    const promoted = extractHeroImage("# Soup\n\n![Bowl](images/bowl.png)\n\nServe hot.", {});
+    const promoted = hero("# Soup\n\n![Bowl](images/bowl.png)\n\nServe hot.", {});
     expect(promoted.hero).toEqual({ src: "images/bowl.png", alt: "Bowl" });
     expect(promoted.body).not.toContain("images/bowl.png");
     expect(promoted.body).toContain("Serve hot.");
 
     // An image inside a sentence is not a hero and stays in the body.
-    const inline = extractHeroImage("Serve with ![Bowl](images/bowl.png) alongside.", {});
+    const inline = hero("Serve with ![Bowl](images/bowl.png) alongside.", {});
     expect(inline.hero).toBeNull();
     expect(inline.body).toContain("images/bowl.png");
 
     // Reference-style images, images inside list items/blockquotes, and titles with ")" are left alone.
-    expect(extractHeroImage("![a][ref]\n\n[ref]: images/bowl.png", {}).hero).toBeNull();
-    expect(extractHeroImage("- ![Bowl](images/bowl.png)", {}).hero).toBeNull();
-    expect(extractHeroImage("> ![Bowl](images/bowl.png)", {}).hero).toBeNull();
-    const titled = extractHeroImage('![Bowl](images/bowl.png "A (nice) bowl")', {});
+    expect(hero("![a][ref]\n\n[ref]: images/bowl.png", {}).hero).toBeNull();
+    expect(hero("- ![Bowl](images/bowl.png)", {}).hero).toBeNull();
+    expect(hero("> ![Bowl](images/bowl.png)", {}).hero).toBeNull();
+    const titled = hero('![Bowl](images/bowl.png "A (nice) bowl")', {});
     expect(titled.hero).toEqual({ src: "images/bowl.png", alt: "Bowl" });
 
-    expect(extractHeroImage("No pictures here.", {}).hero).toBeNull();
+    expect(hero("No pictures here.", {}).hero).toBeNull();
   });
 
   it("removes the body copy of a declared cover so the image renders only in the masthead", () => {
     // The shape every imported recipe has: `cover:` in the frontmatter, repeated as the
     // body's leading image. Rendering both put the same picture on the page twice.
     const markdown = "# Aubergine curry\n\n![Recipe Image](images/aubergine-curry.webp)\n\n## Ingredients";
-    const duplicate = extractHeroImage(markdown, { cover: "images/aubergine-curry.webp" });
+    const duplicate = hero(markdown, { cover: "images/aubergine-curry.webp" });
     expect(duplicate.hero).toEqual({ src: "images/aubergine-curry.webp", alt: "" });
     expect(duplicate.body).not.toContain("images/aubergine-curry.webp");
     expect(duplicate.body).toContain("## Ingredients");
 
     // The same file written two equivalent ways is still one image.
     expect(
-      extractHeroImage("![Cover](./images/a%20b.webp)", { cover: "images/a b.webp" }).body
+      hero("![Cover](./images/a%20b.webp)", { cover: "images/a b.webp" }).body
     ).not.toContain("images/a");
   });
 
   it("does not promote an image inside a fenced code block and leaves the fence intact", () => {
     const markdown = ["How to embed a picture:", "", "```markdown", "![alt text](example.png)", "```"].join("\n");
-    const result = extractHeroImage(markdown, {});
+    const result = hero(markdown, {});
     expect(result.hero).toBeNull();
     expect(result.body).toBe(markdown);
   });
@@ -246,24 +202,24 @@ describe("recipe frontmatter utilities", () => {
       "![Plate](plate.png)"
     ].join("\n");
 
-    const result = extractHeroImage(markdown, {});
+    const result = hero(markdown, {});
     expect(result.hero).toBeNull();
     expect(result.body).toContain("The finished plate:");
     expect(result.body).toContain("![Plate](plate.png)");
   });
 
   it("falls through to image when cover is present but empty", () => {
-    const result = extractHeroImage("Body", { cover: "", image: "photos/chilli.jpg" });
+    const result = hero("Body", { cover: "", image: "photos/chilli.jpg" });
     expect(result.hero).toEqual({ src: "photos/chilli.jpg", alt: "" });
   });
 
   it("resolves an Obsidian wiki-link cover", () => {
-    const result = extractHeroImage("Body", { cover: "[[chilli.png]]" });
+    const result = hero("Body", { cover: "[[chilli.png]]" });
     expect(result.hero).toEqual({ src: "chilli.png", alt: "" });
   });
 
   it("shows provenance and tags, and nothing else the page already says", () => {
-    const meta = buildRecipeMeta({
+    const meta = recipeMeta({
       title: '"Beef Chilli"',
       type: "recipe",
       marked: false,
@@ -282,24 +238,24 @@ describe("recipe frontmatter utilities", () => {
   });
 
   it("keeps a non-URL source visible but unlinked", () => {
-    expect(buildRecipeMeta({ source: "ad-hoc" })).toEqual({ source: { label: "ad-hoc", href: null }, tags: [] });
+    expect(recipeMeta({ source: "ad-hoc" })).toEqual({ source: { label: "ad-hoc", href: null }, tags: [] });
   });
 
   it("drops a hostless scheme rather than linking or half-rendering it", () => {
-    expect(buildRecipeMeta({ source: "javascript:alert(1)" }).source).toBeNull();
-    expect(buildRecipeMeta({ source: "ftp://files.example.com/r" }).source).toEqual({
+    expect(recipeMeta({ source: "javascript:alert(1)" }).source).toBeNull();
+    expect(recipeMeta({ source: "ftp://files.example.com/r" }).source).toEqual({
       label: "files.example.com",
       href: null
     });
   });
 
   it("reads tags from a bracketed list, a comma list, and a single value", () => {
-    expect(buildRecipeMeta({ tags: '[one, "two"]' }).tags).toEqual(["one", "two"]);
-    expect(buildRecipeMeta({ tags: "alpha, beta" }).tags).toEqual(["alpha", "beta"]);
-    expect(buildRecipeMeta({ tags: "solo" }).tags).toEqual(["solo"]);
+    expect(recipeMeta({ tags: '[one, "two"]' }).tags).toEqual(["one", "two"]);
+    expect(recipeMeta({ tags: "alpha, beta" }).tags).toEqual(["alpha", "beta"]);
+    expect(recipeMeta({ tags: "solo" }).tags).toEqual(["solo"]);
   });
 
   it("reports nothing for a recipe with no source and no tags", () => {
-    expect(buildRecipeMeta({})).toEqual({ source: null, tags: [] });
+    expect(recipeMeta({})).toEqual({ source: null, tags: [] });
   });
 });

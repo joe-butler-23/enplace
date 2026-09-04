@@ -1,6 +1,6 @@
 # Weekly Planner Behaviour
 
-The planner reads and writes only `Plan.md` in the selected folder.
+Planning and marking read and write `Plan.md` in the shared kitchen document. Build list writes `Shopping.md`. Complete Week appends Cook Log entries to the scheduled recipe files.
 
 ## Marked recipes
 
@@ -20,6 +20,6 @@ The planner displays Monday through Sunday. Scheduling adds the recipe wikilink 
 
 ## Shopping hand-off
 
-Build list selects scheduled recipes from the displayed week, ordered by date and then by their order in each date section. It rebuilds recipe-owned sections in `Shopping.md` without writing any recipe.
+Build list selects the distinct scheduled recipe paths from the displayed week and currently processes them in ascending path order. It rebuilds recipe-owned sections in `Shopping.md` without writing any recipe.
 
-All planner writes use the folder adapter's hash comparison and conflict-copy rule.
+Each planner write transforms the relevant shared kitchen text inside one Yjs transaction. Marking and scheduling change only `Plan.md`; Complete Week appends one Cook Log entry to each completed recipe.

@@ -10,43 +10,42 @@ function splitLines(text: string): string[] {
   return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
 
-function diffHunks(base: string[], next: string[], side: TextHunk["side"]): TextHunk[] {
-  const lengths = Array.from({ length: base.length + 1 }, () => new Uint32Array(next.length + 1));
-  for (let left = base.length - 1; left >= 0; left -= 1) {
-    for (let right = next.length - 1; right >= 0; right -= 1) {
-      lengths[left][right] = base[left] === next[right]
+function commonLineLengths(leftLines: string[], rightLines: string[]): Uint32Array[] {
+  const lengths = Array.from({ length: leftLines.length + 1 }, () => new Uint32Array(rightLines.length + 1));
+  for (let left = leftLines.length - 1; left >= 0; left -= 1) {
+    for (let right = rightLines.length - 1; right >= 0; right -= 1) {
+      lengths[left][right] = leftLines[left] === rightLines[right]
         ? lengths[left + 1][right + 1] + 1
         : Math.max(lengths[left + 1][right], lengths[left][right + 1]);
     }
   }
+  return lengths;
+}
 
+function diffHunks(base: string[], next: string[], side: TextHunk["side"]): TextHunk[] {
+  const lengths = commonLineLengths(base, next);
   const hunks: TextHunk[] = [];
   let left = 0;
   let right = 0;
   let hunk: TextHunk | null = null;
-  const finish = (): void => {
-    if (hunk) hunks.push(hunk);
-    hunk = null;
-  };
-  const active = (): TextHunk => {
-    hunk ??= { start: left, end: left, lines: [], side };
-    return hunk;
-  };
-
   while (left < base.length || right < next.length) {
     if (left < base.length && right < next.length && base[left] === next[right]) {
-      finish();
+      if (hunk) hunks.push(hunk);
+      hunk = null;
       left += 1;
       right += 1;
-    } else if (right < next.length && (left === base.length || lengths[left][right + 1] >= lengths[left + 1][right])) {
-      active().lines.push(next[right]);
+      continue;
+    }
+    hunk ??= { start: left, end: left, lines: [], side };
+    if (right < next.length && (left === base.length || lengths[left][right + 1] >= lengths[left + 1][right])) {
+      hunk.lines.push(next[right]);
       right += 1;
     } else {
-      active().end += 1;
+      hunk.end += 1;
       left += 1;
     }
   }
-  finish();
+  if (hunk) hunks.push(hunk);
   return hunks;
 }
 
@@ -77,14 +76,7 @@ function conflictLines(ours: string[], theirs: string[], trailingNewline: boolea
 
 /** Shortest common supersequence, with our line first when either order is valid. */
 function mergeInsertions(ours: string[], theirs: string[]): string[] {
-  const lengths = Array.from({ length: ours.length + 1 }, () => new Uint32Array(theirs.length + 1));
-  for (let left = ours.length - 1; left >= 0; left -= 1) {
-    for (let right = theirs.length - 1; right >= 0; right -= 1) {
-      lengths[left][right] = ours[left] === theirs[right]
-        ? lengths[left + 1][right + 1] + 1
-        : Math.max(lengths[left + 1][right], lengths[left][right + 1]);
-    }
-  }
+  const lengths = commonLineLengths(ours, theirs);
   const output: string[] = [];
   let left = 0;
   let right = 0;
@@ -106,17 +98,7 @@ function joinLines(lines: string[]): string {
   return lines.map((line, index) => index < lines.length - 1 && !line.endsWith("\n") ? `${line}\n` : line).join("");
 }
 
-/** Line-based three-way merge. Overlapping edits are preserved as readable conflict blocks. */
-export function mergeText(baseText: string, oursText: string, theirsText: string): MergeResult {
-  if (oursText === theirsText) return { text: oursText, conflicts: 0 };
-  if (oursText === baseText) return { text: theirsText, conflicts: 0 };
-  if (theirsText === baseText) return { text: oursText, conflicts: 0 };
-
-  const base = splitLines(baseText);
-  const hunks = [
-    ...diffHunks(base, splitLines(oursText), "ours"),
-    ...diffHunks(base, splitLines(theirsText), "theirs"),
-  ];
+function relatedHunkGroups(hunks: TextHunk[]): TextHunk[][] {
   const visited = new Set<number>();
   const groups: TextHunk[][] = [];
   for (let root = 0; root < hunks.length; root += 1) {
@@ -128,10 +110,9 @@ export function mergeText(baseText: string, oursText: string, theirsText: string
       const index = pending.pop()!;
       group.push(hunks[index]);
       for (let candidate = 0; candidate < hunks.length; candidate += 1) {
-        if (!visited.has(candidate) && related(hunks[index], hunks[candidate])) {
-          visited.add(candidate);
-          pending.push(candidate);
-        }
+        if (visited.has(candidate) || !related(hunks[index], hunks[candidate])) continue;
+        visited.add(candidate);
+        pending.push(candidate);
       }
     }
     groups.push(group);
@@ -143,7 +124,21 @@ export function mergeText(baseText: string, oursText: string, theirsText: string
     const rightInsertion = right.every((hunk) => hunk.start === hunk.end);
     return leftStart - rightStart || Number(!leftInsertion) - Number(!rightInsertion);
   });
+  return groups;
+}
 
+/** Line-based three-way merge. Overlapping edits are preserved as readable conflict blocks. */
+export function mergeText(baseText: string, oursText: string, theirsText: string): MergeResult {
+  if (oursText === theirsText) return { text: oursText, conflicts: 0 };
+  if (oursText === baseText) return { text: theirsText, conflicts: 0 };
+  if (theirsText === baseText) return { text: oursText, conflicts: 0 };
+
+  const base = splitLines(baseText);
+  const hunks = [
+    ...diffHunks(base, splitLines(oursText), "ours"),
+    ...diffHunks(base, splitLines(theirsText), "theirs"),
+  ];
+  const groups = relatedHunkGroups(hunks);
   const output: string[] = [];
   let cursor = 0;
   let conflicts = 0;

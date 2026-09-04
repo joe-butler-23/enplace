@@ -1,15 +1,13 @@
+import { parseRecipeDocument } from "./recipe-document.js";
+export { parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
 
 export type Recipe = {
   path: string;
   title: string;
   ingredients: string[];
-  method: string[];
   cover: string | null;
-  source: string | null;
   added: string | null;
   tags: string[];
-  body: string;
-  markdown: string;
   link: string;
 };
 
@@ -26,217 +24,77 @@ export type ShoppingLine = {
   heading: string | null;
 };
 
-/**
- * Recipe frontmatter is flat: `key: value`, quoted strings, `[a, b]` lists, or `- item` block
- * lists. That is all Enplace writes and all it reads, so a full YAML parser is not carried.
- */
-function unquote(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length >= 2 && ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
-    const inner = trimmed.slice(1, -1);
-    return trimmed.startsWith('"') ? inner.replace(/\\(["\\nt])/g, (_, char: string) => ({ n: "\n", t: "\t" }[char] ?? char)) : inner.replace(/''/g, "'");
-  }
-  return trimmed;
-}
-
-function parseFrontmatter(text: string): Record<string, unknown> {
-  const values: Record<string, unknown> = {};
-  let listKey: string | null = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const item = /^\s*-\s+(.*)$/.exec(raw);
-    if (item && listKey) { (values[listKey] as string[]).push(unquote(item[1])); continue; }
-    const pair = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(raw);
-    if (!pair) continue;
-    const [, key, rest] = pair;
-    listKey = null;
-    if (rest === "") { values[key] = []; listKey = key; continue; }
-    if (rest.startsWith("[") && rest.endsWith("]")) { values[key] = rest.slice(1, -1).split(",").map(unquote).filter(Boolean); continue; }
-    values[key] = unquote(rest);
-  }
-  return values;
-}
-
-function frontmatter(raw: string): { values: Record<string, unknown>; body: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(raw);
-  if (!match) return { values: {}, body: raw };
-  return { values: parseFrontmatter(match[1]), body: raw.slice(match[0].length) };
-}
-
 function frontmatterScalar(value: string): string {
   return /^[\w./:@%?&=+-]+$/.test(value) && !/^[-?:,\[\]{}#&*!|>'"%@`]/.test(value) ? value : JSON.stringify(value);
 }
 
-function sectionItems(body: string, name: string, numbered: boolean): string[] | null {
-  const lines = body.split(/\r?\n/);
-  const heading = new RegExp(`^##\\s+${name}\\s*$`, "i");
-  let start = -1;
-  let fenced = false;
-  for (let index = 0; index < lines.length; index += 1) {
-    if (/^\s*(```|~~~)/.test(lines[index])) { fenced = !fenced; continue; }
-    if (!fenced && heading.test(lines[index].trim())) { start = index; break; }
-  }
-  if (start < 0) return null;
-  const items: string[] = [];
-  fenced = false;
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    if (fenced) continue;
-    if (/^#{1,2}\s+/.test(line.trim())) break;
-    const match = numbered
-      ? /^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+?)\s*$/.exec(line)
-      : /^\s*[-*+]\s+(.+?)\s*$/.exec(line);
-    if (match) items.push(match[1]);
-  }
-  return items;
-}
-
-function cleanScalar(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  return value.trim().replace(/^!?\[\[|\]\]$/g, "").replace(/^<|>$/g, "");
-}
-
-function firstImage(body: string): string | null {
-  const markdown = /!\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\)/.exec(body);
-  if (markdown) return markdown[1] ?? markdown[2];
-  const wiki = /!\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/.exec(body);
-  return wiki?.[1]?.trim() ?? null;
-}
-
-function recipeTags(values: Record<string, unknown>, body: string): string[] {
-  const tags = new Set<string>();
-  const frontmatterTags = values.tags;
-  const valuesToAdd = Array.isArray(frontmatterTags)
-    ? frontmatterTags
-    : typeof frontmatterTags === "string" ? frontmatterTags.split(/[\s,]+/) : [];
-  for (const value of valuesToAdd) {
-    if (typeof value === "string" && value.trim()) tags.add(value.trim().replace(/^#/, ""));
-  }
-  for (const match of body.matchAll(/(?:^|\s)#([\p{L}\p{N}_/-]+)/gu)) tags.add(match[1]);
-  return [...tags].sort((left, right) => left.localeCompare(right));
-}
-
-export function recipeBody(markdown: string): string {
-  return frontmatter(markdown).body;
-}
-
-export type CookLogEntry = { date: string; rating: number | null; makeAgain: boolean | null; notes: string };
-
-export function parseCookLog(markdown: string): CookLogEntry[] {
-  const lines = recipeBody(markdown).split(/\r?\n/);
-  const start = lines.findIndex((line) => /^##\s+Cook Log\s*$/i.test(line.trim()));
-  if (start < 0) return [];
-  const entries: CookLogEntry[] = [];
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (/^#{1,2}\s+/.test(lines[index].trim())) break;
-    const header = /^-\s+(.+)$/.exec(lines[index]);
-    if (header) {
-      const [date, ...fields] = header[1].split("|").map((value) => value.trim());
-      const rating = fields.map((field) => /^rating:\s*(-?\d+(?:\.\d+)?)$/i.exec(field)).find(Boolean);
-      const again = fields.map((field) => /^make again:\s*(yes|no)$/i.exec(field)).find(Boolean);
-      entries.push({ date, rating: rating ? Number(rating[1]) : null, makeAgain: again ? again[1].toLocaleLowerCase() === "yes" : null, notes: "" });
-      continue;
-    }
-    const current = entries[entries.length - 1];
-    const note = /^\s+-\s+Notes:\s*(.*)$/i.exec(lines[index]) ?? /^\s{4,}(\S.*)$/.exec(lines[index]);
-    if (current && note) current.notes = `${current.notes} ${note[1]}`.trim();
-  }
-  return entries.filter((entry) => entry.date);
-}
-
 export function parseRecipe(path: string, markdown: string): Recipe | null {
-  const parsed = frontmatter(markdown);
-  const ingredients = sectionItems(parsed.body, "Ingredients", false);
-  if (ingredients === null) return null;
-  const fallbackTitle = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
-  const h1 = /^#\s+(.+?)\s*$/m.exec(parsed.body)?.[1]?.trim();
-  const title = cleanScalar(parsed.values.title) ?? h1 ?? fallbackTitle;
+  const parsed = parseRecipeDocument(path, markdown);
+  if (parsed.recipe.ingredients === null) return null;
   return {
     path,
-    title,
-    ingredients,
-    method: sectionItems(parsed.body, "Method", true) ?? [],
-    cover: cleanScalar(parsed.values.cover) ?? firstImage(parsed.body),
-    source: cleanScalar(parsed.values.source),
-    added: cleanScalar(parsed.values.added),
-    tags: recipeTags(parsed.values, parsed.body),
-    body: parsed.body,
-    markdown,
-    link: fallbackTitle,
+    ...parsed.recipe,
+    ingredients: parsed.recipe.ingredients,
+    link: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
   };
 }
 
-export function scanRecipes(files: ReadonlyArray<{ path: string; text: string }>): Recipe[] {
-  const recipes = files
-    .filter(({ path }) => path.toLowerCase().endsWith(".md"))
-    .map(({ path, text }) => parseRecipe(path, text))
-    .filter((recipe): recipe is Recipe => recipe !== null);
+const recipeStem = (path: string): string => path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
+
+/** Allocates links and catalogue order for any complete set of parsed recipes. */
+export function finalizeRecipes(recipes: readonly Recipe[]): Recipe[] {
   const stemCounts = new Map<string, number>();
   for (const recipe of recipes) {
-    const stem = recipe.path.split("/").pop()?.replace(/\.md$/i, "") ?? recipe.path;
-    const key = stem.toLocaleLowerCase();
-    stemCounts.set(key, (stemCounts.get(key) ?? 0) + 1);
+    const stem = recipeStem(recipe.path).toLowerCase();
+    stemCounts.set(stem, (stemCounts.get(stem) ?? 0) + 1);
   }
-  return recipes
-    .map((recipe) => {
-      const stem = recipe.path.split("/").pop()?.replace(/\.md$/i, "") ?? recipe.path;
-      return {
-        ...recipe,
-        link: stemCounts.get(stem.toLocaleLowerCase()) === 1
-          ? stem
-          : recipe.path.replace(/\.md$/i, ""),
-      };
-    })
-    .sort((left, right) => left.title.localeCompare(right.title));
+  return recipes.map((recipe) => {
+    const stem = recipeStem(recipe.path);
+    const link = stemCounts.get(stem.toLowerCase()) === 1 ? stem : recipe.path.replace(/\.md$/i, "");
+    return recipe.link === link ? recipe : { ...recipe, link };
+  }).sort((left, right) => left.title.localeCompare(right.title));
 }
 
-export function replaceRecipeDocument(
-  recipes: readonly Recipe[],
-  path: string,
-  markdown: string,
-): Recipe[] {
-  const parsed = parseRecipe(path, markdown);
-  if (!parsed) return recipes.filter((recipe) => recipe.path !== path);
-  const previous = recipes.find((recipe) => recipe.path === path);
-  const next = previous ? { ...parsed, link: previous.link } : parsed;
-  return previous
-    ? recipes.map((recipe) => recipe.path === path ? next : recipe)
-    : [...recipes, next];
+export function scanRecipes(files: ReadonlyArray<{ path: string; text: string }>): Recipe[] {
+  return finalizeRecipes(files
+    .filter(({ path }) => path.toLowerCase().endsWith(".md"))
+    .map(({ path, text }) => parseRecipe(path, text))
+    .filter((recipe): recipe is Recipe => recipe !== null));
 }
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
+type PlanSection = { entries: string[] | null; date: string | null };
+
+function planSection(plan: Plan, heading: string): PlanSection {
+  if (heading.toLowerCase() === "marked") return { entries: plan.marked, date: null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(heading)) return { entries: null, date: null };
+  // Concurrent additions can duplicate a date heading. Both sections belong to the same day.
+  const entries = plan.days.get(heading) ?? [];
+  plan.days.set(heading, entries);
+  return { entries, date: heading };
+}
+
 export function parsePlan(markdown: string): Plan {
   const plan: Plan = { marked: [], days: new Map(), notes: new Map() };
-  let destination: string[] | null = null;
-  let date: string | null = null;
-  for (const raw of markdown.split(/\r?\n/)) {
-    const heading = /^##\s+(.+?)\s*$/.exec(raw);
+  let section: PlanSection = { entries: null, date: null };
+  for (const line of markdown.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
     if (heading) {
-      date = null;
-      if (heading[1].toLocaleLowerCase() === "marked") destination = plan.marked;
-      else if (/^\d{4}-\d{2}-\d{2}$/.test(heading[1])) {
-        // A merged plan can carry the same date twice when two devices added it at once;
-        // both sections belong to that day, and the next save writes one section.
-        date = heading[1];
-        destination = plan.days.get(date) ?? [];
-        plan.days.set(date, destination);
-      } else destination = null;
+      section = planSection(plan, heading[1]);
       continue;
     }
-    const note = date ? /^\s*>\s?(.*?)\s*$/.exec(raw)?.[1]?.trim() : undefined;
-    if (date && note) plan.notes.set(date, note);
-    const item = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/.exec(raw);
-    if (destination && item) destination.push(item[1].trim());
+    const note = section.date ? /^\s*>\s?(.*?)\s*$/.exec(line)?.[1]?.trim() : undefined;
+    if (section.date && note) plan.notes.set(section.date, note);
+    const item = /^\s*-\s+\[\[([^\]]+)\]\]\s*$/.exec(line);
+    if (section.entries && item) {
+      const value = item[1].trim();
+      if (!section.entries.includes(value)) section.entries.push(value);
+    }
   }
-  plan.marked = unique(plan.marked);
-  for (const [day, entries] of plan.days) {
-    const deduplicated = unique(entries);
-    if (deduplicated.length) plan.days.set(day, deduplicated);
-    else plan.days.delete(day);
-  }
+  for (const [day, entries] of plan.days) if (!entries.length) plan.days.delete(day);
   return plan;
 }
 
@@ -252,22 +110,6 @@ export function serializePlan(plan: Plan): string {
     lines.push(...entries.map((entry) => `- [[${entry}]]`));
   }
   return `${lines.join("\n")}\n`;
-}
-
-export function withMarked(plan: Plan, link: string, marked: boolean): Plan {
-  return {
-    marked: marked ? unique([...plan.marked, link]) : plan.marked.filter((entry) => entry !== link),
-    days: new Map(plan.days),
-    notes: new Map(plan.notes),
-  };
-}
-
-export function withScheduled(plan: Plan, link: string, date: string, scheduled: boolean): Plan {
-  const days = new Map([...plan.days].map(([key, entries]) => [key, [...entries]]));
-  const entries = days.get(date) ?? [];
-  const next = scheduled ? unique([...entries, link]) : entries.filter((entry) => entry !== link);
-  if (next.length) days.set(date, next); else days.delete(date);
-  return { marked: [...plan.marked], days, notes: new Map(plan.notes) };
 }
 
 export type RecipePlanning = { marked: boolean; scheduledDates: string[] };
@@ -305,9 +147,9 @@ export function withRecipePlanning(plan: Plan, link: string, planning: RecipePla
 }
 
 export function resolveRecipeReference(recipes: readonly Recipe[], reference: string): Recipe | null {
-  const normalized = reference.replace(/\\/g, "/").replace(/\.md$/i, "").toLocaleLowerCase();
-  return recipes.find((recipe) => recipe.link.toLocaleLowerCase() === normalized)
-    ?? recipes.find((recipe) => recipe.path.replace(/\.md$/i, "").toLocaleLowerCase() === normalized)
+  const normalized = reference.replace(/\\/g, "/").replace(/\.md$/i, "").toLowerCase();
+  return recipes.find((recipe) => recipe.link.toLowerCase() === normalized)
+    ?? recipes.find((recipe) => recipe.path.replace(/\.md$/i, "").toLowerCase() === normalized)
     ?? null;
 }
 
@@ -338,7 +180,7 @@ function removeRecipeBlocks(markdown: string, recipeTitles: ReadonlySet<string>)
   let remove = false;
   return tokens.filter((token) => {
     const heading = /^##\s+(.+?)\s*(?:\n)?$/.exec(token.replace(/\r\n$/, "\n"));
-    if (heading) remove = recipeTitles.has(heading[1].trim().toLocaleLowerCase());
+    if (heading) remove = recipeTitles.has(heading[1].trim().toLowerCase());
     return !remove;
   }).join("");
 }
@@ -350,31 +192,30 @@ export function buildShoppingMarkdown(
 ): string {
   const checked = new Map<string, boolean>();
   for (const item of parseShopping(current)) {
-    const key = item.text.trim().toLocaleLowerCase();
-    checked.set(key, item.checked || (checked.get(key) ?? false));
+    const key = item.text.trim().toLowerCase();
+    checked.set(key, item.checked || checked.get(key) === true);
   }
-  const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLocaleLowerCase()));
+  const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLowerCase()));
   const preserved = removeRecipeBlocks(current, titles);
+  const prefix = preserved ? `${preserved}${preserved.endsWith("\n") ? "" : "\n"}` : "";
   const seenIngredients = new Set<string>();
-  const seenRecipes = new Set<string>();
-  const generated: string[] = [];
-  for (const recipe of plannedRecipes) {
-    if (seenRecipes.has(recipe.path)) continue;
-    seenRecipes.add(recipe.path);
+  const blocks: string[] = [];
+  const recipes = new Map<string, Recipe>();
+  for (const recipe of plannedRecipes) recipes.set(recipe.path, recipes.get(recipe.path) ?? recipe);
+  for (const recipe of recipes.values()) {
     const lines: string[] = [];
     for (const ingredient of recipe.ingredients) {
       const text = ingredient.trim();
-      const key = text.toLocaleLowerCase();
+      const key = text.toLowerCase();
       if (!text || seenIngredients.has(key)) continue;
       seenIngredients.add(key);
       lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}`);
     }
-    if (lines.length) generated.push(`## ${recipe.title}\n${lines.join("\n")}`);
+    if (lines.length) blocks.push(`## ${recipe.title}\n${lines.join("\n")}`);
   }
-  const prefix = preserved
-    ? `${preserved}${preserved.endsWith("\n") ? "" : "\n"}`
-    : "";
-  return generated.length ? `${prefix}${prefix && !prefix.endsWith("\n\n") ? "\n" : ""}${generated.join("\n\n")}\n` : prefix;
+  if (!blocks.length) return prefix;
+  const separator = /(?:^|\n\n)$/.test(prefix) ? "" : "\n";
+  return `${prefix}${separator}${blocks.join("\n\n")}\n`;
 }
 
 function resolveShoppingItem(markdown: string, itemLine: number, itemText: string): ShoppingLine {

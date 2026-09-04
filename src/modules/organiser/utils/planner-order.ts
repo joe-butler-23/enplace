@@ -1,7 +1,23 @@
+import type { OrganiserItem } from "../types";
 import type { BaseKanbanItem } from "../types/kanban-config";
 import type { BoardEntry } from "../kanban/buildBoardsData";
 
 type PlannerOrderEntries = Record<string, string[]>;
+
+export function comparePlannerItems(sortBy: string, a: OrganiserItem, b: OrganiserItem): number {
+	if (sortBy === "title-asc") return a.title.localeCompare(b.title);
+	if (sortBy === "title-desc") return b.title.localeCompare(a.title);
+	if (sortBy !== "added-asc" && sortBy !== "added-desc") return 0;
+	const aDate = a.added ?? "";
+	const bDate = b.added ?? "";
+	if (!aDate && !bDate) return 0;
+	if (!aDate) return 1;
+	if (!bDate) return -1;
+	if (aDate === bDate) return 0;
+	return sortBy === "added-desc"
+		? (aDate > bDate ? -1 : 1)
+		: (aDate < bDate ? -1 : 1);
+}
 
 export function plannerOrderKey(boardId: string, presetId: string, columnId: string): string {
 	return `${boardId}/${presetId}/${columnId}`;
@@ -50,11 +66,8 @@ export function applyPlannerOrder<T extends BaseKanbanItem>(
 
 export class PlannerOrderStore {
 	private entries: PlannerOrderEntries = {};
-	private loaded = false;
 
-
-	isLoaded(): boolean { return this.loaded; }
-	async load(): Promise<void> { this.loaded = true; }
+	async load(): Promise<void> {}
 
 	get(boardId: string, presetId: string, columnId: string): string[] {
 		return [...(this.entries[plannerOrderKey(boardId, presetId, columnId)] ?? [])];
@@ -65,14 +78,9 @@ export class PlannerOrderStore {
 	}
 
 	async replaceMany(updates: ReadonlyMap<string, readonly string[]>): Promise<void> {
-		this.loaded = true;
 		for (const [key, entryIds] of updates) {
 			const ids = normalizeIds(entryIds);
 			if (ids.length) this.entries[key] = ids; else delete this.entries[key];
 		}
-	}
-
-	async reconcileMany(updates: ReadonlyMap<string, readonly string[]>): Promise<void> {
-		await this.replaceMany(updates);
 	}
 }

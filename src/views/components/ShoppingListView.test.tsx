@@ -11,12 +11,9 @@ const list: ShoppingList = { items: [
 
 const props = {
   list,
-  plan: null,
   busy: false,
   error: null,
-  onApply: vi.fn(),
   onCheck: vi.fn(),
-  onRefresh: vi.fn(),
   onAdd: vi.fn(),
   onRemove: vi.fn(),
   onCopyLink: vi.fn(),
@@ -35,6 +32,8 @@ describe("ShoppingListView Markdown presentation", () => {
     expect(html).toContain("Soup");
     expect(html).toContain("Bread");
     expect(html).toContain("Copy list");
+    expect(html).not.toContain(">Refresh<");
+    expect(html).not.toContain(">Retry<");
     expect(html).not.toContain("Roll back");
     expect(html).toContain('aria-label="Add an item"');
     expect(html).toContain('aria-label="Remove 2 tomatoes"');

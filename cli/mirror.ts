@@ -1,53 +1,94 @@
 import { watch, type FSWatcher } from "node:fs";
-import { link, lstat, mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, realpath, rename, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebsocketProvider } from "y-websocket";
-import WebSocket from "ws";
 import * as Y from "yjs";
 import {
-  deleteKitchenPath,
-  isKitchenId,
-  isTextPath,
-  kitchenFiles,
-  observeKitchen,
-  kitchenIdFromUrl,
-  listKitchenPaths,
-  readKitchenBytes,
-  writeKitchenBytes,
-  writeKitchenText,
+  deleteKitchenPath, hasKitchenDirectory, hasKitchenFile, isKitchenId, isTextPath, kitchenIdFromUrl,
+  listKitchenPaths, observeKitchen, readKitchenBytes, writeKitchenBytes, writeKitchenText,
 } from "../src/kitchen/doc.js";
 import { mergeText } from "../src/kitchen/merge.js";
+import { atomicCommit, createPrivateOperation, equal, optionalLstat, readOptional, unlinkIfPresent, type Bytes } from "./mirror-commit.js";
 
 export const MIRROR_ORIGIN = Symbol("mep-mirror");
-
-const DISK_EVENT_COALESCE_MS = 75;
 const INITIAL_SYNC_DEADLINE_MS = 15_000;
 const MAX_PATH_SYNC_RETRIES = 8;
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 type MirrorOptions = {
-  folder: string;
-  kitchen: string;
-  relay: string;
-  once?: boolean;
-  log?: (line: string) => void;
-  signal?: AbortSignal;
-  now?: () => Date;
+  folder: string; kitchen: string; relay: string; once?: boolean;
+  log?: (line: string) => void; signal?: AbortSignal; now?: () => Date;
 };
+async function cleanupPrivateRoot(privateRoot: string, parent: string): Promise<void> {
+  const operations = await readdir(privateRoot, { withFileTypes: true });
+  for (const operationEntry of operations) {
+    if (!operationEntry.isDirectory() || operationEntry.isSymbolicLink() || !operationEntry.name.startsWith("operation-")) continue;
+    const operation = path.join(privateRoot, operationEntry.name);
+    const entries = await readdir(operation, { withFileTypes: true });
+    const replacement = entries.find((entry) => entry.isFile() && entry.name === "replacement");
+    const recoveries = entries.filter((entry) => entry.isFile() && /\.local-\d{8}-\d{6}(\..*)?$/.test(entry.name));
+    if (replacement && recoveries.length === 1) {
+      const match = /^(.*)\.local-\d{8}-\d{6}(\..*)?$/.exec(recoveries[0].name);
+      const publicBytes = match ? await readOptional(path.join(parent, `${match[1]}${match[2] ?? ""}`)) : null;
+      const stagedBytes = await readOptional(path.join(operation, replacement.name));
+      if (publicBytes !== null && equal(publicBytes, stagedBytes)) await unlinkIfPresent(path.join(operation, replacement.name));
+    }
+    if ((await readdir(operation)).length === 0) await rmdir(operation);
+  }
+}
+
+export async function cleanupReplacementScratch(folder: string): Promise<void> {
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      const child = path.join(directory, entry.name);
+      if (entry.name === ".mep-mirror") await cleanupPrivateRoot(child, directory);
+      else await visit(child);
+    }
+  };
+  await visit(folder);
+}
+
+export function createPathScheduler(run: (paths: readonly string[]) => Promise<void>, onError: (error: unknown) => void) {
+  const pending = new Set<string>();
+  let accepting = true;
+  let draining = false;
+  let tail = Promise.resolve();
+  const schedule = (relative = ""): void => {
+    if (!accepting) return;
+    pending.add(relative);
+    if (draining) return;
+    draining = true;
+    tail = tail.then(async () => {
+      try {
+        while (pending.size) {
+          const paths = [...pending];
+          pending.clear();
+          await run(paths);
+        }
+      } catch (error) {
+        accepting = false;
+        pending.clear();
+        onError(error);
+      } finally { draining = false; }
+    });
+  };
+  const stop = (): void => { accepting = false; };
+  return { schedule, stop, close: async () => { stop(); await tail; }, idle: () => tail };
+}
+
+type Decision = "equal" | "local" | "remote" | "conflict";
 
 function kitchenId(value: string): string {
   const id = isKitchenId(value) ? value : kitchenIdFromUrl(value);
   if (!id) throw new Error("--kitchen needs a kitchen link or valid kitchen id");
   return id;
 }
-
-function skipped(relative: string, directory = false): boolean {
+function skipped(relative: string): boolean {
   const parts = relative.split("/");
-  if (parts.includes(".git") || parts.includes("node_modules")) return true;
-  return !directory && parts.at(-1)?.includes(".local-") === true;
+  return parts.includes(".git") || parts.includes("node_modules") || parts.includes(".mep-mirror");
 }
-
 function safeRelative(value: string): string {
   const relative = value.replace(/\\/g, "/").replace(/^\.\//, "");
   const parts = relative.split("/").filter(Boolean);
@@ -56,84 +97,28 @@ function safeRelative(value: string): string {
   }
   return parts.join("/");
 }
-
 function absolutePath(folder: string, relative: string): string {
   return path.join(folder, ...safeRelative(relative).split("/"));
 }
-
 async function rejectSymlinks(folder: string, relative: string): Promise<void> {
   let candidate = folder;
   for (const part of safeRelative(relative).split("/")) {
     candidate = path.join(candidate, part);
-    const info = await lstat(candidate).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
+    const info = await optionalLstat(candidate);
     if (info === null) return;
     if (info.isSymbolicLink()) throw new Error(`refusing to mirror symbolic link: ${relative}`);
   }
 }
-
-function equal(left: Uint8Array | null, right: Uint8Array | null): boolean {
-  if (left === null || right === null) return left === right;
-  return left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+function reconciliationDecision(
+  baselineKnown: boolean, baseline: Bytes, local: Bytes, remote: Bytes,
+): Decision {
+  if (equal(local, remote)) return "equal";
+  if (!baselineKnown) return local === null ? "remote" : remote === null ? "local" : "conflict";
+  const localChanged = !equal(local, baseline);
+  const remoteChanged = !equal(remote, baseline);
+  if (localChanged && remoteChanged) return "conflict";
+  return localChanged ? "local" : "remote";
 }
-
-async function readOptional(file: string): Promise<Buffer | null> {
-  try { return await readFile(file); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
-
-let temporaryFileCounter = 0;
-async function replaceFileIfCurrent(
-  file: string,
-  bytes: Uint8Array,
-  expected: Uint8Array | null,
-  stillCurrent: () => boolean,
-): Promise<boolean> {
-  const temporary = path.join(
-    path.dirname(file),
-    `.${path.basename(file)}.local-mirror-${process.pid}-${temporaryFileCounter++}`,
-  );
-  await writeFile(temporary, bytes, { flag: "wx" });
-  try {
-    if (!equal(await readOptional(file), expected) || !stillCurrent()) return false;
-    if (expected === null) {
-      try {
-        await link(temporary, file);
-        return true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-        throw error;
-      }
-    }
-    await rename(temporary, file);
-    return true;
-  } finally {
-    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error;
-    });
-  }
-}
-
-async function unlinkIfCurrent(
-  file: string,
-  expected: Uint8Array,
-  stillCurrent: () => boolean,
-): Promise<boolean> {
-  if (!equal(await readOptional(file), expected) || !stillCurrent()) return false;
-  try {
-    await unlink(file);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
-}
-
 async function diskFiles(folder: string, start = ""): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>();
   async function walk(relativeDirectory: string): Promise<void> {
@@ -146,9 +131,8 @@ async function diskFiles(folder: string, start = ""): Promise<Map<string, Buffer
     }
     for (const entry of entries) {
       const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        if (!skipped(relative, true)) await walk(relative);
-      } else if (entry.isFile() && !skipped(relative)) {
+      if (entry.isDirectory() && !skipped(relative)) await walk(relative);
+      else if (entry.isFile() && !skipped(relative)) {
         await rejectSymlinks(folder, relative);
         const bytes = await readOptional(absolutePath(folder, relative));
         if (bytes !== null) files.set(relative, bytes);
@@ -159,49 +143,65 @@ async function diskFiles(folder: string, start = ""): Promise<Map<string, Buffer
   return files;
 }
 
+
 function writeDoc(doc: Y.Doc, relative: string, bytes: Uint8Array): void {
   if (isTextPath(relative)) writeKitchenText(doc, relative, decoder.decode(bytes), MIRROR_ORIGIN);
-  else writeKitchenBytes(doc, relative, bytes, MIRROR_ORIGIN);
+  else writeKitchenBytes(doc, relative, new Uint8Array(bytes), MIRROR_ORIGIN);
 }
-
-function stamp(date: Date): string {
-  const values = [
-    date.getFullYear(), date.getMonth() + 1, date.getDate(),
-    date.getHours(), date.getMinutes(), date.getSeconds(),
-  ];
-  return values.map((value, index) => index === 0 ? String(value) : String(value).padStart(2, "0"))
-    .slice(0, 3).join("") + "-" + values.slice(3).map((value) => String(value).padStart(2, "0")).join("");
-}
-
-function localCopyPath(file: string, now: Date): string {
+export function localCopyPath(file: string, now: Date): string {
   const parsed = path.parse(file);
-  return path.join(parsed.dir, `${parsed.name}.local-${stamp(now)}${parsed.ext}`);
+  const values = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()];
+  const padded = values.map((value, index) => index === 0 ? String(value) : String(value).padStart(2, "0"));
+  const stamp = `${padded.slice(0, 3).join("")}-${padded.slice(3).join("")}`;
+  return path.join(parsed.dir, `${parsed.name}.local-${stamp}${parsed.ext}`);
 }
-
+type DiskPlan = { desired: Bytes; message: string; merged?: string };
+function diskPlan(
+  relative: string, decision: Decision, known: boolean, baseline: Bytes,
+  local: Bytes, remote: Bytes,
+): DiskPlan {
+  if (decision === "conflict" && local !== null && remote !== null && isTextPath(relative)) {
+    const merged = mergeText(decoder.decode(baseline ?? new Uint8Array()), decoder.decode(local), decoder.decode(remote));
+    const plural = merged.conflicts === 1 ? "" : "s";
+    const detail = merged.conflicts ? `; kept ${merged.conflicts} conflict${plural}` : "";
+    return { desired: encoder.encode(merged.text), merged: merged.text, message: `merged local changes with kitchen for ${relative}${detail}` };
+  }
+  let message = `wrote ${relative}`;
+  if (local === null && known && baseline !== null) {
+    message = `restored ${relative}; local deletion conflicted with kitchen change`;
+  } else if (remote === null) message = `deleted ${relative}`;
+  return { desired: remote, message };
+}
 async function waitForInitialSync(provider: WebsocketProvider, signal: AbortSignal): Promise<boolean> {
   if (provider.synced) return true;
   return await new Promise<boolean>((resolve, reject) => {
     const deadline = setTimeout(() => finish(new Error("timed out waiting for the relay's initial sync")), INITIAL_SYNC_DEADLINE_MS);
     const onSync = (synced: boolean) => { if (synced) finish(); };
     const onAbort = () => finish(undefined, false);
-    const onClosed = (event: { code: number; reason: string }) => {
-      finish(new Error(`relay closed before initial sync (${event.code}${event.reason ? `: ${event.reason}` : ""})`));
-    };
+    const onClosed = (event: { code: number; reason: string }) => finish(new Error(
+      `relay closed before initial sync (${event.code}${event.reason ? `: ${event.reason}` : ""})`,
+    ));
     const finish = (error?: Error, synced = true): void => {
-      clearTimeout(deadline);
-      provider.off("sync", onSync);
-      provider.off("closed", onClosed);
+      clearTimeout(deadline); provider.off("sync", onSync); provider.off("closed", onClosed);
       signal.removeEventListener("abort", onAbort);
       if (error) reject(error); else resolve(synced);
     };
-    provider.on("sync", onSync);
-    provider.on("closed", onClosed);
+    provider.on("sync", onSync); provider.on("closed", onClosed);
     signal.addEventListener("abort", onAbort, { once: true });
     if (signal.aborted) onAbort();
   });
 }
 
+
+
 export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
+  const requestedFolder = path.resolve(options.folder);
+  const folder = await realpath(requestedFolder).catch(() => null);
+  if (!folder || !(await stat(folder).catch(() => null))?.isDirectory()) {
+    throw new Error(`folder not found: ${requestedFolder}`);
+  }
+  if (path.dirname(folder) === folder) throw new Error("refusing to mirror a filesystem root");
+  if (folder !== requestedFolder) options.log?.(`resolved mirror folder ${requestedFolder} to ${folder}\n`);
   const id = kitchenId(options.kitchen);
   let relay: URL;
   try { relay = new URL(options.relay); }
@@ -209,312 +209,177 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
   if (relay.protocol !== "ws:" && relay.protocol !== "wss:") {
     throw new Error("--relay needs a valid ws:// or wss:// URL");
   }
-  const requestedFolder = path.resolve(options.folder);
-  const folder = await realpath(requestedFolder).catch(() => null);
-  if (!folder || !(await stat(folder).catch(() => null))?.isDirectory()) {
-    throw new Error(`folder not found: ${requestedFolder}`);
-  }
-  if (folder !== requestedFolder) {
-    options.log?.(`resolved mirror folder ${requestedFolder} to ${folder}\n`);
-  }
 
   const ownAbort = options.signal ? null : new AbortController();
   const signal = options.signal ?? ownAbort!.signal;
   const onSigint = () => ownAbort?.abort();
   if (ownAbort) process.once("SIGINT", onSigint);
-  if (signal.aborted) {
-    if (ownAbort) process.off("SIGINT", onSigint);
-    return;
-  }
+  if (signal.aborted) { if (ownAbort) process.off("SIGINT", onSigint); return; }
 
   const doc = new Y.Doc();
-  const provider = new WebsocketProvider(relay.toString(), id, doc, {
-    WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket,
-    disableBc: true,
-  });
+  const provider = new WebsocketProvider(relay.toString(), id, doc, { disableBc: true });
   let watcher: FSWatcher | null = null;
   let stopObserving: (() => void) | null = null;
-  let monitoringProvider = false;
-  const debounces = new Map<string, { timeout: NodeJS.Timeout; run: () => void }>();
-  const files = kitchenFiles(doc);
+  const baselines = new Map<string, Bytes>();
   let fatal: unknown;
-  let queue = Promise.resolve();
+  let scheduler: ReturnType<typeof createPathScheduler> | null = null;
   let stopMirror: (() => void) | undefined;
   const stopped = new Promise<void>((resolve) => { stopMirror = resolve; });
-  const onAbort = () => stopMirror?.();
-  signal.addEventListener("abort", onAbort, { once: true });
   const fail = (error: unknown): void => {
     if (fatal === undefined) fatal = error;
+    scheduler?.stop();
     stopMirror?.();
-  };
-  const enqueue = (task: () => Promise<void>): Promise<void> => {
-    const next = queue.then(task);
-    queue = next.catch(fail);
-    return next;
   };
   const log = (message: string, always = false): void => {
     if (!options.once || always) options.log?.(`${message}\n`);
   };
-
-  const baselines = new Map<string, Uint8Array | null>();
-  const rememberBaseline = (relative: string, bytes: Uint8Array | null): void => {
-    baselines.set(relative, bytes?.slice() ?? null);
+  const remember = (relative: string, bytes: Bytes): void => {
+    baselines.set(relative, bytes === null ? null : new Uint8Array(bytes));
   };
-  const preserveLocal = async (file: string, bytes: Uint8Array): Promise<string> => {
-    const first = localCopyPath(file, options.now?.() ?? new Date());
-    const extension = path.extname(first);
-    const stem = first.slice(0, first.length - extension.length);
-    for (let copy = 1; ; copy += 1) {
-      const localCopy = copy === 1 ? first : `${stem}-${copy}${extension}`;
-      try {
-        await writeFile(localCopy, bytes, { flag: "wx" });
-        return path.relative(folder, localCopy).split(path.sep).join("/");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      }
-    }
-  };
-
-  const syncDocPathToDisk = async (relativeValue: string, attempt = 0): Promise<void> => {
-    const relative = safeRelative(relativeValue);
-    if (skipped(relative)) return;
-    if (attempt > MAX_PATH_SYNC_RETRIES) {
-      throw new Error(`mirror path kept changing during synchronization: ${relative}`);
-    }
-    const retry = (): Promise<void> => syncDocPathToDisk(relative, attempt + 1);
-    const file = absolutePath(folder, relative);
-    await rejectSymlinks(folder, relative);
-    const docBytes = readKitchenBytes(doc, relative);
-    const diskBytes = await readOptional(file);
-    const docStillCurrent = (): boolean => equal(readKitchenBytes(doc, relative), docBytes);
-    const baselineKnown = baselines.has(relative);
-    const baseline = baselines.get(relative) ?? null;
-    const localChanged = baselineKnown ? !equal(diskBytes, baseline) : diskBytes !== null;
-
-    if (localChanged && diskBytes !== null) {
-      if (docBytes !== null && isTextPath(relative)) {
-        const merged = mergeText(
-          baseline === null ? "" : decoder.decode(baseline),
-          decoder.decode(diskBytes),
-          decoder.decode(docBytes),
-        );
-        const mergedBytes = encoder.encode(merged.text);
-        await mkdir(path.dirname(file), { recursive: true });
-        await rejectSymlinks(folder, relative);
-        if (!await replaceFileIfCurrent(file, mergedBytes, diskBytes, docStillCurrent)) return retry();
-        if (!docStillCurrent()) return retry();
-        writeKitchenText(doc, relative, merged.text, MIRROR_ORIGIN);
-        const currentBytes = readKitchenBytes(doc, relative)!;
-        rememberBaseline(relative, currentBytes);
-        log(merged.conflicts > 0
-          ? `merged local changes with kitchen for ${relative}; kept ${merged.conflicts} conflict${merged.conflicts === 1 ? "" : "s"}`
-          : `merged local changes with kitchen for ${relative}`, true);
-        return;
-      }
-
-      const preserved = await preserveLocal(file, diskBytes);
-      if (docBytes === null) {
-        if (!await unlinkIfCurrent(file, diskBytes, docStillCurrent)) return retry();
-        if (!docStillCurrent()) return retry();
-        rememberBaseline(relative, null);
-        log(`deleted ${relative}; preserved local copy as ${preserved}`, true);
-        return;
-      }
-      await mkdir(path.dirname(file), { recursive: true });
-      await rejectSymlinks(folder, relative);
-      if (!await replaceFileIfCurrent(file, docBytes, diskBytes, docStillCurrent)) return retry();
-      if (!docStillCurrent()) return retry();
-      rememberBaseline(relative, docBytes);
-      log(`wrote ${relative}; preserved local copy as ${preserved}`, true);
-      return;
-    }
-
-    if (docBytes === null) {
-      if (diskBytes !== null) {
-        if (!await unlinkIfCurrent(file, diskBytes, docStillCurrent)) return retry();
-        if (!docStillCurrent()) return retry();
-        log(`deleted ${relative}`);
-      }
-      rememberBaseline(relative, null);
-      return;
-    }
-    if (equal(docBytes, diskBytes)) {
-      rememberBaseline(relative, docBytes);
-      return;
-    }
-    await mkdir(path.dirname(file), { recursive: true });
-    await rejectSymlinks(folder, relative);
-    if (!await replaceFileIfCurrent(file, docBytes, diskBytes, docStillCurrent)) return retry();
-    if (!docStillCurrent()) return retry();
-    rememberBaseline(relative, docBytes);
-    if (localChanged) log(`restored ${relative}; local deletion conflicted with kitchen change`, true);
-    else log(`wrote ${relative}`);
-  };
-
-  const deleteDocPath = (relative: string): void => {
-    if (files.has(relative) || [...files.keys()].some((key) => key.startsWith(`${relative}/`))) {
+  const deleteDoc = (relative: string): void => {
+    if (hasKitchenFile(doc, relative) || hasKitchenDirectory(doc, relative)) {
       deleteKitchenPath(doc, relative, true, MIRROR_ORIGIN);
       log(`removed ${relative} from kitchen`);
     }
   };
-
-  const syncDiskFileToDoc = async (relative: string, bytes: Uint8Array): Promise<void> => {
-    const docBytes = readKitchenBytes(doc, relative);
-    if (equal(bytes, docBytes)) {
-      rememberBaseline(relative, bytes);
-      return;
-    }
-    if (docBytes !== null) {
-      await syncDocPathToDisk(relative);
-      return;
-    }
-    writeDoc(doc, relative, bytes);
-    rememberBaseline(relative, bytes);
-    log(`updated kitchen from ${relative}`);
+  const applyLocal = (relative: string, local: Bytes): void => {
+    if (local === null) deleteDoc(relative);
+    else { writeDoc(doc, relative, local); log(`updated kitchen from ${relative}`); }
+    remember(relative, local);
   };
 
-  const syncDiskDeletionToDoc = async (relative: string): Promise<void> => {
-    const docBytes = readKitchenBytes(doc, relative);
-    const baselineKnown = baselines.has(relative);
-    const baseline = baselines.get(relative) ?? null;
-    if (docBytes !== null && (!baselineKnown || !equal(docBytes, baseline))) {
-      await syncDocPathToDisk(relative);
-      return;
-    }
-    deleteDocPath(relative);
-    rememberBaseline(relative, null);
-  };
-
-  const syncDiskPathToDoc = async (relativeValue: string): Promise<void> => {
+  const reconcilePath = async (relativeValue: string): Promise<void> => {
     const relative = safeRelative(relativeValue);
     if (skipped(relative)) return;
-    const file = absolutePath(folder, relative);
+    const recoveries: string[] = [];
+    const recoverySuffix = (): string => recoveries
+      .map((file) => `; preserved local copy as ${path.relative(folder, file).split(path.sep).join("/")}`).join("");
+    const reportRecoveries = (): void => { if (recoveries.length) log(`retained local recovery${recoverySuffix()}`, true); };
+    for (let attempt = 0; attempt <= MAX_PATH_SYNC_RETRIES; attempt += 1) {
+      const file = absolutePath(folder, relative);
+      await rejectSymlinks(folder, relative);
+      const remote = readKitchenBytes(doc, relative);
+      const local = await readOptional(file);
+      const known = baselines.has(relative);
+      const baseline = baselines.get(relative) ?? null;
+      const decision = reconciliationDecision(known, baseline, local, remote);
+      if (!equal(readKitchenBytes(doc, relative), remote)) continue;
+      if (decision === "equal") { remember(relative, remote); reportRecoveries(); return; }
+      if (decision === "local") { applyLocal(relative, local); reportRecoveries(); return; }
+      const plan = diskPlan(relative, decision, known, baseline, local, remote);
+      if (plan.desired !== null) {
+        await mkdir(path.dirname(file), { recursive: true });
+        await rejectSymlinks(folder, relative);
+      }
+      const committed = await atomicCommit(file, local, plan.desired, {
+        current: () => equal(readKitchenBytes(doc, relative), remote),
+        recoveryName: path.basename(localCopyPath(file, options.now?.() ?? new Date())),
+      });
+      if (committed.recovery && !recoveries.includes(committed.recovery)) recoveries.push(committed.recovery);
+      if (committed.result === "committed") {
+        if (plan.merged) writeKitchenText(doc, relative, plan.merged, MIRROR_ORIGIN);
+        remember(relative, plan.desired);
+        log(`${plan.message}${recoverySuffix()}`, decision === "conflict" || plan.message.startsWith("restored"));
+        return;
+      }
+    }
+    throw new Error(`mirror path kept changing during synchronization: ${relative}${recoverySuffix()}`);
+  };
+
+  const preservePath = async (relative: string): Promise<string> => {
     await rejectSymlinks(folder, relative);
-    const info = await lstat(file).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (info?.isFile()) {
-      await syncDiskFileToDoc(relative, await readFile(file));
+    const file = absolutePath(folder, relative);
+    const operation = await createPrivateOperation(path.dirname(file));
+    const recovery = path.join(operation, path.basename(localCopyPath(file, options.now?.() ?? new Date())));
+    await rename(file, recovery);
+    return path.relative(folder, recovery).split(path.sep).join("/");
+  };
+  const replaceBlockingDirectory = async (relative: string): Promise<void> => {
+    const recovery = await preservePath(relative);
+    log(`restored ${relative}; preserved blocking directory as ${recovery}`, true);
+    await reconcilePath(relative);
+  };
+
+  const reconcileChangedPath = async (relativeValue: string): Promise<void> => {
+    const relative = safeRelative(relativeValue);
+    if (skipped(relative)) return;
+    await rejectSymlinks(folder, relative);
+    const info = await optionalLstat(absolutePath(folder, relative));
+    if (!info?.isDirectory()) {
+      const paths = listKitchenPaths(doc).filter((key) => key === relative || key.startsWith(`${relative}/`));
+      if (info?.isFile() || paths.length === 0) await reconcilePath(relative);
+      else for (const key of paths) await reconcilePath(key);
       return;
     }
-    if (info?.isDirectory()) {
-      const found = await diskFiles(folder, relative);
-      for (const [filePath, bytes] of found) await syncDiskFileToDoc(filePath, bytes);
-      const prefix = `${relative}/`;
-      for (const docPath of listKitchenPaths(doc)) {
-        if (docPath.startsWith(prefix) && !found.has(docPath)) {
-          await syncDiskDeletionToDoc(docPath);
-        }
-      }
+    if (hasKitchenFile(doc, relative)) {
+      await replaceBlockingDirectory(relative);
       return;
     }
-    const missing = listKitchenPaths(doc).filter(
-      (docPath) => docPath === relative || docPath.startsWith(`${relative}/`),
-    );
-    if (missing.length === 0) rememberBaseline(relative, null);
-    for (const docPath of missing) await syncDiskDeletionToDoc(docPath);
+    const found = await diskFiles(folder, relative);
+    const remote = listKitchenPaths(doc).filter((value) => value.startsWith(`${relative}/`));
+    for (const key of new Set([...found.keys(), ...remote])) await reconcilePath(key);
   };
-
-  const syncAllDiskPathsToDoc = async (): Promise<void> => {
-    const disk = await diskFiles(folder);
-    for (const filePath of new Set([...disk.keys(), ...listKitchenPaths(doc)])) {
-      if (!skipped(filePath)) await syncDiskPathToDoc(filePath);
-    }
-  };
-  const pendingDiskPaths = new Set<string>();
-  let diskDrainQueued = false;
-  const scheduleDiskPath = (relative?: string): void => {
-    pendingDiskPaths.add(relative ?? "");
-    if (diskDrainQueued) return;
-    diskDrainQueued = true;
-    enqueue(async () => {
-      try {
-        while (pendingDiskPaths.size) {
-          const paths = [...pendingDiskPaths];
-          pendingDiskPaths.clear();
-          if (paths.includes("")) await syncAllDiskPathsToDoc();
-          else for (const changed of paths) await syncDiskPathToDoc(changed);
-        }
-      } finally {
-        diskDrainQueued = false;
+  const reconcileAll = async (): Promise<void> => {
+    const remote = listKitchenPaths(doc);
+    let disk = await diskFiles(folder);
+    for (const relative of disk.keys()) {
+      if (hasKitchenDirectory(doc, relative) && !hasKitchenFile(doc, relative)) {
+        const recovery = await preservePath(relative);
+        log(`preserved file blocking projected directory ${relative} as ${recovery}`, true);
       }
-    });
-  };
-
-  const reconcile = async (): Promise<void> => {
-    const disk = await diskFiles(folder);
-    const paths = new Set([...disk.keys(), ...listKitchenPaths(doc)]);
-    for (const relative of paths) {
-      if (skipped(relative)) continue;
-      if (readKitchenBytes(doc, relative) === null) await syncDiskPathToDoc(relative);
-      else await syncDocPathToDisk(relative);
     }
-  };
-
-  const pendingDocPaths = new Set<string>();
-  let docDrainQueued = false;
-  const scheduleDocPath = (relative: string): void => {
-    pendingDocPaths.add(relative);
-    if (docDrainQueued) return;
-    docDrainQueued = true;
-    enqueue(async () => {
-      try {
-        while (pendingDocPaths.size) {
-          const paths = [...pendingDocPaths];
-          pendingDocPaths.clear();
-          for (const changed of paths) await syncDocPathToDisk(changed);
-        }
-      } finally {
-        docDrainQueued = false;
+    for (const relative of remote) {
+      await rejectSymlinks(folder, relative);
+      if ((await optionalLstat(absolutePath(folder, relative)))?.isDirectory()) {
+        await replaceBlockingDirectory(relative);
       }
-    });
+    }
+    disk = await diskFiles(folder);
+    for (const relative of disk.keys()) {
+      if (!remote.includes(relative) && / \(file conflict [0-9a-f]{8}(?:-[0-9]+)?\)(?:\.[^/]+)?$/.test(relative)) {
+        const recovery = await preservePath(relative);
+        log(`preserved stale projected path ${relative} as ${recovery}`, true);
+      }
+    }
+    disk = await diskFiles(folder);
+    for (const relative of new Set([...disk.keys(), ...remote])) await reconcilePath(relative);
   };
-  const observeDoc = (paths: Set<string>, origin: unknown): void => {
-    if (origin === MIRROR_ORIGIN) return;
-    for (const relative of paths) scheduleDocPath(relative);
-  };
-  const onProviderClosed = (event: { code: number; reason: string }): void => {
-    fail(new Error(`relay closed (${event.code}${event.reason ? `: ${event.reason}` : ""})`));
-  };
+  scheduler = createPathScheduler(async (paths) => {
+    if (paths.includes("")) await reconcileAll();
+    else for (const changed of paths) await reconcileChangedPath(changed);
+  }, fail);
+  const { schedule } = scheduler;
+  const onProviderClosed = (event: { code: number; reason: string }): void => fail(new Error(
+    `relay closed (${event.code}${event.reason ? `: ${event.reason}` : ""})`,
+  ));
+  const onAbort = (): void => { scheduler?.stop(); stopMirror?.(); };
+  signal.addEventListener("abort", onAbort, { once: true });
 
   try {
     if (!await waitForInitialSync(provider, signal)) return;
-    if (options.once) {
-      await reconcile();
-      return;
-    }
-
-    stopObserving = observeKitchen(doc, observeDoc);
+    if (options.once) { await reconcileAll(); await cleanupReplacementScratch(folder); return; }
+    stopObserving = observeKitchen(doc, (paths, origin) => {
+      if (origin !== MIRROR_ORIGIN) for (const relative of paths) schedule(relative);
+    });
     provider.on("closed", onProviderClosed);
-    monitoringProvider = true;
     watcher = watch(folder, { recursive: true }, (_event, filename) => {
       const relative = filename?.toString().replace(/\\/g, "/");
       if (relative && skipped(relative)) return;
-      const key = relative || ".";
-      const current = debounces.get(key);
-      if (current) clearTimeout(current.timeout);
-      const run = (): void => {
-        debounces.delete(key);
-        scheduleDiskPath(relative);
-      };
-      debounces.set(key, { timeout: setTimeout(run, DISK_EVENT_COALESCE_MS), run });
+      schedule(relative);
     });
     watcher.on("error", fail);
-    await enqueue(reconcile);
+    schedule();
+    await scheduler.idle();
+    await cleanupReplacementScratch(folder);
     await stopped;
   } finally {
+    scheduler.stop();
     watcher?.close();
-    for (const pending of [...debounces.values()]) {
-      clearTimeout(pending.timeout);
-      pending.run();
-    }
-    await queue;
-    provider.disconnect();
-    if (monitoringProvider) provider.off("closed", onProviderClosed);
-    signal.removeEventListener("abort", onAbort);
-    await queue;
     stopObserving?.();
+    provider.off("closed", onProviderClosed);
+    signal.removeEventListener("abort", onAbort);
+    await scheduler.close();
+    provider.disconnect();
     provider.destroy();
     doc.destroy();
     if (ownAbort) process.off("SIGINT", onSigint);

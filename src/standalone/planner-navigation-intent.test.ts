@@ -3,7 +3,6 @@ import {
   acknowledgePlannerMountReady,
   cancelPlannerNavigation,
   createPlannerNavigationIntentState,
-  failPlannerNavigation,
   requestPlannerNavigation,
   retryPlannerNavigation,
   settlePlannerNavigation,
@@ -30,14 +29,12 @@ describe("planner navigation intent", () => {
     cancelPlannerNavigation(state);
     expect(settlePlannerNavigation(state, true)).toBeNull();
   });
-  it("retains a failed intent for a distinct retry", () => {
+  it("requires fresh mount readiness after a retry", () => {
     const state = createPlannerNavigationIntentState();
     requestPlannerNavigation(state, "push");
     acknowledgePlannerMountReady(state);
-    failPlannerNavigation(state, "EACCES");
-    expect(settlePlannerNavigation(state, true)).toBeNull();
-    expect(state.pending).not.toBeNull();
     retryPlannerNavigation(state);
+    expect(settlePlannerNavigation(state, true)).toBeNull();
     acknowledgePlannerMountReady(state);
     expect(settlePlannerNavigation(state, true)?.history).toBe("push");
   });

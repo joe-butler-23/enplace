@@ -12,23 +12,6 @@ afterEach(() => {
 });
 
 describe("AppSidebar", () => {
-  it("prepares shopping on press without navigating before release", () => {
-    container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    const onNavigate = vi.fn();
-    const onPrepareShopping = vi.fn();
-    flushSync(() => root.render(
-      <AppSidebar activeView="database" canGoBack={false} onBack={vi.fn()}
-        onNavigate={onNavigate} onPrepareShopping={onPrepareShopping} />
-    ));
-    const shopping = container.querySelector<HTMLButtonElement>('[title="Shopping List"]')!;
-    shopping.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
-    expect(onPrepareShopping).toHaveBeenCalledOnce();
-    expect(onNavigate).not.toHaveBeenCalled();
-    flushSync(() => root.unmount());
-  });
-
   it("keeps each nav icon element mounted when the sidebar re-renders during a press", () => {
     container = document.createElement("div");
     document.body.append(container);

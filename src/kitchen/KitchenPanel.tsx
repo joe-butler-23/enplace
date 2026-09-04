@@ -12,7 +12,6 @@ import { SAMPLE_PATHS } from "./sample-pack";
 
 const MAX_IMPORT_FILES = 500;
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
-const REOPEN_SHARE_KEY = "enplace-reopen-share";
 
 /** The boot listener reloads when this same-document navigation changes the kitchen fragment. */
 function openKitchenLink(id: string): void {
@@ -44,19 +43,12 @@ async function copyLink(link: string): Promise<void> {
   }
 }
 
-export function consumeShareDialogRequest(): boolean {
-  if (typeof sessionStorage === "undefined" || sessionStorage.getItem(REOPEN_SHARE_KEY) !== "1") return false;
-  sessionStorage.removeItem(REOPEN_SHARE_KEY);
-  return true;
-}
-
 export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.JSX.Element | null {
   const connection = currentKitchenConnection();
   const ref = React.useRef<HTMLDialogElement>(null);
   const [status, setStatus] = React.useState<KitchenStatus>(() => connection?.status() ?? "offline");
   const [showQr, setShowQr] = React.useState(false);
   const [qrUrl, setQrUrl] = React.useState("");
-  const busy = false;
   const link = connection ? kitchenLink(window.location.origin, connection.id, window.location.pathname) : "";
 
   React.useEffect(() => {
@@ -114,9 +106,9 @@ export function ShareKitchenDialog({ onClose }: { onClose: () => void }): React.
         <input type="url" readOnly value={link} />
       </label>
       <div className="mep-kitchen-panel__actions">
-        <button className="mep-button" type="button" disabled={busy} onClick={() => void share()}>Share</button>
-        <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={() => void copyLink(link)}>Copy link</button>
-        <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={() => setShowQr(true)}>Show QR code</button>
+        <button className="mep-button" type="button" onClick={() => void share()}>Share</button>
+        <button className="mep-button mep-button--ghost" type="button" onClick={() => void copyLink(link)}>Copy link</button>
+        <button className="mep-button mep-button--ghost" type="button" onClick={() => setShowQr(true)}>Show QR code</button>
       </div>
       {showQr && qrUrl ? <img className="mep-kitchen-panel__qr" src={qrUrl} alt="QR code for this kitchen link" /> : null}
       <p className="mep-kitchen-panel__status">{statusMessage(status)}</p>
@@ -145,8 +137,8 @@ export function KitchenPanel(): React.JSX.Element | null {
   const downloadKitchen = async (): Promise<void> => {
     try {
       const files = await connection.adapter.walkFiles();
-      const entries: Record<string, Uint8Array> = {};
-      for (const { path, file } of files) entries[path] = new Uint8Array(await file.arrayBuffer());
+      const entries = Object.create(null) as Record<string, Uint8Array>;
+      for (const { path, bytes } of files) entries[path] = bytes;
       const bytes = (await import("fflate")).zipSync(entries, { level: 6 });
       const url = URL.createObjectURL(new Blob([blobPart(bytes)], { type: "application/zip" }));
       const anchor = document.createElement("a");
@@ -177,12 +169,13 @@ export function KitchenPanel(): React.JSX.Element | null {
       };
 
       for (const file of Array.from(files)) {
-        if (file.name.toLocaleLowerCase().endsWith(".zip")) {
+        if (file.name.toLowerCase().endsWith(".zip")) {
           const countBeforeArchive = fileCount;
           const bytesBeforeArchive = expandedBytes;
           const bytes = new Uint8Array(await file.arrayBuffer());
           const archive = (await import("fflate")).unzipSync(bytes, { filter: (entry) => {
             if (entry.name.endsWith("/")) return false;
+            if (entry.name === "__proto__") throw new Error("Invalid folder path: __proto__");
             accept(entry.originalSize);
             return true;
           }});

@@ -9,30 +9,34 @@ if [[ "${SKIP_MEP_PREPUSH:-0}" == "1" ]]; then
   exit 1
 fi
 
-node_major="$(node -p 'process.versions.node.split(`.`)[0]')"
-if [[ "$node_major" != "22" ]]; then
-  echo "Release certification requires Node 22; found $(node --version)." >&2
+required_node="$(tr -d '[:space:]' < .nvmrc)"
+actual_node="$(node -p 'process.versions.node')"
+if [[ "$actual_node" != "$required_node" ]]; then
+  echo "Release certification requires Node $required_node; found $(node --version)." >&2
   exit 1
 fi
 
-echo "==> Clean dependency install"
+echo "==> Clean root/workspace dependency install"
 npm ci
 
-echo "==> Provision Playwright Chromium"
-npx playwright install chromium
+echo "==> Verify pinned Nix Playwright runtime"
+npm run check:playwright-runtime
 
-echo "==> Full local push gate"
-./scripts/pre-push.sh
+echo "==> Full three-engine local push gate"
+ENPLACE_ENGINES=all ./scripts/pre-push.sh
 
-echo "==> Dependency audit"
-npm audit --audit-level=high --ignore-scripts
+echo "==> Root and workspace dependency audit"
+npm audit --workspaces --include-workspace-root --audit-level=high --ignore-scripts
 
-echo "==> Static production build"
-npm run build:static
+echo "==> App, CLI, and production relay release build"
+npm run build:release
+
+echo "==> Cloudflare Pages boundary"
+npm run test:pages-boundary
 
 echo "==> MANUAL STEP REQUIRED: installed-PWA verification"
-echo "Open the static site in desktop Chromium with an isolated folder, install Enplace,"
-echo "and confirm reload, offline launch, direct Markdown writes, /, and /shopping."
+echo "Open the static site in desktop Chromium with a throwaway kitchen, install Enplace,"
+echo "and confirm a kitchen edit survives reload, offline launch, /, /shopping, and zip export."
 
 echo "==> Public snapshot"
 echo "After certification, publish this commit to the public repository with:"

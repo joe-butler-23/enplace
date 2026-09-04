@@ -10,7 +10,8 @@ import * as Y from "yjs";
  *
  * Text content is a top-level type rather than a value nested under the map key on purpose:
  * two devices creating the same file at the same moment then edit one shared text instead of
- * racing to own the key, so neither device's content is discarded.
+ * racing to own the key, so neither device's content is discarded. Concurrent file/directory
+ * collisions stay untouched in Yjs and receive filesystem-safe names through one derived projection.
  *
  * This module is shared by the browser adapter, the CLI mirror, and tests. It knows nothing
  * about persistence or transport.
@@ -36,47 +37,140 @@ function kitchenText(doc: Y.Doc, path: string): Y.Text {
 }
 
 export function normalizeKitchenPath(path: string): string {
-  let values = path.replace(/\\/g, "/").replace(/^\/+/, "").split("/").filter(Boolean);
-  if (values[0] === "appdata") values = [".mep", ...values.slice(1)];
-  if (values[0] === "home" && values[1] === "vault") values = values.slice(2);
+  if (/^(?:[\\/]|[A-Za-z]:)/.test(path)) throw new Error(`Invalid folder path: ${path}`);
+  const values = path.replace(/\\/g, "/").split("/").filter(Boolean);
   if (values.some((value) => value === "." || value === "..")) throw new Error(`Invalid folder path: ${path}`);
   return values.join("/");
+}
+
+/** Returns a file which makes `path` unrepresentable in a real folder. */
+export function kitchenPathConflict(paths: Iterable<string>, path: string): string | null {
+  for (const candidate of paths) {
+    if (candidate === path || path.startsWith(`${candidate}/`) || candidate.startsWith(`${path}/`)) return candidate;
+  }
+  return null;
+}
+
+
+type KitchenPathProjection = {
+  rawToVisible: Map<string, string>;
+  visibleToRaw: Map<string, string>;
+};
+
+function comparePaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function pathFingerprint(path: string): string {
+  let hash = 0x811c9dc5;
+  for (const byte of encoder.encode(path)) hash = Math.imul(hash ^ byte, 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function conflictName(path: string, attempt: number): string {
+  const slash = path.lastIndexOf("/");
+  const directory = slash < 0 ? "" : path.slice(0, slash + 1);
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const suffix = ` (file conflict ${pathFingerprint(path)}${attempt === 1 ? "" : `-${attempt}`})`;
+  if (dot > 0) return `${directory}${name.slice(0, dot)}${suffix}${name.slice(dot)}`;
+  if (dot === 0) return `${directory}file${suffix}${name}`;
+  return `${directory}${name}${suffix}`;
+}
+
+/** Pure visible-folder projection. Raw Yjs keys and their Y.Text identities never move. */
+function kitchenPathProjection(doc: Y.Doc): KitchenPathProjection {
+  const rawPaths = [...kitchenFiles(doc).keys()].sort(comparePaths);
+  const allRaw = new Set(rawPaths);
+  const moved = new Set<string>(rawPaths.filter((path) => path === "__proto__"));
+  for (const path of rawPaths) {
+    for (let slash = path.indexOf("/"); slash >= 0; slash = path.indexOf("/", slash + 1)) {
+      const ancestor = path.slice(0, slash);
+      if (allRaw.has(ancestor)) moved.add(ancestor);
+    }
+  }
+  const rawToVisible = new Map<string, string>();
+  const visibleToRaw = new Map<string, string>();
+  const occupied = new Set(rawPaths.filter((path) => !moved.has(path)));
+  for (const path of occupied) {
+    rawToVisible.set(path, path);
+    visibleToRaw.set(path, path);
+  }
+  for (const raw of [...moved].sort(comparePaths)) {
+    let attempt = 1;
+    let visible = conflictName(raw, attempt);
+    while (allRaw.has(visible) || kitchenPathConflict(occupied, visible)) {
+      attempt += 1;
+      visible = conflictName(raw, attempt);
+    }
+    occupied.add(visible);
+    rawToVisible.set(raw, visible);
+    visibleToRaw.set(visible, raw);
+  }
+  return { rawToVisible, visibleToRaw };
+}
+
+function writableRawKitchenPath(doc: Y.Doc, input: string): string {
+  const path = normalizeKitchenPath(input);
+  if (!path) throw new Error("Cannot write the folder root.");
+  const projection = kitchenPathProjection(doc);
+  const existingRaw = projection.visibleToRaw.get(path);
+  if (existingRaw) return existingRaw;
+  if (kitchenFiles(doc).has(path)) throw new Error(`Cannot store ${input}: its raw path is hidden by projection.`);
+  const conflict = kitchenPathConflict(projection.visibleToRaw.keys(), path);
+  if (conflict) throw new Error(`Cannot store ${input}: it conflicts with file ${conflict}.`);
+  return path;
 }
 
 export function isTextPath(path: string): boolean {
   const dot = path.lastIndexOf(".");
   if (dot < 0) return false;
-  return TEXT_EXTENSIONS.has(path.slice(dot + 1).toLocaleLowerCase());
+  return TEXT_EXTENSIONS.has(path.slice(dot + 1).toLowerCase());
 }
 
 export function listKitchenPaths(doc: Y.Doc): string[] {
-  return [...kitchenFiles(doc).keys()].sort((left, right) => left.localeCompare(right));
+  return [...kitchenPathProjection(doc).visibleToRaw.keys()].sort((left, right) => left.localeCompare(right));
 }
 
 export function hasKitchenFile(doc: Y.Doc, path: string): boolean {
-  return kitchenFiles(doc).has(normalizeKitchenPath(path));
+  return kitchenPathProjection(doc).visibleToRaw.has(normalizeKitchenPath(path));
 }
 
 export function hasKitchenDirectory(doc: Y.Doc, path: string): boolean {
   const normalized = normalizeKitchenPath(path);
   if (!normalized) return true;
   const prefix = `${normalized}/`;
-  for (const key of kitchenFiles(doc).keys()) if (key.startsWith(prefix)) return true;
+  for (const key of kitchenPathProjection(doc).visibleToRaw.keys()) if (key.startsWith(prefix)) return true;
   return false;
 }
 
 export function readKitchenText(doc: Y.Doc, path: string): string | null {
   const key = normalizeKitchenPath(path);
-  const entry = kitchenFiles(doc).get(key);
+  const raw = kitchenPathProjection(doc).visibleToRaw.get(key);
+  if (!raw) return null;
+  const entry = kitchenFiles(doc).get(raw);
   if (entry === undefined) return null;
-  return entry === TEXT_MARK ? kitchenText(doc, key).toString() : decoder.decode(entry);
+  return entry === TEXT_MARK ? kitchenText(doc, raw).toString() : decoder.decode(entry);
+}
+
+function rawKitchenBytes(doc: Y.Doc, raw: string): Uint8Array | null {
+  const entry = kitchenFiles(doc).get(raw);
+  if (entry === undefined) return null;
+  return entry === TEXT_MARK ? encoder.encode(kitchenText(doc, raw).toString()) : entry.slice();
 }
 
 export function readKitchenBytes(doc: Y.Doc, path: string): Uint8Array | null {
   const key = normalizeKitchenPath(path);
-  const entry = kitchenFiles(doc).get(key);
-  if (entry === undefined) return null;
-  return entry === TEXT_MARK ? encoder.encode(kitchenText(doc, key).toString()) : entry.slice();
+  const raw = kitchenPathProjection(doc).visibleToRaw.get(key);
+  return raw ? rawKitchenBytes(doc, raw) : null;
+}
+
+/** Reads a whole projected kitchen from one derived path snapshot. */
+export function walkKitchenFiles(doc: Y.Doc): Array<{ path: string; bytes: Uint8Array }> {
+  const projection = kitchenPathProjection(doc);
+  return [...projection.visibleToRaw]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, raw]) => ({ path, bytes: rawKitchenBytes(doc, raw) ?? new Uint8Array() }));
 }
 
 type TextDiffHunk = { start: number; end: number; lines: string[] };
@@ -85,7 +179,7 @@ function splitTextLines(value: string): string[] {
   return value.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
 
-function textDiffHunks(current: string[], next: string[]): TextDiffHunk[] {
+function textMatchLengths(current: string[], next: string[]): Uint32Array[] {
   const lengths = Array.from({ length: current.length + 1 }, () => new Uint32Array(next.length + 1));
   for (let left = current.length - 1; left >= 0; left -= 1) {
     for (let right = next.length - 1; right >= 0; right -= 1) {
@@ -94,34 +188,33 @@ function textDiffHunks(current: string[], next: string[]): TextDiffHunk[] {
         : Math.max(lengths[left + 1][right], lengths[left][right + 1]);
     }
   }
+  return lengths;
+}
 
+function textDiffHunks(current: string[], next: string[]): TextDiffHunk[] {
+  const lengths = textMatchLengths(current, next);
   const hunks: TextDiffHunk[] = [];
   let left = 0;
   let right = 0;
   let hunk: TextDiffHunk | null = null;
-  const finish = (): void => {
-    if (hunk) hunks.push(hunk);
-    hunk = null;
-  };
-  const active = (): TextDiffHunk => {
-    hunk ??= { start: left, end: left, lines: [] };
-    return hunk;
-  };
-
   while (left < current.length || right < next.length) {
     if (left < current.length && right < next.length && current[left] === next[right]) {
-      finish();
+      if (hunk) hunks.push(hunk);
+      hunk = null;
       left += 1;
       right += 1;
-    } else if (right < next.length && (left === current.length || lengths[left][right + 1] >= lengths[left + 1][right])) {
-      active().lines.push(next[right]);
+      continue;
+    }
+    hunk ??= { start: left, end: left, lines: [] };
+    if (right < next.length && (left === current.length || lengths[left][right + 1] >= lengths[left + 1][right])) {
+      hunk.lines.push(next[right]);
       right += 1;
     } else {
-      active().end += 1;
+      hunk.end += 1;
       left += 1;
     }
   }
-  finish();
+  if (hunk) hunks.push(hunk);
   return hunks;
 }
 
@@ -159,8 +252,7 @@ export function applyTextDiff(text: Y.Text, next: string): void {
 }
 
 export function writeKitchenText(doc: Y.Doc, path: string, next: string, origin?: unknown): void {
-  const key = normalizeKitchenPath(path);
-  if (!key) throw new Error("Cannot write the folder root.");
+  const key = writableRawKitchenPath(doc, path);
   const files = kitchenFiles(doc);
   doc.transact(() => {
     if (files.get(key) !== TEXT_MARK) files.set(key, TEXT_MARK);
@@ -173,8 +265,7 @@ export function writeKitchenBytes(doc: Y.Doc, path: string, bytes: Uint8Array, o
     writeKitchenText(doc, path, decoder.decode(bytes), origin);
     return;
   }
-  const key = normalizeKitchenPath(path);
-  if (!key) throw new Error("Cannot write the folder root.");
+  const key = writableRawKitchenPath(doc, path);
   doc.transact(() => { kitchenFiles(doc).set(key, bytes.slice()); }, origin);
 }
 
@@ -191,22 +282,17 @@ function deleteEntry(doc: Y.Doc, key: string): void {
 export function deleteKitchenPath(doc: Y.Doc, path: string, recursive = false, origin?: unknown): string[] {
   const key = normalizeKitchenPath(path);
   if (!key) throw new Error("Cannot remove the folder root.");
-  const files = kitchenFiles(doc);
-  if (files.has(key)) {
-    doc.transact(() => { deleteEntry(doc, key); }, origin);
-    return [key];
-  }
+  const projection = kitchenPathProjection(doc);
+  const exactRaw = projection.visibleToRaw.get(key);
   const prefix = `${key}/`;
-  const children = [...files.keys()].filter((candidate) => candidate.startsWith(prefix));
-  if (!children.length) throw new Error(`File not found: ${path}`);
-  if (!recursive) throw new Error(`Directory is not empty: ${path}`);
-  doc.transact(() => { for (const child of children) deleteEntry(doc, child); }, origin);
-  return children;
-}
-
-function topLevelName(doc: Y.Doc, type: unknown): string | null {
-  for (const [name, shared] of doc.share) if (shared === type) return name;
-  return null;
+  const children = [...projection.visibleToRaw].filter(([visible]) => visible.startsWith(prefix));
+  if (!exactRaw && !children.length) throw new Error(`File not found: ${path}`);
+  if (!exactRaw && !recursive) throw new Error(`Directory is not empty: ${path}`);
+  const removed = recursive
+    ? [...(exactRaw ? [[key, exactRaw] as const] : []), ...children]
+    : [[key, exactRaw!] as const];
+  doc.transact(() => { for (const [, raw] of removed) deleteEntry(doc, raw); }, origin);
+  return removed.map(([visible]) => visible);
 }
 
 /**
@@ -218,16 +304,29 @@ export function observeKitchen(
   listener: (paths: Set<string>, origin: unknown) => void,
 ): () => void {
   const files = kitchenFiles(doc);
+  let previous = kitchenPathProjection(doc);
   const handler = (transaction: Y.Transaction): void => {
-    const paths = new Set<string>();
-    for (const [type, keys] of transaction.changed) {
-      if ((type as unknown) === files) {
-        for (const key of keys) if (key) paths.add(key);
-        continue;
-      }
-      const name = topLevelName(doc, type);
-      if (name?.startsWith(TEXT_PREFIX)) paths.add(name.slice(TEXT_PREFIX.length));
+    const changedRaw = new Set<string>();
+    const changes: ReadonlyMap<unknown, ReadonlySet<string | null>> = transaction.changed;
+    for (const key of changes.get(files) ?? []) {
+      if (key) changedRaw.add(key);
     }
+    for (const [name, type] of doc.share) {
+      if (name.startsWith(TEXT_PREFIX) && transaction.changed.has(type)) {
+        changedRaw.add(name.slice(TEXT_PREFIX.length));
+      }
+    }
+    if (!changedRaw.size) return;
+    const next = kitchenPathProjection(doc);
+    const paths = new Set<string>();
+    for (const raw of new Set([...previous.rawToVisible.keys(), ...next.rawToVisible.keys()])) {
+      const before = previous.rawToVisible.get(raw);
+      const after = next.rawToVisible.get(raw);
+      if (!changedRaw.has(raw) && before === after) continue;
+      if (before) paths.add(before);
+      if (after) paths.add(after);
+    }
+    previous = next;
     if (paths.size) listener(paths, transaction.origin);
   };
   doc.on("afterTransaction", handler);

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test, type FilePayload, type Page } from "@playwright/test";
+import { unzipSync, zipSync } from "fflate";
 
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
@@ -38,7 +39,7 @@ async function importFiles(page: Page, files: string | string[] | FilePayload | 
   await openSettings(page);
   const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(files);
-  await expect(page.locator(".mep-notices")).toContainText(`Imported ${count} files; skipped 0 existing files.`);
+  await expect(page.locator(".mep-notices")).toContainText(`Imported ${count} file${count === 1 ? "" : "s"}; skipped 0 existing files.`);
   await page.getByTitle("Close settings").click();
 }
 
@@ -49,9 +50,9 @@ type VisibleKitchenState = {
   shopping: Array<{ item: string; checked: boolean }>;
 };
 
-async function collectVisibleKitchenState(page: Page): Promise<VisibleKitchenState> {
+async function collectVisibleKitchenState(page: Page, recipeCount = 2): Promise<VisibleKitchenState> {
   await page.getByRole("button", { name: "Recipe Database", exact: true }).click();
-  await expect(page.getByText("2 recipes", { exact: true })).toBeVisible();
+  await expect(page.getByText(`${recipeCount} recipes`, { exact: true })).toBeVisible();
   const titles = (await page.locator(".cooking-db__title").allTextContents()).sort();
   const recipes: VisibleKitchenState["recipes"] = [];
   for (const title of titles) {
@@ -59,7 +60,7 @@ async function collectVisibleKitchenState(page: Page): Promise<VisibleKitchenSta
     await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
     recipes.push({ title, ingredientCount: await page.locator(".recipe-view__ingredients-panel li").count() });
     await page.getByRole("button", { name: "Recipe Database", exact: true }).click();
-    await expect(page.getByText("2 recipes", { exact: true })).toBeVisible();
+    await expect(page.getByText(`${recipeCount} recipes`, { exact: true })).toBeVisible();
   }
 
   await page.getByRole("button", { name: "Planner", exact: true }).click();
@@ -83,34 +84,31 @@ async function collectVisibleKitchenState(page: Page): Promise<VisibleKitchenSta
   return { recipes, plan, dayNotes, shopping };
 }
 
-test("a zip export imports into a new kitchen without losing visible cooking state", async ({ page, browser }) => {
+test("offline paste and a disconnected path collision survive visible ZIP round-trip", async ({ page, browser, browserName }) => {
+  test.skip(browserName === "webkit", "WebKit cannot read Playwright-injected files while the context is offline");
   const monday = currentMonday();
-  await openEmptyKitchen(page);
+  const id = newKitchenId();
+  await page.goto(`/#k=${id}`);
   await importFiles(page, [
     {
-      name: "round-trip-soup.md",
-      mimeType: "text/markdown",
+      name: "round-trip-soup.md", mimeType: "text/markdown",
       buffer: Buffer.from("---\ntitle: Round Trip Soup\n---\n\n# Round Trip Soup\n\n## Ingredients\n- 2 onions\n- 1 litre stock\n- black pepper\n\n## Method\n1. Simmer.\n"),
     },
     {
-      name: "round-trip-pie.md",
-      mimeType: "text/markdown",
+      name: "round-trip-pie.md", mimeType: "text/markdown",
       buffer: Buffer.from("---\ntitle: Round Trip Pie\n---\n\n# Round Trip Pie\n\n## Ingredients\n- pastry\n- 3 apples\n\n## Method\n1. Bake.\n"),
     },
     {
-      name: "Plan.md",
-      mimeType: "text/markdown",
+      name: "Plan.md", mimeType: "text/markdown",
       buffer: Buffer.from(`## Marked\n- [[round-trip-soup]]\n\n## ${monday}\n> Pick up the veg box\n- [[round-trip-pie]]\n`),
     },
     {
-      name: "Shopping.md",
-      mimeType: "text/markdown",
+      name: "Shopping.md", mimeType: "text/markdown",
       buffer: Buffer.from("# Shopping\n\n## Other\n- [ ] fresh basil\n- [x] olive oil\n"),
     },
   ], 4);
-
-  const sourceState = await collectVisibleKitchenState(page);
-  expect(sourceState).toEqual({
+  const initial = await collectVisibleKitchenState(page);
+  expect(initial).toEqual({
     recipes: [
       { title: "Round Trip Pie", ingredientCount: 2 },
       { title: "Round Trip Soup", ingredientCount: 3 },
@@ -121,29 +119,93 @@ test("a zip export imports into a new kitchen without losing visible cooking sta
     ],
     dayNotes: [{ date: monday, note: "Pick up the veg box" }],
     shopping: [
-      { item: "fresh basil", checked: false },
-      { item: "olive oil", checked: true },
+      { item: "fresh basil", checked: false }, { item: "olive oil", checked: true },
     ],
   });
+  await page.getByRole("button", { name: "Planner", exact: true }).click();
+  await page.getByRole("button", { name: "Build shopping list" }).click();
+  await expect(page).toHaveURL(/\/shopping#k=/);
+  const beforeOffline = await collectVisibleKitchenState(page);
+  expect(beforeOffline.shopping).toEqual([
+    { item: "fresh basil", checked: false }, { item: "olive oil", checked: true },
+    { item: "pastry", checked: false }, { item: "3 apples", checked: false },
+  ]);
 
-  await openSettings(page);
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download kitchen (.zip)" }).click();
-  const download = await downloadPromise;
-  const zipPath = await download.path();
-  expect(zipPath).not.toBeNull();
-
-  const targetContext = await browser.newContext();
-  const target = await targetContext.newPage();
+  const rightContext = await browser.newContext();
+  const right = await rightContext.newPage();
   try {
-    await openEmptyKitchen(target);
-    await importFiles(target, {
-      name: "enplace-kitchen.zip",
-      mimeType: "application/zip",
-      buffer: await readFile(zipPath!),
-    }, 4);
-    expect(await collectVisibleKitchenState(target)).toEqual(sourceState);
-  } finally {
-    await targetContext.close();
-  }
+    await right.goto(`/#k=${id}`);
+    expect(await collectVisibleKitchenState(right)).toEqual(beforeOffline);
+    await page.goto(`/?share-target#k=${id}`);
+    await expect(page.getByLabel("Recipe title")).toBeVisible();
+    const documentToken = await page.evaluate(() => (document.documentElement.dataset.testToken = crypto.randomUUID()));
+    await page.context().setOffline(true);
+    await rightContext.setOffline(true);
+    await expect(page.evaluate(() => navigator.onLine)).resolves.toBe(false);
+    await expect(right.evaluate(() => navigator.onLine)).resolves.toBe(false);
+    await expect(right.getByText("Offline. Your ticks are saved on this phone.", { exact: true })).toBeVisible();
+    await right.reload();
+    await expect(right.getByRole("checkbox", { name: "fresh basil" })).toBeVisible();
+    await expect(right.getByText("Offline. Your ticks are saved on this phone.", { exact: true })).toBeVisible();
+    await importFiles(page, {
+      name: "existing.zip", mimeType: "application/zip",
+      buffer: Buffer.from(zipSync({ "images/blocked.png": new Uint8Array([9]) })),
+    }, 1);
+    await page.getByLabel("Recipe title").fill("Blocked");
+    await page.getByLabel("Recipe ingredients").fill("onion");
+    await page.getByLabel("Recipe method").fill("Simmer");
+    await page.getByLabel("Recipe cover image").setInputFiles({
+      name: "blocked.png", mimeType: "image/png", buffer: Buffer.from([1, 2, 3]),
+    });
+    await page.getByRole("button", { name: "Import recipe" }).click();
+    await expect(page.getByRole("alert")).toContainText("images/blocked.png");
+    await page.getByLabel("Recipe title").fill("Recipes");
+    await page.getByRole("button", { name: "Import recipe" }).click();
+    await expect(page.getByRole("button", { name: "Open recipe Recipes" })).toBeVisible();
+    await expect(page.evaluate(() => document.documentElement.dataset.testToken)).resolves.toBe(documentToken);
+    await importFiles(right, {
+      name: "child.zip", mimeType: "application/zip",
+      buffer: Buffer.from(zipSync({ "recipes.md/nested/cover.webp": new Uint8Array([0, 255, 7]) })),
+    }, 1);
+    await rightContext.setOffline(false);
+    await page.context().setOffline(false);
+    await expect(page.locator('.cooking-db__card[data-path="recipes (file conflict 0ed49ba7).md"]')).toBeVisible();
+
+    const source = await collectVisibleKitchenState(page, 3);
+    expect(source).toEqual({
+      ...initial,
+      recipes: [
+        { title: "Recipes", ingredientCount: 1 },
+        { title: "Round Trip Pie", ingredientCount: 2 },
+        { title: "Round Trip Soup", ingredientCount: 3 },
+      ],
+      shopping: [
+        { item: "fresh basil", checked: false }, { item: "olive oil", checked: true },
+        { item: "pastry", checked: false }, { item: "3 apples", checked: false },
+      ],
+    });
+    await openSettings(page);
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download kitchen (.zip)" }).click();
+    const exportedPath = await (await download).path();
+    const exported = unzipSync(await readFile(exportedPath!));
+    const renamed = "recipes (file conflict 0ed49ba7).md";
+    expect(Object.keys(exported).sort()).toEqual([
+      "Plan.md", "Shopping.md", "images/blocked.png", "images/recipes.png", renamed,
+      "recipes.md/nested/cover.webp", "round-trip-pie.md", "round-trip-soup.md",
+    ]);
+    expect(exported["blocked.md"]).toBeUndefined();
+    expect(new TextDecoder().decode(exported[renamed])).toContain("# Recipes");
+    expect(exported["images/recipes.png"]).toEqual(new Uint8Array([1, 2, 3]));
+
+    const targetContext = await browser.newContext();
+    const target = await targetContext.newPage();
+    try {
+      await openEmptyKitchen(target);
+      await importFiles(target, {
+        name: "kitchen.zip", mimeType: "application/zip", buffer: await readFile(exportedPath!),
+      }, 8);
+      expect(await collectVisibleKitchenState(target, 3)).toEqual(source);
+    } finally { await targetContext.close(); }
+  } finally { await rightContext.close(); }
 });

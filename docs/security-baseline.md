@@ -13,9 +13,7 @@ Enplace code and the app treats it as untrusted transport.
   access logs hold it, and a relay operator can open any kitchen it hosts until
   end-to-end encryption lands. Anyone holding the link holds the kitchen;
   sharing the link is the sharing model. The share dialog states, “Anyone with
-  this private link can view and change this kitchen.” Its reset-link action
-  copies the current document to a new kitchen id, leaving the old room as-is
-  while people with the old link lose access to future changes.
+  this private link can view and change this kitchen.”
 - The kitchen document is the sole authority for user content and state. Every
   device keeps its own full copy in IndexedDB; the relay keeps a copy for
   fan-out. Clearing browser storage removes this device's copy only.
@@ -29,13 +27,15 @@ Enplace code and the app treats it as untrusted transport.
 
 ## Static Deployment Boundary
 
-Cloudflare Pages builds with Node 22 using `npm run build:static` and publishes
-`dist-static`. The deployment contains HTML, JavaScript, CSS, images, the web
-manifest, and the service worker only. There is no server process or API.
+The release uses the exact Node 22 pinned in `.nvmrc`. One root `npm ci`
+installs the app, CLI, and production relay workspace from one lockfile.
+`npm run build:release` checks the static app output, CLI compile, and relay
+Wrangler dry-run; Cloudflare Pages publishes `dist-static`. The deployment
+contains HTML, JavaScript, CSS, images, the web manifest, and the service worker only. There is no server process or API.
 
 `public/_redirects` maps browser navigation routes to `index.html`. The service
-worker precaches the application shell and uses cached `index.html` when a
-navigation fails or returns a non-success response. It does not cache or upload
+worker precaches the application shell and serves the cached canonical root `/`
+for navigation requests. It does not cache or upload
 kitchen contents.
 
 ## Security Headers

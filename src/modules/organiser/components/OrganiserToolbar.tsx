@@ -1,4 +1,13 @@
 import * as React from "react";
+import { usePikadayDatePicker } from "../hooks/usePikadayDatePicker";
+import {
+  addCalendarDays,
+  calendarWeekOffset,
+  dateFromIso,
+  formatIsoDate,
+  formatPlannerDate,
+  startOfIsoWeek,
+} from "../utils/scheduled-dates";
 
 type PopoverId = "filter" | "sort" | null;
 
@@ -42,7 +51,7 @@ export type OrganiserToolbarPopovers = {
 	isSortActive: boolean;
 };
 
-type OrganiserToolbarProps = {
+export type OrganiserToolbarProps = {
   topbarRef: React.RefObject<HTMLDivElement | null>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -54,7 +63,7 @@ type OrganiserToolbarProps = {
   popovers: OrganiserToolbarPopovers;
 };
 
-function renderOrganiserToolbar({
+export function OrganiserToolbar({
   topbarRef,
   searchQuery,
   onSearchChange,
@@ -170,8 +179,6 @@ function renderOrganiserToolbar({
           </button>
           <span
             className="week-range"
-            // @ts-expect-error elementtiming is a valid Element Timing API attribute.
-            elementtiming="mep:planner-week-range"
           >
             {weekRangeDisplay}
           </span>
@@ -284,6 +291,164 @@ function renderOrganiserToolbar({
   );
 }
 
-export function OrganiserToolbar(props: OrganiserToolbarProps): React.JSX.Element {
-	return renderOrganiserToolbar(props);
+
+const SORT_OPTIONS = [
+  { id: "default", label: "Default" },
+  { id: "title-asc", label: "Title A-Z" },
+  { id: "title-desc", label: "Title Z-A" },
+  { id: "added-desc", label: "Added (newest)" },
+  { id: "added-asc", label: "Added (oldest)" },
+];
+
+type WeeklyToolbarState = {
+  searchQuery: string;
+  setSearchQuery: (value: string) => void;
+  sortBy: string;
+  weekOffset: number;
+  startDateValue: string;
+  endDateValue: string;
+  weekRangeDisplay: string;
+  advanceWeek: () => void;
+  toolbarProps: Omit<OrganiserToolbarProps, "onSendShoppingList" | "isReviewOpen" | "onToggleReview">;
+};
+
+/** Owns the weekly toolbar's navigation, date picker, filter, and sort lifecycle. */
+export function useWeeklyToolbarState(): WeeklyToolbarState {
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [activePopover, setActivePopover] = React.useState<PopoverId>(null);
+  const [sortBy, setSortBy] = React.useState("default");
+  const [showTimeControls, setShowTimeControls] = React.useState(true);
+  const [weekOffset, setWeekOffset] = React.useState(0);
+  const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
+  const topbarRef = React.useRef<HTMLDivElement>(null);
+  const calendarInputRef = React.useRef<HTMLInputElement>(null);
+  const calendarPopoverRef = React.useRef<HTMLDivElement>(null);
+  const calendarToggleRef = React.useRef<HTMLButtonElement>(null);
+  const filterButtonRef = React.useRef<HTMLButtonElement>(null);
+  const filterPopoverRef = React.useRef<HTMLDivElement>(null);
+  const sortButtonRef = React.useRef<HTMLButtonElement>(null);
+  const sortPopoverRef = React.useRef<HTMLDivElement>(null);
+
+  const startDate = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
+  const endDate = addCalendarDays(startDate, 6);
+  const startDateValue = formatIsoDate(startDate);
+  const endDateValue = formatIsoDate(endDate);
+  const weekRangeDisplay = `${formatPlannerDate(startDate, false, false)} - ${formatPlannerDate(endDate, false, true)}`;
+
+  React.useEffect(() => {
+    if (!showTimeControls && isCalendarOpen) setIsCalendarOpen(false);
+  }, [isCalendarOpen, showTimeControls]);
+
+  const handleCalendarSelect = React.useCallback((date: Date) => {
+    if (!date || Number.isNaN(date.getTime())) return;
+    setWeekOffset(calendarWeekOffset(date));
+    setIsCalendarOpen(false);
+  }, []);
+  const handleCalendarClose = React.useCallback(() => setIsCalendarOpen(false), []);
+  const calendarSelectedDate = React.useMemo(() => dateFromIso(startDateValue), [startDateValue]);
+  const { gotoToday, clear: clearCalendarSelection } = usePikadayDatePicker({
+    isOpen: isCalendarOpen,
+    inputRef: calendarInputRef,
+    containerRef: calendarPopoverRef,
+    selectedDate: calendarSelectedDate,
+    onSelect: handleCalendarSelect,
+    onClose: handleCalendarClose,
+  });
+  const handleCalendarClear = React.useCallback(() => {
+    clearCalendarSelection();
+    setWeekOffset(0);
+    setIsCalendarOpen(false);
+  }, [clearCalendarSelection]);
+
+  React.useEffect(() => {
+    if (!isCalendarOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const isInsidePopover = calendarPopoverRef.current?.contains(target);
+      const isInsideToggle = calendarToggleRef.current?.contains(target);
+      let element: HTMLElement | null = target;
+      let isInsidePikaday = false;
+      while (element) {
+        if (typeof element.className === "string" && element.className.includes("pika")) {
+          isInsidePikaday = true;
+          break;
+        }
+        element = element.parentElement;
+      }
+      if (!isInsidePopover && !isInsideToggle && !isInsidePikaday) setIsCalendarOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCalendarOpen]);
+
+  React.useEffect(() => {
+    if (!activePopover) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const refs = activePopover === "filter"
+        ? [filterButtonRef, filterPopoverRef]
+        : [sortButtonRef, sortPopoverRef];
+      if (refs.some((ref) => ref.current?.contains(target))) return;
+      setActivePopover(null);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [activePopover]);
+
+  const togglePopover = React.useCallback((name: Exclude<PopoverId, null>) => {
+    setActivePopover((previous) => previous === name ? null : name);
+  }, []);
+  const handleSortChange = React.useCallback((next: string) => {
+    setSortBy(next);
+    setActivePopover(null);
+  }, []);
+  const handleCalendarToggle = React.useCallback(() => setIsCalendarOpen((open) => !open), []);
+  const previousWeek = React.useCallback(() => setWeekOffset((offset) => offset - 1), []);
+  const nextWeek = React.useCallback(() => setWeekOffset((offset) => offset + 1), []);
+  const resetWeek = React.useCallback(() => setWeekOffset(0), []);
+
+  const calendar: OrganiserToolbarCalendar = {
+    isOpen: isCalendarOpen,
+    isTimeRowVisible: showTimeControls,
+    startDateValue,
+    inputRef: calendarInputRef,
+    popoverRef: calendarPopoverRef,
+    toggleRef: calendarToggleRef,
+    onToggle: handleCalendarToggle,
+    onGotoToday: gotoToday,
+    onClearDate: handleCalendarClear,
+  };
+  const weekNav: OrganiserToolbarWeekNav = {
+    onPrevWeek: previousWeek,
+    onNextWeek: nextWeek,
+    onResetWeek: resetWeek,
+    weekRangeDisplay,
+  };
+  const popovers: OrganiserToolbarPopovers = {
+    filterButtonRef,
+    filterPopoverRef,
+    sortButtonRef,
+    sortPopoverRef,
+    activePopover,
+    onToggle: togglePopover,
+    showTimeControls,
+    onToggleShowTimeControls: setShowTimeControls,
+    sortOptions: SORT_OPTIONS,
+    sortBy,
+    onSortChange: handleSortChange,
+    isFilterActive: !showTimeControls,
+    isSortActive: sortBy !== "default",
+  };
+
+  return {
+    searchQuery,
+    setSearchQuery,
+    sortBy,
+    weekOffset,
+    startDateValue,
+    endDateValue,
+    weekRangeDisplay,
+    advanceWeek: nextWeek,
+    toolbarProps: { topbarRef, searchQuery, onSearchChange: setSearchQuery, calendar, weekNav, popovers },
+  };
 }

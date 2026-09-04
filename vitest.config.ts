@@ -13,7 +13,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@/platform": path.resolve(__dirname, "test/platform-mock.ts"),
       "@": path.resolve(__dirname, "src"),
       "react/jsx-runtime": "preact/jsx-runtime",
       "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
@@ -21,8 +20,7 @@ export default defineConfig({
       "react-dom/server": "preact/compat/server",
       "react-dom/test-utils": "preact/test-utils",
       "react-dom": "preact/compat",
-      "react": "preact/compat",
-      obsidian: path.resolve(__dirname, "test/platform-mock.ts")
+      "react": "preact/compat"
     }
   }
 });

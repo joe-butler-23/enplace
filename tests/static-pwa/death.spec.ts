@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { persistedUpdateCount } from "./helpers";
 
 test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 import { unzipSync } from "fflate";
@@ -10,19 +11,6 @@ const SAMPLE_RECIPE_PATHS = readdirSync("sample/recipes").filter((name) => name.
 async function ensureServiceWorkerControl(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
-}
-
-async function persistedUpdateCount(page: Page, id: string): Promise<number> {
-  return page.evaluate(async (name) => new Promise<number>((resolve, reject) => {
-    const request = indexedDB.open(name);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const count = db.transaction("updates", "readonly").objectStore("updates").count();
-      count.onsuccess = () => { db.close(); resolve(count.result); };
-      count.onerror = () => { db.close(); reject(count.error); };
-    };
-  }), `enplace-kitchen-${id}`);
 }
 
 async function openSettings(page: Page): Promise<void> {

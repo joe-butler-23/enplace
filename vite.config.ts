@@ -75,7 +75,7 @@ function appShellServiceWorker(): Plugin {
       }
       const trackedHeaders = readFileSync(path.resolve(__dirname, "public/_headers"), "utf8").trimEnd();
       const navigationHeaders = EARLY_HINT_ROUTES
-        .map((route) => `${route}\n${linkHeader}`)
+        .map((route) => `${route}\n  Cache-Control: no-store\n${linkHeader}`)
         .join("\n\n");
       this.emitFile({
         type: "asset",
@@ -87,8 +87,10 @@ function appShellServiceWorker(): Plugin {
       // are cached on first use instead. Cache the canonical root so hosts that redirect
       // /index.html never leave a redirected response that Chromium rejects for navigation.
       const files = new Set(["/", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png"]);
-      const deferred = /(?:^|\/)sample-pack-[^/]+\.pack$|(?:^|\/)browser-[^/]+\.js$|vietnamese|latin-ext/;
-      for (const output of outputs) if (!deferred.test(output.fileName)) files.add(`/${output.fileName}`);
+      const deferred = /(?:^|\/)sample-pack-[^/]+\.pack$|(?:^|\/)browser-[^/]+\.js$/;
+      for (const output of outputs) {
+        if (output.fileName !== "index.html" && !deferred.test(output.fileName)) files.add(`/${output.fileName}`);
+      }
       const precache = [...files].sort();
       const template = readFileSync(path.resolve(__dirname, "src/pwa/service-worker.js"), "utf8");
       const version = createHash("sha256")
@@ -110,42 +112,35 @@ function appShellServiceWorker(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
-  return {
-    plugins: [appShellServiceWorker()],
-    resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "src"),
-        "react/jsx-runtime": "preact/jsx-runtime",
-        "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
-        "react-dom/client": "preact/compat/client",
-        "react-dom/server": "preact/compat/server",
-        "react-dom/test-utils": "preact/test-utils",
-        "react-dom": "preact/compat",
-        "react": "preact/compat",
-      },
-      dedupe: ["preact"],
+export default defineConfig({
+  plugins: [appShellServiceWorker()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+      "react/jsx-runtime": "preact/jsx-runtime",
+      "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
+      "react-dom/client": "preact/compat/client",
+      "react-dom/server": "preact/compat/server",
+      "react-dom/test-utils": "preact/test-utils",
+      "react-dom": "preact/compat",
+      "react": "preact/compat",
     },
-    define: {
-      __MEP_DEV__: JSON.stringify(mode === "development"),
-      global: "globalThis",
+    dedupe: ["preact"],
+  },
+  server: {
+    host: "127.0.0.1",
+    port: 5174,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
     },
-    server: {
-      host: "127.0.0.1",
-      port: 5174,
-      headers: {
-        "Cache-Control": "no-store, max-age=0",
-      },
-      fs: {
-        allow: [path.resolve(__dirname)],
-      },
+    fs: {
+      allow: [path.resolve(__dirname)],
     },
-    base: "/",
-    build: {
-      target: "es2020",
-      outDir: "dist-static",
-      emptyOutDir: true,
-      manifest: true,
-    },
-  };
+  },
+  base: "/",
+  build: {
+    target: "es2020",
+    outDir: "dist-static",
+    emptyOutDir: true,
+  },
 });

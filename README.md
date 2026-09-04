@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `2bb22a553f7a`, 2026-09-03.
+> Published snapshot of a private repository, refreshed at each release. Source commit `d5c9f73cf375`, 2026-09-04.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -46,7 +46,7 @@ For terminal or agent-assisted workflows, the optional Node 22 `mep` CLI can che
 ```bash
 git clone https://github.com/joe-butler-23/mise-en-place.git
 cd mise-en-place
-npm ci
+npm ci # installs the app, CLI, and relay workspace from one lock
 npm run build:static
 npm run preview
 ```

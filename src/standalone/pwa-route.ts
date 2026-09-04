@@ -19,10 +19,6 @@ export function pathnameForView(view: string): string {
   return "/";
 }
 
-export function shoppingShareUrl(origin: string): string {
-  return new URL("/shopping", origin).toString();
-}
-
 /** Keep the active kitchen fragment when app navigation changes the pathname. */
 export function preserveKitchenHash(
   history: History,

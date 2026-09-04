@@ -36,10 +36,7 @@ function resolveAddedAfter(added: DatabaseState["added"]): number | undefined {
   return since.getTime();
 }
 
-export function databaseQuery(
-  _settings: StandaloneSettings,
-  state: DatabaseState
-): RecipeIndexQuery {
+export function databaseQuery(state: DatabaseState): RecipeIndexQuery {
   return {
     sortBy: state.sort,
     filter: {
@@ -94,8 +91,8 @@ export function buildDatabaseView(
   if (filter.scheduled !== undefined) items = items.filter((item) => (item.scheduled !== null) === filter.scheduled);
   if (filter.tags?.length) items = items.filter((item) => filter.tags!.every((tag) => item.tags.includes(tag)));
   if (filter.addedAfter !== undefined) items = items.filter((item) => (item.addedTimestamp ?? 0) >= filter.addedAfter!);
-  const search = query.search?.trim().toLocaleLowerCase();
-  if (search) items = items.filter((item) => `${item.title} ${item.path}`.toLocaleLowerCase().includes(search));
+  const search = query.search?.trim().toLowerCase();
+  if (search) items = items.filter((item) => `${item.title} ${item.path}`.toLowerCase().includes(search));
   const sort = query.sortBy ?? "added-desc";
   items.sort((left, right) => {
     if (sort === "title-asc") return left.title.localeCompare(right.title);
@@ -113,4 +110,12 @@ export function buildDatabaseView(
     availableTags: [...new Set(recipes.flatMap((recipe) => recipe.tags))].sort(),
     markedCount: recipes.filter((recipe) => plan.marked.includes(recipe.link)).length,
   };
+}
+
+export function projectDatabaseView(recipes: readonly Recipe[], plan: Plan, query: RecipeIndexQuery): { view: DatabaseView; sourceError: string | null } {
+  try { return { view: buildDatabaseView(recipes, plan, query), sourceError: null }; }
+  catch (error) {
+    return { view: { items: [], total: 0, availableTags: [], markedCount: 0 },
+      sourceError: error instanceof Error ? error.message : String(error) };
+  }
 }

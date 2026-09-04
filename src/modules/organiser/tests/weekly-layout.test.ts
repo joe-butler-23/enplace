@@ -6,6 +6,7 @@ import {
 } from "../utils/weekly-layout";
 import { addCalendarDays, calendarWeekOffset, formatIsoDate, formatPlannerDate, formatPlannerDay, normalizeFrontmatterDate, startOfIsoWeek } from "../utils/scheduled-dates";
 import { generateWeekColumns } from "../boards/weeklyOrganiserConfig";
+import { clampHorizontalScroll } from "../hooks/useWeeklyBoardLayout";
 
 describe("weekly layout sizing", () => {
 	it("clamps the persisted minimum width to 200px+", () => {
@@ -51,4 +52,15 @@ describe("weekly layout sizing", () => {
 		expect(title).not.toContain('<img src=x onerror="alert(1)">');
 		expect(title).toContain('class="organiser-column-note has-note"');
 	});
+
+	it("ignores an absent scroll host", () => expect(() => clampHorizontalScroll(null)).not.toThrow());
+
+	it.each([
+		[100, 100, 4, 0], [200, 100, -1, 0], [200, 100, 101, 100], [200, 100, 50, 50],
+	] as const)("clamps horizontal scroll %s/%s from %s", (scrollWidth, clientWidth, scrollLeft, expected) => {
+		const element = { scrollWidth, clientWidth, scrollLeft } as HTMLElement;
+		clampHorizontalScroll(element);
+		expect(element.scrollLeft).toBe(expected);
+	});
+
 });

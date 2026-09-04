@@ -27,6 +27,7 @@ fi
   cd "${ROOT_DIR}"
   npm run typecheck
   npm test
+  npm run test:cli-package
   npm run test:static-pwa
 )
 

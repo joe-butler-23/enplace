@@ -50,6 +50,19 @@ describe("cook log round trip", () => {
     ]);
   });
 
+  it("accepts writer fields in either order and ignores unknown fields", () => {
+    const content = [
+      "## Cook Log",
+      "    stray text before the first entry",
+      "- 2026-08-14 | make again: YES | source: notebook | rating: -1.5",
+      "  - Notes: Needs another try."
+    ].join("\n");
+
+    expect(parseCookLog(content)).toEqual([
+      { date: "2026-08-14", rating: -1.5, makeAgain: true, notes: "Needs another try." }
+    ]);
+  });
+
   it("stops at the next section and ignores an absent log", () => {
     const content = ["## Cook Log", "", "- 2026-08-14", "", "## Notes", "- not a cook"].join("\n");
     expect(parseCookLog(content).map((entry) => entry.date)).toEqual(["2026-08-14"]);

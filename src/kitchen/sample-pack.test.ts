@@ -50,6 +50,6 @@ describe("sample kitchen pack", () => {
     const covers = (await readdir(path.resolve("public/samples"))).sort();
     expect(covers.filter((name) => /^[a-z-]+\.webp$/.test(name))).toEqual(canonicalCovers);
     expect(covers.filter((name) => /-\d+\.(?:avif|webp)$/.test(name))).toEqual(expectedVariants.sort());
-    expect(covers).toEqual([...canonicalCovers, ...expectedVariants, "cover-manifest.json"].sort());
+    expect(covers).toEqual([...canonicalCovers, ...expectedVariants].sort());
   });
 });

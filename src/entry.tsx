@@ -1,7 +1,6 @@
 import "./fonts.css";
 import "../styles.css";
 import "./standalone.css";
-import { useVaultStorage } from "./host-client/browser-storage";
 import { openKitchen } from "./host-client/kitchen-storage";
 import { setCurrentKitchenConnection } from "./kitchen/current";
 import {
@@ -88,7 +87,6 @@ async function openSharedKitchen(): Promise<boolean> {
       deferRelayUntilLocalWrite: unpublished,
       onFirstLocalWrite: () => setKitchenUnpublished(id, false),
     });
-    useVaultStorage(connection.adapter);
     setCurrentKitchenConnection(connection);
     if (!createdHere && !connection.hasLocalCopy) {
       showKitchenGate({ title: "Opening your shared kitchen…" });

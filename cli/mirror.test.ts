@@ -1,313 +1,327 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { watch as watchDirectory, writeFileSync } from "node:fs";
+import { chmod, mkdir, open, readFile, readdir, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { WebsocketProvider } from "y-websocket";
-import { WebSocket } from "ws";
 import * as Y from "yjs";
-import {
-  deleteKitchenPath,
-  kitchenLink,
-  newKitchenId,
-  readKitchenBytes,
-  readKitchenText,
-  writeKitchenBytes,
-  writeKitchenText,
-} from "../src/kitchen/doc";
-import { startRelay } from "../scripts/kitchen-relay.mjs";
+import { deleteKitchenPath, newKitchenId, readKitchenBytes, readKitchenText, writeKitchenBytes, writeKitchenText } from "../src/kitchen/doc";
 import { execute } from "./index";
+import { atomicCommit } from "./mirror-commit";
+import { createPathScheduler, localCopyPath, mirrorKitchen } from "./mirror";
+import { MirrorTestFixture, waitFor } from "./mirror-test-support";
 
-const folders: string[] = [];
-const providers: WebsocketProvider[] = [];
-const documents: Y.Doc[] = [];
+const harness = new MirrorTestFixture();
 const controllers: AbortController[] = [];
 const mirrors: Promise<string>[] = [];
-let relayServer: Awaited<ReturnType<typeof startRelay>>;
+const encoder = new TextEncoder();
+const fixedNow = new Date(2026, 8, 10, 12, 34, 56);
+const currentCommit = { current: () => true, recoveryName: "cover.local-20260910-123456.webp" };
 let relay: string;
+type Client = Awaited<ReturnType<typeof harness.client>>;
+type MirrorFixture = { root: string; target: string; kitchen: string; client: Client };
+type StartOptions = { log?: (line: string) => void; now?: Date };
+const folder = (): Promise<string> => harness.folder();
+const syncedClient = (kitchen: string): Promise<Client> => harness.client(kitchen);
 
-async function folder(): Promise<string> {
-  const value = await mkdtemp(path.join(os.tmpdir(), "mep-mirror-"));
-  folders.push(value);
-  return value;
+async function remoteFile(relative: string, contents: string | Uint8Array): Promise<Pick<MirrorFixture, "kitchen" | "client">> {
+  const kitchen = newKitchenId();
+  const client = await syncedClient(kitchen);
+  const bytes = typeof contents === "string" ? encoder.encode(contents) : contents;
+  writeKitchenBytes(client.doc, relative, bytes);
+  const verifier = await syncedClient(kitchen);
+  expect(readKitchenBytes(verifier.doc, relative)).toEqual(bytes);
+  verifier.provider.destroy();
+  verifier.doc.destroy();
+  return { kitchen, client };
 }
-
-async function syncedClient(kitchen: string): Promise<{ doc: Y.Doc; provider: WebsocketProvider }> {
-  const doc = new Y.Doc();
-  const provider = new WebsocketProvider(relay, kitchen, doc, {
-    WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket,
-    disableBc: true,
-  });
-  documents.push(doc);
-  providers.push(provider);
-  if (!provider.synced) {
-    await new Promise<void>((resolve, reject) => {
-      const deadline = setTimeout(() => finish(new Error("client did not sync")), 5_000);
-      const onSync = (synced: boolean) => { if (synced) finish(); };
-      const finish = (error?: Error): void => {
-        clearTimeout(deadline);
-        provider.off("sync", onSync);
-        if (error) reject(error); else resolve();
-      };
-      provider.on("sync", onSync);
-    });
-  }
-  return { doc, provider };
+async function binaryConflict(relative = "cover.webp", local = "local bytes", remote = "shared bytes"): Promise<MirrorFixture> {
+  const root = await folder();
+  const target = path.join(root, ...relative.split("/"));
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, local);
+  return { root, target, ...await remoteFile(relative, remote) };
 }
-
-async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
-  await expect.poll(async () => {
-    try { await assertion(); return true; }
-    catch { return false; }
-  }, { timeout: 5_000, interval: 20 }).toBe(true);
+async function recoveryFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.parentPath.split(path.sep).includes(".mep-mirror"))
+    .map((entry) => path.join(entry.parentPath, entry.name));
 }
-
-function startMirror(
-  root: string,
-  kitchen: string,
-  options: { log?: (line: string) => void; now?: Date } = {},
-): AbortController {
+async function recoveryWith(root: string, contents: string | Uint8Array): Promise<string> {
+  const expected = typeof contents === "string" ? encoder.encode(contents) : contents;
+  const matches = (await recoveryFiles(root)).filter((file) =>
+    file.split(path.sep).some((part) => /\.local-\d{8}-\d{6}/.test(part)));
+  expect(matches).toHaveLength(1);
+  expect(Buffer.from(await readFile(matches[0])).equals(Buffer.from(expected))).toBe(true);
+  return matches[0];
+}
+function startMirror(root: string, kitchen: string, options: StartOptions = {}): void {
   const controller = new AbortController();
   controllers.push(controller);
-  mirrors.push(execute([
-    "mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay,
-  ], { ...options, signal: controller.signal }));
-  return controller;
+  mirrors.push(execute(["mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay], { ...options, signal: controller.signal }));
 }
-
-beforeAll(async () => {
-  relayServer = await startRelay();
-  relay = relayServer.url;
-});
-
+async function startedMirrorFile(relative: string, contents: string | Uint8Array, options: StartOptions = {}): Promise<MirrorFixture> {
+  const root = await folder();
+  const kitchen = newKitchenId();
+  const client = await syncedClient(kitchen);
+  const target = path.join(root, ...relative.split("/"));
+  const bytes = typeof contents === "string" ? encoder.encode(contents) : contents;
+  startMirror(root, kitchen, options);
+  writeKitchenBytes(client.doc, relative, bytes);
+  await waitFor(async () => expect(new Uint8Array(await readFile(target))).toEqual(bytes));
+  return { root, target, kitchen, client };
+}
+async function mirrorOnce(root: string, kitchen: string, options: StartOptions = {}): Promise<void> {
+  await execute(["mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay, "--once"], options);
+}
+beforeAll(async () => { await harness.start(); relay = harness.relay; });
 afterEach(async () => {
   for (const controller of controllers.splice(0)) controller.abort();
   await Promise.all(mirrors.splice(0));
-  for (const provider of providers.splice(0)) provider.destroy();
-  for (const doc of documents.splice(0)) doc.destroy();
-  await Promise.all(folders.splice(0).map((value) => rm(value, { recursive: true, force: true })));
+  await harness.cleanup();
 });
-
-afterAll(async () => {
-  await relayServer.close();
-});
+afterAll(async () => harness.close());
 
 describe("mep mirror", () => {
-  it("requires an explicit or environment relay URL", async () => {
+  it("projects a disconnected file/descendant collision without losing bytes", async () => {
     const root = await folder();
-    const previous = process.env.ENPLACE_RELAY_URL;
-    delete process.env.ENPLACE_RELAY_URL;
-    try {
-      await expect(execute([
-        "mirror", "--folder", root, "--kitchen", newKitchenId(), "--once",
-      ])).rejects.toThrow("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL");
-    } finally {
-      if (previous === undefined) delete process.env.ENPLACE_RELAY_URL;
-      else process.env.ENPLACE_RELAY_URL = previous;
+    const kitchen = newKitchenId();
+    const client = await syncedClient(kitchen);
+    writeKitchenText(client.doc, "recipes.md", "parent text\n");
+    const offline = new Y.Doc();
+    writeKitchenBytes(offline, "recipes.md/nested/cover.webp", new Uint8Array([0, 255, 7]));
+    Y.applyUpdate(client.doc, Y.encodeStateAsUpdate(offline));
+    await mirrorOnce(root, kitchen);
+    await expect(readFile(path.join(root, "recipes (file conflict 0ed49ba7).md"), "utf8"))
+      .resolves.toBe("parent text\n");
+    await expect(readFile(path.join(root, "recipes.md/nested/cover.webp")))
+      .resolves.toEqual(Buffer.from([0, 255, 7]));
+  });
+  it("rejects a resolved filesystem root before relay work or traversal", async () => {
+    const linkedRoot = path.join(await folder(), "filesystem-root");
+    await symlink(path.parse(process.cwd()).root, linkedRoot, "dir");
+    await expect(mirrorKitchen({ folder: linkedRoot, kitchen: newKitchenId(), relay: "not a relay" })).rejects.toThrow("refusing to mirror a filesystem root");
+  });
+  it.each(["README", ".env"])("places a recovery timestamp correctly in %s", (original) =>
+    expect(path.basename(localCopyPath(original, fixedNow))).toBe(`${original}.local-20260910-123456`));
+  it("applies a non-UTF8 local binary edit to the kitchen without another recovery", async () => {
+    const initial = Uint8Array.from([0xff, 0x00, 0x80]);
+    const changed = Uint8Array.from([0x80, 0x00, 0xff, 0x01]);
+    const { root, target, client } = await startedMirrorFile("images/cover.webp", initial);
+    const before = await recoveryFiles(root);
+    await waitFor(async () => expect(readdir(path.join(path.dirname(target), ".mep-mirror"))).resolves.toEqual([]));
+    await writeFile(target, changed);
+    await waitFor(() => expect(readKitchenBytes(client.doc, "images/cover.webp")).toEqual(changed));
+    expect(await recoveryFiles(root)).toEqual(before);
+  });
+  it("refuses an intermediate symlink before touching an outside blocking directory", async () => {
+    const root = await folder();
+    const outside = await folder();
+    const blocking = path.join(outside, "soup.md");
+    const kept = path.join(blocking, "kept.bin");
+    await mkdir(blocking);
+    await writeFile(kept, new Uint8Array([0, 255, 7]));
+    await chmod(blocking, 0o750);
+    await chmod(kept, 0o640);
+    await symlink(outside, path.join(root, "recipes"));
+    const { kitchen } = await remoteFile("recipes/soup.md", "# Soup\n");
+    await expect(mirrorOnce(root, kitchen)).rejects.toThrow("refusing to mirror symbolic link: recipes/soup.md");
+    expect(await readdir(outside)).toEqual(["soup.md"]);
+    expect(await readdir(blocking)).toEqual(["kept.bin"]);
+    expect(new Uint8Array(await readFile(kept))).toEqual(new Uint8Array([0, 255, 7]));
+    expect((await stat(blocking)).mode & 0o777).toBe(0o750);
+    expect((await stat(kept)).mode & 0o777).toBe(0o640);
+    await expect(stat(path.join(outside, ".mep-mirror"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("does not rewrite or preserve an equal pre-existing binary after restart", async () => {
+    const root = await folder();
+    const target = path.join(root, "cover.webp");
+    const bytes = Uint8Array.from([0, 255, 17, 0, 93]);
+    await writeFile(target, bytes);
+    const before = await stat(target, { bigint: true });
+    const { kitchen } = await remoteFile("cover.webp", bytes);
+    const logs: string[] = [];
+    await mirrorOnce(root, kitchen, { log: (line) => logs.push(line) });
+    const after = await stat(target, { bigint: true });
+    expect(after.ino).toBe(before.ino);
+    expect(after.mtimeNs).toBe(before.mtimeNs);
+    expect(new Uint8Array(await readFile(target))).toEqual(bytes);
+    expect(await readdir(root)).toEqual(["cover.webp"]);
+    await expect(stat(path.join(root, ".mep-mirror"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(logs).toEqual([]);
+  });
+  it("round-trips user files and directories containing .local-", async () => {
+    const root = await folder();
+    const kitchen = newKitchenId();
+    const client = await syncedClient(kitchen);
+    const userFiles = new Map([
+      ["family.local-notes.md", "family notes\n"],
+      ["notes.local-20260910-123456.md", "timestamp-shaped user note\n"],
+      [".notes.local-mirror-999-1.md", "temp-shaped user note\n"],
+      ["archive.local-20260910-123456/inside.md", "inside user directory\n"],
+    ]);
+    for (const [relative, text] of userFiles) {
+      const target = path.join(root, ...relative.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, text);
+    }
+    const temporary = path.join(root, ".mep-mirror/stale.md");
+    await mkdir(path.dirname(temporary));
+    await writeFile(temporary, "generated temporary bytes\n");
+    await mirrorOnce(root, kitchen);
+    await waitFor(() => {
+      for (const [relative, text] of userFiles) expect(readKitchenText(client.doc, relative)).toBe(text);
+    });
+    expect(readKitchenText(client.doc, ".mep-mirror/stale.md")).toBeNull();
+    writeKitchenText(client.doc, "remote.local-20260910-123456.md", "remote user note\n");
+    const verifier = await syncedClient(kitchen);
+    expect(readKitchenText(verifier.doc, "remote.local-20260910-123456.md")).toBe("remote user note\n");
+    await mirrorOnce(root, kitchen);
+    await expect(readFile(path.join(root, "remote.local-20260910-123456.md"), "utf8")).resolves.toBe("remote user note\n");
+    startMirror(root, kitchen);
+    const watched = path.join(root, "live.local-20260910-123456/watched.md");
+    await mkdir(path.dirname(watched));
+    await writeFile(watched, "watched user directory\n");
+    await waitFor(() => expect(readKitchenText(client.doc, "live.local-20260910-123456/watched.md")).toBe("watched user directory\n"));
+  });
+  it("keeps final recovery private while retaining the displaced mode", async () => {
+    const { root, target, kitchen, client } = await binaryConflict("cover.webp", "local image", "shared image");
+    const privateRoot = path.join(root, ".mep-mirror");
+    await mkdir(privateRoot, { mode: 0o777 });
+    await chmod(privateRoot, 0o777);
+    await chmod(target, 0o640);
+    const logs: string[] = [];
+    const previous = process.umask(0);
+    try { await mirrorOnce(root, kitchen, { now: fixedNow, log: (line) => logs.push(line) }); }
+    finally { process.umask(previous); }
+    const recovery = await recoveryWith(root, "local image");
+    const relative = path.relative(root, recovery).split(path.sep).join("/");
+    expect(relative).toMatch(/^\.mep-mirror\/[^/]+\/cover\.local-20260910-123456\.webp$/);
+    expect(logs).toEqual([`wrote cover.webp; preserved local copy as ${relative}\n`]);
+    await expect(readFile(target, "utf8")).resolves.toBe("shared image");
+    expect(readKitchenBytes(client.doc, relative)).toBeNull();
+    expect((await stat(privateRoot)).mode & 0o777).toBe(0o700);
+    expect((await stat(path.dirname(recovery))).mode & 0o777).toBe(0o700);
+    await waitFor(async () => expect(readdir(path.dirname(recovery))).resolves.toEqual([path.basename(recovery)]));
+    expect((await stat(recovery)).mode & 0o777).toBe(0o640);
+    expect((await stat(target)).mode & 0o777).toBe(0o640);
+    expect(recovery + logs.join("")).not.toContain(kitchen);
+  });
+  it("places nested recovery in one final same-parent private namespace", async () => {
+    const relative = "images/nested/cover.webp";
+    const { root, target, kitchen } = await binaryConflict(relative, "new local bytes", "shared bytes");
+    await mirrorOnce(root, kitchen, { now: fixedNow });
+    const recovery = await recoveryWith(root, "new local bytes");
+    expect(path.relative(root, recovery).split(path.sep).join("/")).toMatch(/^images\/nested\/\.mep-mirror\/[^/]+\/cover\.local-20260910-123456\.webp$/);
+    await expect(readFile(target, "utf8")).resolves.toBe("shared bytes");
+  });
+  it("refuses unavailable or symlinked same-parent recovery without changing the mirror", async () => {
+    for (const kind of ["blocked", "symlink", "nested-symlink"] as const) {
+      const relative = kind === "nested-symlink" ? "images/nested/cover.webp" : "cover.webp";
+      const { root, target, kitchen } = await binaryConflict(relative);
+      const outside = kind === "blocked" ? null : await folder();
+      const privateRoot = path.join(path.dirname(target), ".mep-mirror");
+      if (outside) await symlink(outside, privateRoot);
+      else await writeFile(privateRoot, "blocking file");
+      await expect(mirrorOnce(root, kitchen)).rejects.toThrow("refusing invalid mirror recovery directory");
+      if (outside) expect(await readdir(outside)).toEqual([]);
+      await expect(readFile(target, "utf8")).resolves.toBe("local bytes");
     }
   });
 
-  it("pushes a folder recipe into an empty kitchen with --once", async () => {
+  it("restores a mismatched regular capture without clobber", async () => {
     const root = await folder();
-    await mkdir(path.join(root, "recipes"));
-    const markdown = "# Soup\n\n## Ingredients\n- lentils\n";
-    await writeFile(path.join(root, "recipes", "soup.md"), markdown);
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-
-    await execute([
-      "mirror", "--folder", root, "--kitchen", kitchenLink("https://enplace.test", kitchen),
-      "--relay", relay, "--once",
-    ]);
-
-    await waitFor(() => expect(readKitchenText(client.doc, "recipes/soup.md")).toBe(markdown));
+    const target = path.join(root, "cover.webp");
+    await writeFile(target, "changed writer bytes");
+    await chmod(target, 0o640);
+    const mismatch = await atomicCommit(target, encoder.encode("stale bytes"), encoder.encode("remote bytes"), currentCommit);
+    expect(mismatch.result).toBe("retry");
+    await expect(readFile(target, "utf8")).resolves.toBe("changed writer bytes");
+    await expect(readFile(mismatch.recovery!, "utf8")).resolves.toBe("changed writer bytes");
+    expect((await stat(target)).mode & 0o777).toBe(0o640);
   });
-
-  it("writes a second client's Shopping.md change to disk in continuous mode", async () => {
+  it("rereads and converges through the live caller after publication EEXIST", async () => {
     const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    startMirror(root, kitchen);
-
-    writeKitchenText(client.doc, "Shopping.md", "# Shopping\n- [ ] onions\n");
-
-    const shopping = path.join(root, "Shopping.md");
-    await waitFor(async () => {
-      await expect(readFile(shopping, "utf8")).resolves.toBe("# Shopping\n- [ ] onions\n");
-    });
-
-    deleteKitchenPath(client.doc, "Shopping.md");
-    await waitFor(async () => {
-      await expect(readFile(shopping)).rejects.toMatchObject({ code: "ENOENT" });
-    });
-  });
-
-  it("updates the kitchen when a mirrored disk file is edited", async () => {
-    const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    startMirror(root, kitchen);
-    writeKitchenText(client.doc, "recipes/pie.md", "# Pie\n");
-    await waitFor(async () => {
-      await expect(readFile(path.join(root, "recipes", "pie.md"), "utf8")).resolves.toBe("# Pie\n");
-    });
-
-    const recipe = path.join(root, "recipes", "pie.md");
-    await writeFile(recipe, "# Better Pie\n");
-    await waitFor(() => expect(readKitchenText(client.doc, "recipes/pie.md")).toBe("# Better Pie\n"));
-
-    await rm(recipe);
-    await waitFor(() => expect(readKitchenText(client.doc, "recipes/pie.md")).toBeNull());
-  }, 12_000);
-
-  it("refuses a document write through a symlink outside the mirror root", async () => {
-    const root = await folder();
-    const outside = await folder();
-    await symlink(outside, path.join(root, "recipes"));
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    writeKitchenText(client.doc, "recipes/soup.md", "# Soup\n");
-    const verifier = await syncedClient(kitchen);
-    expect(readKitchenText(verifier.doc, "recipes/soup.md")).toBe("# Soup\n");
-
-    await expect(execute([
-      "mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay, "--once",
-    ])).rejects.toThrow("refusing to mirror symbolic link: recipes/soup.md");
-    await expect(readFile(path.join(outside, "soup.md"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("preserves a differing local binary file and lets the kitchen version win", async () => {
-    const root = await folder();
-    await writeFile(path.join(root, "cover.webp"), "local image");
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    writeKitchenBytes(client.doc, "cover.webp", new TextEncoder().encode("shared image"));
-    const verifier = await syncedClient(kitchen);
-    expect(new TextDecoder().decode(readKitchenBytes(verifier.doc, "cover.webp")!)).toBe("shared image");
-
+    const target = path.join(root, "cover.webp");
+    const local = Uint8Array.from([0x80, 0x01]);
+    const remote = Uint8Array.from([0xff, 0x02]);
+    const { kitchen } = await remoteFile("cover.webp", remote);
     const logs: string[] = [];
-    await execute([
-      "mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay, "--once",
-    ], { now: new Date(2026, 8, 10, 12, 34, 56), log: (line) => logs.push(line) });
-
-    expect(logs).toEqual([
-      "wrote cover.webp; preserved local copy as cover.local-20260910-123456.webp\n",
-    ]);
-    await expect(readFile(path.join(root, "cover.webp"), "utf8")).resolves.toBe("shared image");
-    await expect(readFile(path.join(root, "cover.local-20260910-123456.webp"), "utf8"))
-      .resolves.toBe("local image");
+    let planted = false;
+    const watcher = watchDirectory(root, { recursive: true }, () => {
+      if (planted) return;
+      try { writeFileSync(target, local, { flag: "wx" }); planted = true; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    });
+    try { await mirrorOnce(root, kitchen, { now: fixedNow, log: (line) => logs.push(line) }); }
+    finally { watcher.close(); }
+    expect(planted).toBe(true);
+    expect(new Uint8Array(await readFile(target))).toEqual(remote);
+    const recovery = await recoveryWith(root, local);
+    expect(logs).toContain(`wrote cover.webp; preserved local copy as ${path.relative(root, recovery).split(path.sep).join("/")}
+`);
   });
-
+  it("reports a post-rename non-regular path at its final recovery name", async () => {
+    const root = await folder();
+    const target = path.join(root, "cover.webp");
+    await mkdir(target);
+    await writeFile(path.join(target, "inside"), "directory writer bytes");
+    await expect(atomicCommit(target, Uint8Array.of(1), Uint8Array.of(2), currentCommit))
+      .rejects.toThrow(/non-regular path after the atomic move.*captured path kept at .*\.mep-mirror/);
+    const recovered = await recoveryWith(root, "directory writer bytes");
+    expect(recovered).toContain("cover.local-20260910-123456.webp");
+    await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("merges unknown initial text as peer content instead of overwriting it", async () => {
     const root = await folder();
     await writeFile(path.join(root, "notes.md"), "local starting point\n");
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    writeKitchenText(client.doc, "notes.md", "kitchen starting point\n");
-    const verifier = await syncedClient(kitchen);
-    expect(readKitchenText(verifier.doc, "notes.md")).toBe("kitchen starting point\n");
+    const { kitchen, client } = await remoteFile("notes.md", "kitchen starting point\n");
     const logs: string[] = [];
-
-    await execute([
-      "mirror", "--folder", root, "--kitchen", kitchen, "--relay", relay, "--once",
-    ], { log: (line) => logs.push(line) });
-
+    await mirrorOnce(root, kitchen, { log: (line) => logs.push(line) });
     const merged = "local starting point\nkitchen starting point\n";
     await expect(readFile(path.join(root, "notes.md"), "utf8")).resolves.toBe(merged);
     await waitFor(() => expect(readKitchenText(client.doc, "notes.md")).toBe(merged));
-    expect(logs).toContain("merged local changes with kitchen for notes.md\n");
+    expect(logs.some((line) => line.startsWith("merged local changes with kitchen for notes.md"))).toBe(true);
   });
-
-  it("merges an immediate local text edit with a remote text edit", async () => {
-    const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    const logs: string[] = [];
-    startMirror(root, kitchen, { log: (line) => logs.push(line) });
-    const target = path.join(root, "notes.md");
-    const base = "first: base\nsecond: base\n";
-    writeKitchenText(client.doc, "notes.md", base);
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe(base));
-
-    const local = "first: local\nsecond: base\n";
-    const remote = "first: base\nsecond: remote\n";
-    const merged = "first: local\nsecond: remote\n";
-    await writeFile(target, local);
-    writeKitchenText(client.doc, "notes.md", remote);
-
-    await waitFor(() => expect(readKitchenText(client.doc, "notes.md")).toBe(merged));
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe(merged));
-    expect(logs).toContain("merged local changes with kitchen for notes.md\n");
-  });
-
   it("keeps both overlapping text edits in the disk file and kitchen", async () => {
-    const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
     const logs: string[] = [];
-    startMirror(root, kitchen, { log: (line) => logs.push(line) });
-    const target = path.join(root, "notes.md");
-    const base = "first: base\nsecond: base\n";
-    writeKitchenText(client.doc, "notes.md", base);
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe(base));
-
+    const { root, target, client } = await startedMirrorFile("notes.md", "first: base\nsecond: base\n", { log: (line) => logs.push(line) });
     await writeFile(target, "first: disk\nsecond: base\n");
     writeKitchenText(client.doc, "notes.md", "first: kitchen\nsecond: base\n");
     const merged = "<<<<<<< this device\nfirst: disk\n=======\nfirst: kitchen\n>>>>>>>>\nsecond: base\n";
-
     await waitFor(async () => {
       expect(await readFile(target, "utf8")).toBe(merged);
       expect(readKitchenText(client.doc, "notes.md")).toBe(merged);
     });
-    expect(logs.filter((line) => line.includes("conflict"))).toEqual([
-      "merged local changes with kitchen for notes.md; kept 1 conflict\n",
-    ]);
+    expect(logs.filter((line) => line.includes("conflict"))).toHaveLength(1);
+    expect(logs.find((line) => line.includes("conflict"))).toMatch(/^merged local changes with kitchen for notes\.md; kept 1 conflict/);
     expect((await readdir(root)).filter((name) => name.includes(".local-"))).toEqual([]);
   });
-
-  it("preserves a local edit when a remote delete wins the path", async () => {
-    const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
+  it("lets a Y.Doc delete win while retaining a late local inode write", async () => {
     const logs: string[] = [];
-    startMirror(root, kitchen, {
-      now: new Date(2026, 8, 10, 12, 34, 56),
-      log: (line) => logs.push(line),
-    });
-    const target = path.join(root, "Shopping.md");
-    writeKitchenText(client.doc, "Shopping.md", "shared\n");
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe("shared\n"));
-
-    await writeFile(target, "local unsynced change\n");
-    deleteKitchenPath(client.doc, "Shopping.md");
-
+    const { root, target, client } = await startedMirrorFile("Shopping.md", "shared\n", { now: fixedNow, log: (line) => logs.push(line) });
+    const descriptor = await open(target, "r+");
+    try {
+      deleteKitchenPath(client.doc, "Shopping.md");
+      await waitFor(async () => expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" }));
+      await descriptor.truncate(0);
+      await descriptor.writeFile("late local change\n");
+    } finally { await descriptor.close(); }
+    const recovery = await recoveryWith(root, "late local change\n");
+    const relative = path.relative(root, recovery).split(path.sep).join("/");
+    expect(logs).toContain(`deleted Shopping.md; preserved local copy as ${relative}\n`);
+  });
+  it("preserves a non-UTF8 local binary edit when both sides change", async () => {
+    const base = Uint8Array.from([0xff, 0x00, 0x01]);
+    const local = Uint8Array.from([0x80, 0x00, 0x02]);
+    const remote = Uint8Array.from([0xfe, 0x00, 0x03]);
+    const { root, target, client } = await startedMirrorFile("cover.webp", base, { now: fixedNow });
+    await writeFile(target, local);
+    writeKitchenBytes(client.doc, "cover.webp", remote);
     await waitFor(async () => {
-      await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
-      const copies = (await readdir(root)).filter((name) => name.startsWith("Shopping.local-"));
-      expect(copies).toHaveLength(1);
-      await expect(readFile(path.join(root, copies[0]), "utf8")).resolves.toBe("local unsynced change\n");
+      expect(new Uint8Array(await readFile(target))).toEqual(remote);
+      await recoveryWith(root, local);
     });
-    expect(logs).toContain(
-      "deleted Shopping.md; preserved local copy as Shopping.local-20260910-123456.md\n",
-    );
   });
-
-  it("restores a remote update when the local file was concurrently deleted", async () => {
-    const root = await folder();
-    const kitchen = newKitchenId();
-    const client = await syncedClient(kitchen);
-    const logs: string[] = [];
-    startMirror(root, kitchen, { log: (line) => logs.push(line) });
-    const target = path.join(root, "notes.md");
-    writeKitchenText(client.doc, "notes.md", "shared\n");
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe("shared\n"));
-
-    await unlink(target);
-    writeKitchenText(client.doc, "notes.md", "remote replacement\n");
-
-    await waitFor(async () => expect(await readFile(target, "utf8")).toBe("remote replacement\n"));
-    expect(logs).toContain("restored notes.md; local deletion conflicted with kitchen change\n");
-  });
-
   it("merges divergent files when two continuous mirrors start together", async () => {
     const left = await folder();
     const right = await folder();
@@ -315,10 +329,8 @@ describe("mep mirror", () => {
     await writeFile(path.join(right, "same.md"), "right addition\n");
     const kitchen = newKitchenId();
     const client = await syncedClient(kitchen);
-
     startMirror(left, kitchen);
     startMirror(right, kitchen);
-
     await waitFor(() => {
       const text = readKitchenText(client.doc, "same.md") ?? "";
       expect(text).toContain("left addition");
@@ -331,23 +343,86 @@ describe("mep mirror", () => {
     });
   }, 12_000);
 
-  it("resolves a symlink mirror root to its physical directory", async () => {
-    const physical = await folder();
-    const parent = await folder();
-    const linked = path.join(parent, "linked-root");
-    await symlink(physical, linked, "dir");
+  it("does not create an unhandled rejection with a pending disk event after fatal", async () => {
+    const seen: unknown[] = [];
+    const failure = new Error("fatal injection");
+    let observed: unknown;
+    let acknowledge!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { acknowledge = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const scheduler = createPathScheduler(async (paths) => {
+      expect(paths).toContain("active-disk-event");
+      acknowledge();
+      await gate;
+      throw failure;
+    }, (error) => { observed = error; });
+    const onUnhandled = (reason: unknown) => { seen.push(reason); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      scheduler.schedule("active-disk-event");
+      await started;
+      scheduler.schedule("pending-disk-event");
+      release();
+      await scheduler.close();
+      scheduler.schedule("after-fatal");
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(observed).toBe(failure);
+      expect(seen).toEqual([]);
+    } finally { process.off("unhandledRejection", onUnhandled); }
+  });
+  it("drains accepted scheduler work serially during graceful close", async () => {
+    const calls: string[][] = [];
+    let acknowledge!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { acknowledge = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const scheduler = createPathScheduler(async (paths) => {
+      calls.push([...paths]);
+      if (calls.length === 1) { acknowledge(); await gate; }
+    }, (error) => { throw error; });
+    scheduler.schedule("active");
+    await started;
+    scheduler.schedule("pending");
+    const closing = scheduler.close();
+    scheduler.schedule("rejected-after-close");
+    release();
+    await closing;
+    expect(calls).toEqual([["active"], ["pending"]]);
+  });
+
+  it("starts a new drain for work accepted at the tail microtask boundary", async () => {
+    const calls: string[][] = [];
+    let scheduler!: ReturnType<typeof createPathScheduler>;
+    let acknowledge!: () => void;
+    const lateRan = new Promise<void>((resolve) => { acknowledge = resolve; });
+    scheduler = createPathScheduler(async (paths) => {
+      calls.push([...paths]);
+      if (paths.includes("first")) {
+        void Promise.resolve().then(() => undefined).then(() => scheduler.schedule("late"));
+      } else acknowledge();
+    }, (error) => { throw error; });
+    scheduler.schedule("first");
+    await lateRan;
+    await scheduler.close();
+    expect(calls).toEqual([["first"], ["late"]]);
+  });
+
+  it("stops accepting remote work before continuous-mirror teardown drains", async () => {
+    const root = await folder();
     const kitchen = newKitchenId();
     const client = await syncedClient(kitchen);
-    writeKitchenText(client.doc, "inside.md", "relay bytes\n");
-    const verifier = await syncedClient(kitchen);
-    expect(readKitchenText(verifier.doc, "inside.md")).toBe("relay bytes\n");
-    const logs: string[] = [];
-
-    await execute([
-      "mirror", "--folder", linked, "--kitchen", kitchen, "--relay", relay, "--once",
-    ], { log: (line) => logs.push(line) });
-
-    await expect(readFile(path.join(physical, "inside.md"), "utf8")).resolves.toBe("relay bytes\n");
-    expect(logs.some((line) => line.includes(`resolved mirror folder ${linked} to ${physical}`))).toBe(true);
+    const controller = new AbortController();
+    const running = mirrorKitchen({ folder: root, kitchen, relay, signal: controller.signal });
+    writeKitchenText(client.doc, "ready.md", "ready\n");
+    await waitFor(async () => expect(readFile(path.join(root, "ready.md"), "utf8")).resolves.toBe("ready\n"));
+    controller.abort();
+    writeKitchenText(client.doc, "during-close.md", "ignored\n");
+    await running;
+    writeKitchenText(client.doc, "after-close.md", "ignored\n");
+    await new Promise((resolve) => setImmediate(resolve));
+    for (const file of ["during-close.md", "after-close.md"]) {
+      await expect(readFile(path.join(root, file))).rejects.toMatchObject({ code: "ENOENT" });
+    }
   });
 });

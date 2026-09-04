@@ -10,7 +10,6 @@ type AppSidebarProps = {
   onNavigate: (view: Exclude<SidebarView, "recipe">) => void;
   onShare?: () => void;
   onPreparePlanner?: () => void;
-  onPrepareShopping?: () => void;
 };
 
 function iconRef(icon: string): React.RefCallback<HTMLSpanElement> {
@@ -32,7 +31,6 @@ export function AppSidebar({
   onNavigate,
   onShare,
   onPreparePlanner,
-  onPrepareShopping,
 }: AppSidebarProps): React.JSX.Element {
   return (
     <aside className="mep-sidebar">
@@ -53,7 +51,6 @@ export function AppSidebar({
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               if (item.view === "planner") onPreparePlanner?.();
-              if (item.view === "shopping") onPrepareShopping?.();
             }}
             onPointerUp={(event) => {
               if (event.button === 0) onNavigate(item.view);

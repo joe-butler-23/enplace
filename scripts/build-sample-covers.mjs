@@ -68,7 +68,7 @@ const images = [
   }
 ];
 
-const manifestPath = path.join(outputDirectory, "cover-manifest.json");
+const manifestPath = path.join(root, "scripts", "sample-cover-manifest.json");
 const generatorVersion = 1;
 const buildKey = createHash("sha256").update(JSON.stringify({ generatorVersion, sourceRevision, widths, qualityFloor, images })).digest("hex");
 const cachedManifest = await readManifest();

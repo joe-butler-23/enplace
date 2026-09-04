@@ -1,19 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const KITCHEN_ID = /^[a-z2-7]{26}$/;
-
-function kitchenIdFromPage(page: Page): string {
-  const id = new URL(page.url()).hash.match(/^#k=([a-z2-7]{26})$/)?.[1] ?? "";
-  expect(id).toMatch(KITCHEN_ID);
-  return id;
-}
-
-async function openFreshKitchen(page: Page): Promise<string> {
-  await page.goto("/");
-  await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-  return kitchenIdFromPage(page);
-}
+import { openFreshKitchen } from "./helpers";
 
 async function openSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings", exact: true }).click();

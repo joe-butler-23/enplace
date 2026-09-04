@@ -40,8 +40,7 @@ export function buildBoardEntries(
   const columnIds = new Set(config.columns.map((column) => column.id));
   const defaultColumn = config.columns.find((column) => column.isDefault)?.id;
 
-  for (const recipe of recipes) {
-    if (isArchivedPath(recipe.path)) continue;
+  for (const recipe of recipes.filter((candidate) => !isArchivedPath(candidate.path))) {
     const planning = recipePlanning(plan, recipe.link);
     const destinations = planning.scheduledDates.filter((date) => columnIds.has(date));
     if (planning.scheduledDates.length === 0 && planning.marked && defaultColumn) destinations.push(defaultColumn);
@@ -70,9 +69,10 @@ export function buildBoardEntries(
     }
   }
 
+  const orderStore = options.manualOrder ? options.plannerOrderStore : undefined;
   for (const [columnId, entries] of entriesByColumn) {
-    const persistedIds = options.manualOrder && options.plannerOrderStore && options.plannerOrderPresetId
-      ? options.plannerOrderStore.get(config.id, options.plannerOrderPresetId, columnId)
+    const persistedIds = options.plannerOrderPresetId
+      ? orderStore?.get(config.id, options.plannerOrderPresetId, columnId)
       : undefined;
     entriesByColumn.set(columnId, applyPlannerOrder(entries, persistedIds));
   }

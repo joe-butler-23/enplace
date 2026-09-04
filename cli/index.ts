@@ -11,7 +11,6 @@ import {
   resolveRecipeReference,
   scanRecipes,
 } from "../src/core.js";
-import { mirrorKitchen } from "./mirror.js";
 
 export type ExecuteOptions = {
   cwd?: string;
@@ -21,60 +20,61 @@ export type ExecuteOptions = {
   signal?: AbortSignal;
 };
 
-type Arguments = {
-  command: string;
-  positional: string[];
-  folder: string;
-  json: boolean;
-  week?: string;
-  kitchen?: string;
-  relay?: string;
-  once: boolean;
-};
+const valueOptions = new Set(["--folder", "--week", "--kitchen", "--relay"]);
+const recipeCommands = new Set(["check", "add"]);
 
-function argumentsFor(argv: string[], cwd: string): Arguments {
+function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
+  if (!command || !["check", "add", "list", "shop", "mirror"].includes(command)) {
+    throw new Error("usage: mep <check|add|list|shop|mirror> [options]\n"
+      + "       mep mirror --folder <dir> --kitchen <link-or-id> [--relay <wss-url>] [--once]");
+  }
+  if (recipeCommands.has(command) && positional.length !== 1) throw new Error(`${command} needs one <file|->`);
+  if (["list", "shop", "mirror"].includes(command) && positional.length) throw new Error(`${command} takes no file argument`);
+  if (options.has("--week") && command !== "shop") throw new Error("--week is only valid with shop");
+  if ((options.has("--kitchen") || options.has("--relay") || options.has("--once")) && command !== "mirror") {
+    throw new Error("--kitchen, --relay, and --once are only valid with mirror");
+  }
+  if (command === "mirror") {
+    if (!options.has("--folder")) throw new Error("mirror needs --folder <dir>");
+    if (!options.has("--kitchen")) throw new Error("mirror needs --kitchen <link-or-id>");
+    if (options.has("--json")) throw new Error("--json is not valid with mirror");
+  }
+}
+
+function argumentsFor(argv: string[], cwd: string) {
   const positional: string[] = [];
-  let folder = cwd;
-  let folderProvided = false;
-  let json = false;
-  let once = false;
-  let week: string | undefined;
-  let kitchen: string | undefined;
-  let relay: string | undefined;
+  const options = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === "--json") json = true;
-    else if (value === "--once") once = true;
-    else if (["--folder", "--week", "--kitchen", "--relay"].includes(value)) {
-      const next = argv[++index];
-      if (!next || next.startsWith("--")) throw new Error(`${value} needs a value`);
-      if (value === "--folder") {
-        folder = path.resolve(cwd, next);
-        folderProvided = true;
-      } else if (value === "--week") week = next;
-      else if (value === "--kitchen") kitchen = next;
-      else relay = next;
-    } else if (value.startsWith("--")) throw new Error(`unknown option: ${value}`);
-    else positional.push(value);
+    if (value === "--json" || value === "--once") {
+      options.set(value, "");
+      continue;
+    }
+    if (!value.startsWith("--")) {
+      positional.push(value);
+      continue;
+    }
+    if (!valueOptions.has(value)) throw new Error(`unknown option: ${value}`);
+    const next = argv[++index];
+    if (!next || next.startsWith("--")) throw new Error(`${value} needs a value`);
+    options.set(value, next);
   }
   const [command = "", ...rest] = positional;
-  if (!command || !["check", "add", "list", "shop", "mirror"].includes(command)) {
-    throw new Error(
-      "usage: mep <check|add|list|shop|mirror> [options]\n"
-      + "       mep mirror --folder <dir> --kitchen <link-or-id> [--relay <wss-url>] [--once]",
-    );
-  }
-  if ((command === "check" || command === "add") && rest.length !== 1) throw new Error(`${command} needs one <file|->`);
-  if (["list", "shop", "mirror"].includes(command) && rest.length) throw new Error(`${command} takes no file argument`);
-  if (week && command !== "shop") throw new Error("--week is only valid with shop");
-  if ((kitchen || relay || once) && command !== "mirror") throw new Error("--kitchen, --relay, and --once are only valid with mirror");
-  if (command === "mirror") {
-    if (!folderProvided) throw new Error("mirror needs --folder <dir>");
-    if (!kitchen) throw new Error("mirror needs --kitchen <link-or-id>");
-    if (json) throw new Error("--json is not valid with mirror");
-  }
-  return { command, positional: rest, folder, json, week, kitchen, relay, once };
+  validateArguments(command, rest, options);
+  const folder = options.get("--folder");
+  return {
+    command,
+    positional: rest,
+    folder: folder === undefined ? cwd : path.resolve(cwd, folder),
+    json: options.has("--json"),
+    week: options.get("--week"),
+    kitchen: options.get("--kitchen"),
+    relay: options.get("--relay"),
+    once: options.has("--once"),
+  };
 }
+
+type Arguments = ReturnType<typeof argumentsFor>;
 
 async function exists(candidate: string): Promise<boolean> {
   try { await access(candidate, constants.F_OK); return true; } catch { return false; }
@@ -87,7 +87,7 @@ async function recipeFiles(folder: string): Promise<Array<{ path: string; text: 
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) await walk(absolute, relative);
-      else if (entry.isFile() && entry.name.toLocaleLowerCase().endsWith(".md")) {
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
         files.push({ path: relative, text: await readFile(absolute, "utf8") });
       }
     }
@@ -96,13 +96,8 @@ async function recipeFiles(folder: string): Promise<Array<{ path: string; text: 
   return files;
 }
 
-const slugify = (title: string): string => title.toLocaleLowerCase()
+const slugify = (title: string): string => title.toLowerCase()
   .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "recipe";
-
-async function destination(folder: string, title: string): Promise<string> {
-  const recipes = path.join(folder, "recipes");
-  return `${await exists(recipes) && (await stat(recipes)).isDirectory() ? "recipes/" : ""}${slugify(title)}.md`;
-}
 
 async function recipeInput(file: string, stdin: string | undefined): Promise<{ sourcePath: string; markdown: string }> {
   if (file === "-") {
@@ -123,7 +118,9 @@ async function checkedRecipe(folder: string, file: string, stdin: string | undef
   const recipe = parseRecipe(input.sourcePath, input.markdown);
   if (!recipe) throw new Error("recipe needs an ## Ingredients heading");
   if (file === "-" && recipe.title === "-") throw new Error("recipe needs a frontmatter title or # heading");
-  return { recipe, markdown: input.markdown, destination: await destination(folder, recipe.title) };
+  const recipes = path.join(folder, "recipes");
+  const prefix = await exists(recipes) && (await stat(recipes)).isDirectory() ? "recipes/" : "";
+  return { recipe, markdown: input.markdown, destination: `${prefix}${slugify(recipe.title)}.md` };
 }
 
 function localIso(date: Date): string {
@@ -150,22 +147,54 @@ async function readOptional(file: string): Promise<Buffer | null> {
   }
 }
 
-function conflictPath(file: string, now: Date): string {
-  const stamp = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  return file.replace(/\.md$/i, "") + `.conflict-${stamp}.md`;
-}
-
 async function saveShopping(file: string, initial: Buffer | null, markdown: string, now: Date): Promise<void> {
   if (hash(await readOptional(file)) !== hash(initial)) {
-    const conflict = conflictPath(file, now);
+    const stamp = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+    const conflict = file.replace(/\.md$/i, "") + `.conflict-${stamp}.md`;
     await writeFile(conflict, markdown, { flag: "wx" });
     throw new Error(`Shopping.md changed while rebuilding; new list saved as ${path.basename(conflict)}`);
   }
   await writeFile(file, markdown);
 }
 
-function json(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
+const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+
+async function runRecipeCommand(args: Arguments, stdin: string | undefined): Promise<string> {
+  const checked = await checkedRecipe(args.folder, args.positional[0], stdin);
+  if (args.command === "add") {
+    const output = path.join(args.folder, checked.destination);
+    await mkdir(path.dirname(output), { recursive: true });
+    try { await writeFile(output, checked.markdown, { flag: "wx" }); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`refusing to overwrite ${checked.destination}`);
+      throw error;
+    }
+    return args.json ? json({ path: checked.destination }) : `${checked.destination}\n`;
+  }
+  return args.json
+    ? json({ title: checked.recipe.title, path: checked.destination })
+    : `OK: ${checked.recipe.title} -> ${checked.destination}\n`;
+}
+
+async function runShop(args: Arguments, options: ExecuteOptions, recipes: ReturnType<typeof scanRecipes>): Promise<string> {
+  const monday = mondayFor(args.week, options.now ?? new Date());
+  const selected = parsePlan(await readFile(path.join(args.folder, "Plan.md"), "utf8"));
+  const planned = [];
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + offset);
+    for (const reference of selected.days.get(localIso(date)) ?? []) {
+      const recipe = resolveRecipeReference(recipes, reference);
+      if (recipe) planned.push(recipe);
+    }
+  }
+  const shoppingPath = path.join(args.folder, "Shopping.md");
+  const initial = await readOptional(shoppingPath);
+  const markdown = buildShoppingMarkdown(initial?.toString("utf8") ?? "", planned, recipes);
+  await saveShopping(shoppingPath, initial, markdown, options.now ?? new Date());
+  return args.json
+    ? json({ week: localIso(monday), path: "Shopping.md", markdown })
+    : markdown;
 }
 
 export async function execute(argv: string[], options: ExecuteOptions = {}): Promise<string> {
@@ -175,6 +204,7 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
   if (args.command === "mirror") {
     const relay = args.relay ?? process.env.ENPLACE_RELAY_URL;
     if (!relay) throw new Error("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL");
+    const { mirrorKitchen } = await import("./mirror.js");
     await mirrorKitchen({
       folder: args.folder,
       kitchen: args.kitchen!,
@@ -187,23 +217,7 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
     return "";
   }
 
-  if (args.command === "check" || args.command === "add") {
-    const checked = await checkedRecipe(args.folder, args.positional[0], options.stdin);
-    if (args.command === "add") {
-      const output = path.join(args.folder, checked.destination);
-      await mkdir(path.dirname(output), { recursive: true });
-      try { await writeFile(output, checked.markdown, { flag: "wx" }); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`refusing to overwrite ${checked.destination}`);
-        throw error;
-      }
-      return args.json ? json({ path: checked.destination }) : `${checked.destination}\n`;
-    }
-    return args.json
-      ? json({ title: checked.recipe.title, path: checked.destination })
-      : `OK: ${checked.recipe.title} -> ${checked.destination}\n`;
-  }
-
+  if (recipeCommands.has(args.command)) return runRecipeCommand(args, options.stdin);
   const recipes = scanRecipes(await recipeFiles(args.folder));
   if (args.command === "list") {
     const rows = recipes.map((recipe) => ({
@@ -217,24 +231,7 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
       ? `${rows.map((row) => `${row.path}\t${row.title}\t${row.tags.join(",")}\t${row.cover ? "cover" : "no cover"}`).join("\n")}\n`
       : "No recipes found.\n";
   }
-
-  const monday = mondayFor(args.week, options.now ?? new Date());
-  const selected = parsePlan(await readFile(path.join(args.folder, "Plan.md"), "utf8"));
-  const planned = [];
-  for (let offset = 0; offset < 7; offset += 1) {
-    const date = new Date(monday); date.setDate(monday.getDate() + offset);
-    for (const reference of selected.days.get(localIso(date)) ?? []) {
-      const recipe = resolveRecipeReference(recipes, reference);
-      if (recipe) planned.push(recipe);
-    }
-  }
-  const shoppingPath = path.join(args.folder, "Shopping.md");
-  const initial = await readOptional(shoppingPath);
-  const markdown = buildShoppingMarkdown(initial?.toString("utf8") ?? "", planned, recipes);
-  await saveShopping(shoppingPath, initial, markdown, options.now ?? new Date());
-  return args.json
-    ? json({ week: localIso(monday), path: "Shopping.md", markdown })
-    : markdown;
+  return runShop(args, options, recipes);
 }
 
 async function main(): Promise<void> {

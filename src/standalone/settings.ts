@@ -1,9 +1,6 @@
 import type { CookingAssistantSettings } from "@/settings";
 
-export type StandaloneSettings = CookingAssistantSettings & {
-  /** Legacy bootstrap input; browser commands ignore it. */
-  vaultPath?: string;
-};
+export type StandaloneSettings = CookingAssistantSettings;
 
 export const DEFAULT_STANDALONE_SETTINGS: StandaloneSettings = {
   databaseSort: "added-desc",

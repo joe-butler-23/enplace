@@ -7,11 +7,10 @@ export type PlannerNavigationIntentState = {
   nextGeneration: number;
   pending: PlannerNavigationIntent | null;
   mountReadyGeneration: number | null;
-  failure: string | null;
 };
 
 export function createPlannerNavigationIntentState(): PlannerNavigationIntentState {
-  return { nextGeneration: 0, pending: null, mountReadyGeneration: null, failure: null };
+  return { nextGeneration: 0, pending: null, mountReadyGeneration: null };
 }
 
 export function requestPlannerNavigation(
@@ -22,7 +21,6 @@ export function requestPlannerNavigation(
   state.nextGeneration = intent.generation;
   state.pending = intent;
   state.mountReadyGeneration = null;
-  state.failure = null;
   return intent;
 }
 
@@ -31,16 +29,6 @@ export function cancelPlannerNavigation(
 ): void {
   state.pending = null;
   state.mountReadyGeneration = null;
-  state.failure = null;
-}
-
-export function failPlannerNavigation(
-  state: PlannerNavigationIntentState,
-  message: string
-): void {
-  if (state.pending === null) return;
-  state.mountReadyGeneration = null;
-  state.failure = message;
 }
 
 export function retryPlannerNavigation(
@@ -48,7 +36,6 @@ export function retryPlannerNavigation(
 ): void {
   if (state.pending === null) return;
   state.mountReadyGeneration = null;
-  state.failure = null;
 }
 
 export function acknowledgePlannerMountReady(
@@ -64,7 +51,6 @@ export function settlePlannerNavigation(
   if (
     !datasetReady
     || state.pending === null
-    || state.failure !== null
     || state.mountReadyGeneration !== state.pending.generation
   ) {
     return null;
@@ -72,6 +58,5 @@ export function settlePlannerNavigation(
   const intent = state.pending;
   state.pending = null;
   state.mountReadyGeneration = null;
-  state.failure = null;
   return intent;
 }

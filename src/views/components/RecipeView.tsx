@@ -1,19 +1,16 @@
 import * as React from "react";
 import { mergeText, type MergeResult } from "@/kitchen/merge";
-import { parseIngredientsSection } from "@/modules/cooking/services/recipe-section-parsing";
+import { parseRecipeDocument } from "@/recipe-document";
 import { formatCookLogDate, parseCookLog } from "@/modules/cooking/services/RecipeLogService";
 import {
   buildRecipeMeta,
   composeMarkdown,
   extractHeroImage,
-  extractRecipeTitle,
-  parseDirectionsSection,
-  parseFrontmatter,
   stripLeadingH1,
-  stripStructuredSections,
-  stripWrappedQuotes
+  stripStructuredSections
 } from "../utils/recipe-frontmatter";
 import { ReadDocument, ReadInline, type RecipeImageResources } from "./RecipeMarkdown";
+import { responsiveSampleCover } from "./responsive-sample-cover";
 
 type RecipeViewProps = RecipeImageResources & {
   path: string;
@@ -45,12 +42,6 @@ export function parsedListsMatch(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
-let nextRecipeSelectionGeneration = 0;
-
-export function recipeHeroTimingIdentifier(selectionGeneration: number, path: string): string {
-  return `mep:recipe-hero:${selectionGeneration}:${path}`;
-}
-
 const SAMPLE_COVER_WIDTHS = [224, 672, 1288] as const;
 const HERO_COVER_SIZES = [
   "(max-width: 720px) calc(100vw - 64px)",
@@ -58,29 +49,16 @@ const HERO_COVER_SIZES = [
   "640.3px",
 ].join(", ");
 
-function responsiveSampleCover(url: string): { avifSrcSet: string; webpSrcSet: string } | null {
-  const match = /^(.*\/samples\/)([^/?#]+)\.webp([?#].*)?$/.exec(url);
-  if (!match) return null;
-  const [, directory, stem, suffix = ""] = match;
-  const srcSet = (extension: "avif" | "webp") => SAMPLE_COVER_WIDTHS
-    .map((width) => `${directory}${stem}-${width}.${extension}${suffix} ${width}w`)
-    .join(", ");
-  return { avifSrcSet: srcSet("avif"), webpSrcSet: srcSet("webp") };
-}
-
 /** Masthead image. Kept separate from body rendering so a warm cover paints with the first frame. */
-function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; timingIdentifier: string }): React.ReactElement {
-  const responsiveCover = responsiveSampleCover(url);
+function RecipeHero({ url, alt }: { url: string; alt: string }): React.ReactElement {
+  const responsiveCover = responsiveSampleCover(url, SAMPLE_COVER_WIDTHS);
   const image = (
     <img
-      {...({
-        src: url,
-        alt,
-        decoding: "async",
-        srcSet: responsiveCover?.webpSrcSet,
-        sizes: responsiveCover ? HERO_COVER_SIZES : undefined,
-        elementtiming: timingIdentifier,
-      } as React.ImgHTMLAttributes<HTMLImageElement>)}
+      src={url}
+      alt={alt}
+      decoding="async"
+      srcSet={responsiveCover?.webpSrcSet}
+      sizes={responsiveCover ? HERO_COVER_SIZES : undefined}
     />
   );
   return (
@@ -97,14 +75,117 @@ function RecipeHero({ url, alt, timingIdentifier }: { url: string; alt: string; 
 
 type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
-/**
- * Memoised on its own props so an unrelated RecipeView re-render (a checkbox toggle) does not
- * re-invoke the Markdown renderer and fully reparse the document on every call.
- */
+/** Avoid reparsing Markdown when only checklist state changes. */
 export const PreparedRecipeDocument = React.memo(ReadDocument);
 
 /** One method step, memoised on its text so checkbox state never reparses it. */
 export const StepText = React.memo(ReadInline);
+
+type RecipeSaveNoticesProps = { enabled: boolean; state: RecipeSaveState; mergeConflict: boolean; deleteError?: boolean };
+function RecipeSaveNotices({ enabled, state, mergeConflict, deleteError = false }: RecipeSaveNoticesProps): React.ReactElement {
+  return <>
+    {enabled && state !== "clean" ? (
+      <div className="recipe-view__save-state" role="status" data-save-state={state}>
+        {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : state === "error" ? "Could not save changes" : "Unsaved changes"}
+      </div>
+    ) : null}
+    {mergeConflict ? <div className="recipe-view__save-state" role="status" data-merge-conflict="true">
+      Both versions kept where edits overlapped; look for the marked lines.
+    </div> : null}
+    {deleteError ? <div className="recipe-view__save-state" role="status">Could not delete recipe.</div> : null}
+  </>;
+}
+
+type RecipeMastheadProps = {
+  title: string; meta: ReturnType<typeof buildRecipeMeta>; hero: ReturnType<typeof extractHeroImage>["hero"];
+  heroUrl: string | null; isEditing: boolean; onEdit: () => void; onDelete?: () => Promise<void>; deleteRecipe: () => void;
+};
+function RecipeMasthead({ title, meta, hero, heroUrl, isEditing, onEdit, onDelete, deleteRecipe }: RecipeMastheadProps): React.ReactElement {
+  return <header className={`recipe-view__masthead${hero ? "" : " recipe-view__masthead--textonly"}`}>
+    <div className="recipe-view__masthead-text">
+      <h1>{title}</h1>
+      <div className="recipe-view__meta">
+        <span className="recipe-view__source">
+          {meta.source?.href ? <a href={meta.source.href} target="_blank" rel="noopener noreferrer">{meta.source.label}</a> : meta.source?.label}
+        </span>
+        {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={onEdit}>Edit</button> : null}
+        {onDelete && !isEditing ? <button className="recipe-view__edit-action" type="button" onClick={deleteRecipe}>Delete recipe</button> : null}
+      </div>
+    </div>
+    {hero && heroUrl ? <RecipeHero url={heroUrl} alt={hero.alt} /> : null}
+  </header>;
+}
+
+type RecipeReadContentProps = {
+  ingredients: string[]; directions: string[]; checkedIngredients: Set<number>; checkedSteps: Set<number>;
+  toggleIngredient: (index: number) => void; toggleStep: (index: number) => void; resetAll: () => void;
+  readMarkdown: string; editor: React.ReactNode; cookLog: ReturnType<typeof parseCookLog>; tags: string[];
+};
+function RecipeReadContent({ ingredients, directions, checkedIngredients, checkedSteps, toggleIngredient,
+  toggleStep, resetAll, readMarkdown, editor, cookLog, tags }: RecipeReadContentProps): React.ReactElement {
+  return <>
+    <aside className="recipe-view__panel recipe-view__ingredients-panel">
+      <div className="recipe-view__panel-heading"><h2>Ingredients</h2></div>
+      <ul className="recipe-view__checklist">
+        {ingredients.map((ingredient, index) => (
+          <li key={index}>
+            <label>
+              <input className="recipe-view__check" type="checkbox" checked={checkedIngredients.has(index)} onChange={() => toggleIngredient(index)} />
+              <span className="checkbox-box" aria-hidden="true"><svg viewBox="0 0 12 12"><polyline points="2,6.4 4.7,9 10,3.2" /></svg></span>
+              <span className={checkedIngredients.has(index) ? "is-checked" : ""}>{ingredient}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </aside>
+    <article className="recipe-view__panel recipe-view__method">
+      <div className="recipe-view__panel-heading">
+        <h2>Method</h2>
+        <button className="recipe-view__reset" type="button" onClick={resetAll}>Reset</button>
+      </div>
+      <ol className="recipe-view__checklist recipe-view__checklist--steps">
+        {directions.map((step, index) => (
+          <li key={index}>
+            <button type="button" className="recipe-view__step-number" aria-pressed={checkedSteps.has(index)}
+              aria-label={`Step ${index + 1}`} onClick={() => toggleStep(index)}>
+              {String(index + 1).padStart(2, "0")}
+            </button>
+            <p className={`recipe-view__step-text${checkedSteps.has(index) ? " is-checked" : ""}`}><StepText text={step} /></p>
+          </li>
+        ))}
+      </ol>
+    </article>
+    {readMarkdown ? <div className="recipe-view__notes recipe-view__mdx recipe-view__mdx--full">{editor}</div> : null}
+    {cookLog.length > 0 ? (
+      <details className="recipe-view__cooklog">
+        <summary>
+          <span className="recipe-view__cooklog-label">Cook log</span>
+          <span className="recipe-view__cooklog-summary">{cookLog.length === 1 ? "1 cook" : `${cookLog.length} cooks`} · last {formatCookLogDate(cookLog[0].date)}</span>
+        </summary>
+        <ul>
+          {cookLog.map((entry, index) => {
+            const verdict = [
+              entry.rating === null ? null : `Rated ${entry.rating}`,
+              entry.makeAgain === null ? null : entry.makeAgain ? "Would make again" : "Would not make again"
+            ].filter(Boolean).join(" · ");
+            return (
+              <li key={`${entry.date}:${index}`}>
+                <span className="recipe-view__cooklog-date">{formatCookLogDate(entry.date)}</span>
+                <div className="recipe-view__cooklog-entry">
+                  {entry.notes ? <p>{entry.notes}</p> : null}
+                  {verdict ? <p className="recipe-view__cooklog-verdict">{verdict}</p> : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+    ) : null}
+    {tags.length > 0 ? <ul className="recipe-view__tags">
+      {tags.map((tag) => <li key={tag}>{tag}</li>)}
+    </ul> : null}
+  </>;
+}
 
 export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(function RecipeView({
   path,
@@ -122,7 +203,6 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
   const [saveState, setSaveState] = React.useState<RecipeSaveState>("clean");
   const [mergeConflict, setMergeConflict] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState(false);
-  const [selectionGeneration] = React.useState(() => ++nextRecipeSelectionGeneration);
   const isMountedRef = React.useRef(false);
   const autosaveTimerRef = React.useRef<number | null>(null);
   const lastSavedDraftRef = React.useRef(content);
@@ -185,9 +265,9 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     };
   }, []);
 
-  const parsed = React.useMemo(() => parseFrontmatter(draft), [draft]);
-  const ingredients = React.useMemo(() => parseIngredientsSection(parsed.body), [parsed.body]);
-  const directions = React.useMemo(() => parseDirectionsSection(parsed.body), [parsed.body]);
+  const parsed = React.useMemo(() => parseRecipeDocument(path, draft), [draft, path]);
+  const ingredients = parsed.view.ingredients;
+  const directions = parsed.view.directions;
 
   React.useEffect(() => {
     if (draftRef.current !== lastSavedDraftRef.current) {
@@ -202,9 +282,9 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     // Ticks are keyed by index: only reset when the incoming content genuinely adds, removes,
     // or reorders ingredients/steps. An edit (e.g. a typo fix, or the autosave echo of one)
     // that leaves both lists element-wise identical must not wipe what the cook already ticked.
-    const nextBody = parseFrontmatter(content).body;
-    if (!parsedListsMatch(parseIngredientsSection(nextBody), ingredients)) setCheckedIngredients(new Set());
-    if (!parsedListsMatch(parseDirectionsSection(nextBody), directions)) setCheckedSteps(new Set());
+    const next = parseRecipeDocument(path, content);
+    if (!parsedListsMatch(next.view.ingredients, ingredients)) setCheckedIngredients(new Set());
+    if (!parsedListsMatch(next.view.directions, directions)) setCheckedSteps(new Set());
     lastSavedDraftRef.current = content;
     setSaveState("clean");
     if (autosaveTimerRef.current !== null) {
@@ -218,38 +298,18 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
     // fresh parse always returns a new array reference even when its contents are unchanged.
   }, [content]);
 
-  const resolvedTitle = React.useMemo(() => {
-    const frontmatterTitle = typeof parsed.frontmatter.title === "string"
-      ? stripWrappedQuotes(parsed.frontmatter.title.trim()).trim()
-      : "";
-    return frontmatterTitle || extractRecipeTitle(parsed.body, title);
-  }, [parsed.body, parsed.frontmatter.title, title]);
+  const resolvedTitle = parsed.view.title || title;
   const body = parsed.body.trim() ? parsed.body : `# ${resolvedTitle}\n`;
   const editorMarkdown = body;
   const { hero, body: bodyWithoutHero } = React.useMemo(
-    () => extractHeroImage(body, parsed.frontmatter),
-    [body, parsed.frontmatter]
+    () => extractHeroImage(parsed, body),
+    [body, parsed]
   );
   const heroUrl = React.useMemo(
     () => hero ? resolveImage(hero.src, path) : null,
     [hero, path, resolveImage]
   );
-  const heroIdentifier = heroUrl ? recipeHeroTimingIdentifier(selectionGeneration, path) : null;
-  React.useEffect(() => {
-    if (mode !== "full" || typeof performance === "undefined" || typeof performance.mark !== "function") return;
-    performance.mark("mep:recipe:semantic-ready", {
-      detail: {
-        path,
-        title: resolvedTitle,
-        hasHero: Boolean(heroUrl),
-        heroIdentifier,
-        heroUrl,
-        mode,
-        selectionGeneration,
-      }
-    });
-  }, [heroIdentifier, heroUrl, mode, path, resolvedTitle, selectionGeneration]);
-  const meta = React.useMemo(() => buildRecipeMeta(parsed.frontmatter), [parsed.frontmatter]);
+  const meta = React.useMemo(() => buildRecipeMeta(parsed), [parsed]);
   const cookLog = React.useMemo(() => parseCookLog(parsed.body), [parsed.body]);
 
   React.useLayoutEffect(() => {
@@ -302,132 +362,42 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       />
     </div>
   ) : readDocument;
-  const saveIndicator = onSave && saveState !== "clean" ? (
-    <div className="recipe-view__save-state" role="status" data-save-state={saveState}>
-      {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Could not save changes" : "Unsaved changes"}
-    </div>
-  ) : null;
-  const conflictNotice = mergeConflict ? (
-    <div className="recipe-view__save-state" role="status" data-merge-conflict="true">
-      Both versions kept where edits overlapped; look for the marked lines.
-    </div>
-  ) : null;
+  const editRecipe = () => setIsEditing(true);
+  const deleteRecipe = () => {
+    if (!onDelete || !window.confirm(`Delete ${resolvedTitle.trim()}?`)) return;
+    setDeleteError(false);
+    void flushSave().then(onDelete).catch((error) => {
+      setDeleteError(true);
+      console.error("Could not delete recipe", { path, error });
+    });
+  };
+  const notices = <RecipeSaveNotices enabled={Boolean(onSave)} state={saveState} mergeConflict={mergeConflict} />;
 
-  const contentPane = mode === "rendered" ? (
-    <section className="recipe-view recipe-view--rendered">
-      <div className={`recipe-view__rendered-content ${isEditing ? "is-editing" : ""}`}>
-        <div className="recipe-view__mdx">{editor}</div>
-        {saveIndicator}
-        {conflictNotice}
-        {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
-      </div>
-    </section>
-  ) : (
+  if (mode === "rendered") {
+    return (
+      <section className="recipe-view recipe-view--rendered">
+        <div className={`recipe-view__rendered-content ${isEditing ? "is-editing" : ""}`}>
+          <div className="recipe-view__mdx">{editor}</div>
+          {notices}
+          {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={editRecipe}>Edit</button> : null}
+        </div>
+      </section>
+    );
+  }
+
+  return (
     <section className="recipe-view recipe-view--full">
       <div className="recipe-view__content recipe-view__content--full">
-        <header className={`recipe-view__masthead${hero ? "" : " recipe-view__masthead--textonly"}`}>
-          <div className="recipe-view__masthead-text">
-            <h1>{resolvedTitle}</h1>
-            <div className="recipe-view__meta">
-              <span className="recipe-view__source">
-                {meta.source?.href
-                  ? <a href={meta.source.href} target="_blank" rel="noopener noreferrer">{meta.source.label}</a>
-                  : meta.source?.label}
-              </span>
-              {!isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => setIsEditing(true)}>Edit</button> : null}
-              {onDelete && !isEditing ? <button className="recipe-view__edit-action" type="button" onClick={() => {
-                if (!window.confirm(`Delete ${resolvedTitle.trim()}?`)) return;
-                setDeleteError(false);
-                void flushSave().then(onDelete).catch((error) => {
-                  setDeleteError(true);
-                  console.error("Could not delete recipe", { path, error });
-                });
-              }}>Delete recipe</button> : null}
-            </div>
-          </div>
-          {hero && heroUrl && heroIdentifier ? <RecipeHero url={heroUrl} alt={hero.alt} timingIdentifier={heroIdentifier} /> : null}
-        </header>
-
+        <RecipeMasthead title={resolvedTitle} meta={meta} hero={hero} heroUrl={heroUrl}
+          isEditing={isEditing} onEdit={editRecipe} onDelete={onDelete} deleteRecipe={deleteRecipe} />
         {isEditing ? <div className="recipe-view__mdx recipe-view__mdx--full">{editor}</div> : (
-          <>
-            <aside className="recipe-view__panel recipe-view__ingredients-panel">
-              <div className="recipe-view__panel-heading">
-                <h2>Ingredients</h2>
-              </div>
-              <ul className="recipe-view__checklist">
-                {ingredients.map((ingredient, index) => (
-                  <li key={index}>
-                    <label>
-                      <input className="recipe-view__check" type="checkbox" checked={checkedIngredients.has(index)} onChange={() => toggleIngredient(index)} />
-                      <span className="checkbox-box" aria-hidden="true">
-                        <svg viewBox="0 0 12 12"><polyline points="2,6.4 4.7,9 10,3.2" /></svg>
-                      </span>
-                      <span className={checkedIngredients.has(index) ? "is-checked" : ""}>{ingredient}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </aside>
-            <article className="recipe-view__panel recipe-view__method">
-              <div className="recipe-view__panel-heading">
-                <h2>Method</h2>
-                <button className="recipe-view__reset" type="button" onClick={resetAll}>Reset</button>
-              </div>
-              <ol className="recipe-view__checklist recipe-view__checklist--steps">
-                {directions.map((step, index) => (
-                  <li key={index}>
-                    <button
-                      type="button"
-                      className="recipe-view__step-number"
-                      aria-pressed={checkedSteps.has(index)}
-                      aria-label={`Step ${index + 1}`}
-                      onClick={() => toggleStep(index)}
-                    >{String(index + 1).padStart(2, "0")}</button>
-                    <p className={`recipe-view__step-text${checkedSteps.has(index) ? " is-checked" : ""}`}><StepText text={step} /></p>
-                  </li>
-                ))}
-              </ol>
-            </article>
-            {readMarkdown ? <div className="recipe-view__notes recipe-view__mdx recipe-view__mdx--full">{editor}</div> : null}
-            {cookLog.length > 0 ? (
-              <details className="recipe-view__cooklog">
-                <summary>
-                  <span className="recipe-view__cooklog-label">Cook log</span>
-                  <span className="recipe-view__cooklog-summary">
-                    {cookLog.length === 1 ? "1 cook" : `${cookLog.length} cooks`} · last {formatCookLogDate(cookLog[0].date)}
-                  </span>
-                </summary>
-                <ul>
-                  {cookLog.map((entry, index) => {
-                    const verdict = [
-                      entry.rating === null ? null : `Rated ${entry.rating}`,
-                      entry.makeAgain === null ? null : entry.makeAgain ? "Would make again" : "Would not make again"
-                    ].filter(Boolean).join(" · ");
-                    return (
-                      <li key={`${entry.date}:${index}`}>
-                        <span className="recipe-view__cooklog-date">{formatCookLogDate(entry.date)}</span>
-                        <div className="recipe-view__cooklog-entry">
-                          {entry.notes ? <p>{entry.notes}</p> : null}
-                          {verdict ? <p className="recipe-view__cooklog-verdict">{verdict}</p> : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-            ) : null}
-            {meta.tags.length > 0 ? (
-              <ul className="recipe-view__tags">
-                {meta.tags.map((tag) => <li key={tag}>{tag}</li>)}
-              </ul>
-            ) : null}
-          </>
+          <RecipeReadContent ingredients={ingredients} directions={directions}
+            checkedIngredients={checkedIngredients} checkedSteps={checkedSteps}
+            toggleIngredient={toggleIngredient} toggleStep={toggleStep} resetAll={resetAll}
+            readMarkdown={readMarkdown} editor={editor} cookLog={cookLog} tags={meta.tags} />
         )}
-        {saveIndicator}
-        {conflictNotice}
-        {deleteError ? <div className="recipe-view__save-state" role="status">Could not delete recipe.</div> : null}
+        <RecipeSaveNotices enabled={Boolean(onSave)} state={saveState} mergeConflict={mergeConflict} deleteError={deleteError} />
       </div>
     </section>
   );
-  return contentPane;
 });

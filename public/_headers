@@ -20,4 +20,7 @@
 /samples/*
   Cache-Control: public, max-age=86400
 
-# Build-time navigation Link headers are appended to dist-static/_headers by Vite.
+/sw.js
+  Cache-Control: no-cache
+
+# Build-time navigation Cache-Control and Link headers are appended to dist-static/_headers by Vite.

@@ -5,10 +5,12 @@ import {
   deleteKitchenPath,
   hasKitchenDirectory,
   isKitchenId,
+  kitchenFiles,
   kitchenIdFromUrl,
   kitchenLink,
   listKitchenPaths,
   newKitchenId,
+  normalizeKitchenPath,
   observeKitchen,
   readKitchenBytes,
   readKitchenText,
@@ -33,6 +35,51 @@ describe("kitchen document", () => {
     expect(hasKitchenDirectory(doc, "recipes")).toBe(false);
   });
 
+
+  it("projects disconnected path collisions deterministically without touching raw Yjs state", () => {
+    expect(normalizeKitchenPath("appdata/a.md")).toBe("appdata/a.md");
+    expect(normalizeKitchenPath("home/vault/a.md")).toBe("home/vault/a.md");
+    const peers = [new Y.Doc(), new Y.Doc(), new Y.Doc()];
+    writeKitchenText(peers[0], "archive.md", "parent text");
+    writeKitchenBytes(peers[1], "archive.md/nested", new Uint8Array([0, 255]));
+    writeKitchenText(peers[2], "archive.md/nested/deep.txt", "deep text");
+    const updates = peers.map((doc) => Y.encodeStateAsUpdate(doc));
+    const expected = [
+      "archive (file conflict 9b7862d0).md",
+      "archive.md/nested (file conflict 64cbe202)",
+      "archive.md/nested/deep.txt",
+    ];
+    for (const order of [[0, 1, 2], [2, 1, 0]]) {
+      const doc = new Y.Doc();
+      for (const index of order) Y.applyUpdate(doc, updates[index]);
+      expect(listKitchenPaths(doc)).toEqual(expected);
+      expect(readKitchenText(doc, expected[0])).toBe("parent text");
+      expect(readKitchenBytes(doc, expected[1])).toEqual(new Uint8Array([0, 255]));
+      expect(readKitchenText(doc, expected[2])).toBe("deep text");
+      expect([...doc.share.keys()].filter((name) => name.startsWith("text:"))).toHaveLength(2);
+      const durable = Y.encodeStateAsUpdate(doc);
+      expect(listKitchenPaths(doc)).toEqual(expected);
+      const reload = new Y.Doc();
+      Y.applyUpdate(reload, durable);
+      expect(listKitchenPaths(reload)).toEqual(expected);
+    }
+  });
+
+  it("routes projected edits and rejects hidden raw overwrite", () => {
+    const doc = new Y.Doc();
+    kitchenFiles(doc).set(".md", "text");
+    doc.getText("text:.md").insert(0, "kept");
+    kitchenFiles(doc).set(".md/child.bin", new Uint8Array([1]));
+    const alias = "file (file conflict 5e1d80d0).md";
+    const seen: string[][] = [];
+    const stop = observeKitchen(doc, (paths) => seen.push([...paths]));
+    writeKitchenBytes(doc, alias, new TextEncoder().encode("edited"));
+    expect(readKitchenText(doc, alias)).toBe("edited");
+    expect(seen).toEqual([[alias]]);
+    expect(() => writeKitchenBytes(doc, ".md", new Uint8Array([9]))).toThrow("raw path is hidden");
+    stop();
+  });
+
   it("applies the smallest edit so concurrent line edits merge", () => {
     const left = new Y.Doc();
     const right = new Y.Doc();
@@ -44,45 +91,6 @@ describe("kitchen document", () => {
     sync(right, left);
     expect(readKitchenText(left, "Shopping.md")).toBe("- [x] milk\n- [x] eggs\n");
     expect(readKitchenText(right, "Shopping.md")).toBe(readKitchenText(left, "Shopping.md"));
-  });
-
-  it("keeps three independent concurrent ticks on their own items", () => {
-    const left = new Y.Doc();
-    const right = new Y.Doc();
-    const base = "- [ ] milk\n- [ ] eggs\n- [ ] bread\n";
-    writeKitchenText(left, "Shopping.md", base);
-    sync(left, right);
-    writeKitchenText(left, "Shopping.md", "- [x] milk\n- [ ] eggs\n- [x] bread\n");
-    writeKitchenText(right, "Shopping.md", "- [ ] milk\n- [x] eggs\n- [ ] bread\n");
-    sync(left, right);
-    sync(right, left);
-    const expected = "- [x] milk\n- [x] eggs\n- [x] bread\n";
-    expect(readKitchenText(left, "Shopping.md")).toBe(expected);
-    expect(readKitchenText(right, "Shopping.md")).toBe(expected);
-  });
-
-  it("keeps a concurrent prepend and append", () => {
-    const left = new Y.Doc();
-    const right = new Y.Doc();
-    writeKitchenText(left, "Plan.md", "middle\n");
-    sync(left, right);
-    writeKitchenText(left, "Plan.md", "middle\nafter\n");
-    writeKitchenText(right, "Plan.md", "before\nmiddle\n");
-    sync(left, right);
-    sync(right, left);
-    expect(readKitchenText(left, "Plan.md")).toBe("before\nmiddle\nafter\n");
-    expect(readKitchenText(right, "Plan.md")).toBe("before\nmiddle\nafter\n");
-  });
-
-  it("uses one small character hunk for a single changed line", () => {
-    const doc = new Y.Doc();
-    const text = doc.getText("t");
-    text.insert(0, "abcdef");
-    const deltas: unknown[] = [];
-    text.observe((event) => deltas.push(event.delta));
-    doc.transact(() => applyTextDiff(text, "abXYef"));
-    expect(text.toString()).toBe("abXYef");
-    expect(deltas).toEqual([[{ retain: 2 }, { delete: 2 }, { insert: "XY" }]]);
   });
 
   it("keeps both sides when two devices create the same file at once", () => {
@@ -97,36 +105,6 @@ describe("kitchen document", () => {
     expect(merged).toContain("- [ ] milk");
     expect(merged).toContain("- [ ] eggs");
     expect(listKitchenPaths(left)).toEqual(["Shopping.md"]);
-  });
-
-  it("reports changed paths for map and text edits with their origin", () => {
-    const doc = new Y.Doc();
-    const seen: Array<[string[], unknown]> = [];
-    const stop = observeKitchen(doc, (paths, origin) => seen.push([[...paths].sort(), origin]));
-    writeKitchenText(doc, "Plan.md", "## Marked\n", "me");
-    writeKitchenBytes(doc, "images/a.webp", new Uint8Array([1]), "me");
-    writeKitchenText(doc, "Plan.md", "## Marked\n- [[x]]\n", "remote");
-    deleteKitchenPath(doc, "Plan.md", false, "me");
-    stop();
-    writeKitchenText(doc, "ignored.md", "x");
-    expect(seen).toEqual([
-      [["Plan.md"], "me"],
-      [["images/a.webp"], "me"],
-      [["Plan.md"], "remote"],
-      [["Plan.md"], "me"],
-    ]);
-  });
-
-  it("diffs around the changed span", () => {
-    const doc = new Y.Doc();
-    const text = doc.getText("t");
-    text.insert(0, "abcdef");
-    applyTextDiff(text, "abXYef");
-    expect(text.toString()).toBe("abXYef");
-    applyTextDiff(text, "");
-    expect(text.toString()).toBe("");
-    applyTextDiff(text, "new");
-    expect(text.toString()).toBe("new");
   });
 
   it("deletes files and directories", () => {

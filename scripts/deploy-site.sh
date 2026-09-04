@@ -11,4 +11,8 @@ RELAY="$(grep -o -E "wss://[^\"'\` ]+" dist-static/assets/index-*.js | head -1 |
 [[ -n "$RELAY" ]] || { echo "deploy-site: the build has no relay URL; check .env.static" >&2; exit 1; }
 echo "==> Relay in build: $RELAY"
 echo "==> Deploying to Pages project $PROJECT"
-npx wrangler pages deploy dist-static --project-name "$PROJECT" --branch main --commit-dirty=true
+[[ -x ./node_modules/.bin/wrangler ]] || {
+  echo "deploy-site: ./node_modules/.bin/wrangler is missing or not executable; run npm ci at the repository root" >&2
+  exit 1
+}
+./node_modules/.bin/wrangler pages deploy dist-static --project-name "$PROJECT" --branch main --commit-dirty=true

@@ -160,10 +160,7 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .shopping-button { min-height: 38px; padding: 0 14px; border: none; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 0.88rem; font-weight: 500; cursor: pointer; }
 .shopping-button:hover:not(:disabled) { background: var(--accent-hover); }
 .shopping-button:disabled { opacity: 0.45; cursor: default; }
-.shopping-list-view__preview,
 .shopping-list-view__error { flex: 0 0 auto; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
-.shopping-list-view__preview { overflow-y: auto; }
-.shopping-list-view__preview h3 { margin: 0 0 4px; font-family: var(--font-serif); font-size: 1.05rem; }
 .shopping-list-view__error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; color: var(--danger); border-color: var(--danger-line); background: var(--danger-tint); }
 .shopping-list-view__error button { flex: 0 0 auto; min-height: 34px; padding: 0 12px; border: 1px solid var(--danger-line); border-radius: 999px; background: transparent; color: var(--danger); font-family: inherit; font-size: 0.8rem; cursor: pointer; }
 .shopping-list-view__empty,

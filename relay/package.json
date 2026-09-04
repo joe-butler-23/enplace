@@ -7,15 +7,13 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "typecheck": "tsc --noEmit"
+    "types": "wrangler types",
+    "typecheck": "npm run types && tsc --noEmit",
+    "build": "wrangler deploy --dry-run"
   },
   "dependencies": {
     "partyserver": "^0.5.10",
     "y-partyserver": "^2.2.0",
     "yjs": "^13.6.32"
-  },
-  "devDependencies": {
-    "typescript": "5.9.3",
-    "wrangler": "^4.128.0"
   }
 }

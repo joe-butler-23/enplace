@@ -8,7 +8,7 @@ import {
   removeShoppingItem,
   renderImportedRecipe,
   recipePlanning,
-  replaceRecipeDocument,
+  resolveRecipeReference,
   resolveRelativePath,
   scanRecipes,
   serializePlan,
@@ -18,13 +18,19 @@ import {
 } from "./core";
 
 describe("plain Markdown recipe rule", () => {
+
+  it("keeps machine references identical under en-GB and tr-TR case rules", () => {
+    expect("I".toLocaleLowerCase("en-GB")).not.toBe("I".toLocaleLowerCase("tr-TR"));
+    const recipe = parseRecipe("I.md", "# I\n\n## Ingredients\n- onion\n");
+    expect(resolveRecipeReference([recipe!], "i")).toBe(recipe);
+  });
+
   it("accepts only a level-two Ingredients heading and keeps free-form bullets opaque", () => {
     expect(parseRecipe("recipes/a.md", "# A\n\n# Ingredients\n- no\n")).toBeNull();
     expect(parseRecipe("recipes/a.md", "# A\n\n### Ingredients\n- no\n")).toBeNull();
     expect(parseRecipe("recipes/a.md", "```md\n## Ingredients\n- code only\n```\n")).toBeNull();
     const recipe = parseRecipe("recipes/a.md", "# A\n\n## iNgReDiEnTs\n- 2 onions, sliced\n- 1 | lime | produce\n\n## Method\n1. Stir\n- Serve\n");
     expect(recipe?.ingredients).toEqual(["2 onions, sliced", "1 | lime | produce"]);
-    expect(recipe?.method).toEqual(["Stir", "Serve"]);
   });
 
   it("uses frontmatter title, then H1, then filename and finds the first body image", () => {
@@ -36,32 +42,24 @@ describe("plain Markdown recipe rule", () => {
     expect(resolveRelativePath(fallback!.path, fallback!.cover!)).toBe("images/dish.jpg");
   });
 
-  it("uses relative paths only when duplicate stems make wikilinks ambiguous", () => {
+  it("keeps duplicate titles and qualifies case-colliding stems", () => {
     const recipes = scanRecipes([
-      { path: "one/soup.md", text: "## Ingredients\n- a" },
-      { path: "two/soup.md", text: "## Ingredients\n- b" },
+      { path: "recipes/Soup.md", text: "---\ntitle: Shared Supper\n---\n## Ingredients\n- a" },
+      { path: "archive/soup.MD", text: "---\ntitle: Shared Supper\n---\n## Ingredients\n- b" },
       { path: "salad.md", text: "## Ingredients\n- c" },
     ]);
-    expect(Object.fromEntries(recipes.map((recipe) => [recipe.path, recipe.link]))).toEqual({
-      "salad.md": "salad",
-      "one/soup.md": "one/soup",
-      "two/soup.md": "two/soup",
-    });
-  });
-
-  it("keeps a duplicate-stem recipe's qualified plan link after editing", () => {
-    const recipes = scanRecipes([
-      { path: "one/soup.md", text: "# One soup\n\n## Ingredients\n- onion" },
-      { path: "two/soup.md", text: "# Two soup\n\n## Ingredients\n- carrot" },
+    expect(recipes.map(({ path, title, link }) => ({ path, title, link }))).toEqual([
+      { path: "salad.md", title: "salad", link: "salad" },
+      { path: "recipes/Soup.md", title: "Shared Supper", link: "recipes/Soup" },
+      { path: "archive/soup.MD", title: "Shared Supper", link: "archive/soup" },
     ]);
-    const updated = replaceRecipeDocument(recipes, "one/soup.md", "# Edited soup\n\n## Ingredients\n- leek");
-    expect(updated.find((recipe) => recipe.path === "one/soup.md")?.link).toBe("one/soup");
   });
 });
 
 describe("Plan.md", () => {
   it("round-trips marked recipes and sorted non-empty days into the canonical file", () => {
     const parsed = parsePlan("preamble ignored\n## 2026-09-09\n- [[soup]]\n## Marked\n- [[salad]]\n- [[salad]]\n## 2026-09-07\n- [[pie]]\n## empty\n- [[ignored]]\n");
+    expect(parsed.marked).toEqual(["salad"]);
     expect(serializePlan(parsed)).toBe("## Marked\n- [[salad]]\n\n## 2026-09-07\n- [[pie]]\n\n## 2026-09-09\n- [[soup]]\n");
     expect(serializePlan(parsePlan(serializePlan(parsed)))).toBe(serializePlan(parsed));
   });
@@ -102,18 +100,14 @@ describe("Plan.md", () => {
 });
 
 describe("Shopping.md", () => {
-  const soup = parseRecipe("soup.md", "---\ntitle: Soup\n---\n## Ingredients\n- 2 onions\n- Salt\n")!;
-  const pie = parseRecipe("pie.md", "---\ntitle: Pie\n---\n## Ingredients\n- salt\n- Flour\n")!;
-
-  it("rebuilds recipe sections in plan order, merges exact duplicates, and preserves checked state and hand sections", () => {
-    const current = "# Shopping\n\n## Market note\nBuy local\n- [ ] hand soap\n\n## Soup\n- [x] 2 onions\n- [x] Old ingredient\n\n## AI grouping\n- [x] batteries\n";
-    const built = buildShoppingMarkdown(current, [soup, pie], [soup, pie]);
-    expect(built).toContain("## Market note\nBuy local\n- [ ] hand soap");
-    expect(built).toContain("## AI grouping\n- [x] batteries");
-    expect(built).not.toContain("Old ingredient");
-    expect(built).toContain("## Soup\n- [x] 2 onions\n- [ ] Salt");
-    expect(built).toContain("## Pie\n- [ ] Flour");
-    expect(built.match(/Salt/gi)).toHaveLength(1);
+  it("rebuilds exact Markdown in plan order by distinct recipe identity", () => {
+    const sameA = parseRecipe("a/same.md", "---\ntitle: Same\n---\n## Ingredients\n- Salt\n- apples\n")!;
+    const sameB = parseRecipe("b/same.md", "---\ntitle: Same\n---\n## Ingredients\n- salt\n- pears\n- pears\n")!;
+    const current = "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## Same\r\n- [x] SALT\r\n- [ ] stale\r\n\r\n## AI grouping\r\n- [x] batteries\r\n";
+    const duplicatePath = { ...sameB, title: "Ignored duplicate", ingredients: ["wrong"] };
+    expect(buildShoppingMarkdown(current, [sameB, sameA, duplicatePath], [sameA, sameB])).toBe(
+      "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## AI grouping\r\n- [x] batteries\r\n\n## Same\n- [x] salt\n- [ ] pears\n\n## Same\n- [ ] apples\n",
+    );
   });
 
   it("adds under Other and removes exactly the selected Markdown line", () => {

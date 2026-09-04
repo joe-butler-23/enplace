@@ -1,60 +1,27 @@
 import { randomBytes } from "node:crypto";
+import { cpSync, rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { addShoppingItem, openFreshKitchen, openShopping, persistedUpdateCount } from "./helpers";
 
 const OFFLINE_RELOAD_TITLES = new Set(["the kitchen app shell reloads offline after its first visit"]);
 test.beforeEach(async ({ browserName }, testInfo) => {
   if (browserName === "webkit" && OFFLINE_RELOAD_TITLES.has(testInfo.title)) testInfo.skip(true, "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 });
 
-const KITCHEN_ID = /^[a-z2-7]{26}$/;
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
 function newKitchenId(): string {
   return Array.from(randomBytes(26), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
 }
 
-function kitchenIdFromPage(page: Page): string {
-  const id = new URL(page.url()).hash.match(/^#k=([a-z2-7]{26})$/)?.[1] ?? "";
-  expect(id).toMatch(KITCHEN_ID);
-  return id;
-}
-
-async function openFreshKitchen(page: Page): Promise<string> {
-  await page.goto("/");
-  await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
-  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-  return kitchenIdFromPage(page);
-}
-
-async function openShopping(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Shopping List" }).click();
-  await expect(page.getByRole("heading", { name: "Shopping list" })).toBeVisible();
-}
-
-async function addShoppingItem(page: Page, item: string): Promise<void> {
-  await page.getByRole("button", { name: "Add an item" }).click();
-  await page.getByLabel("Add a shopping item").fill(item);
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: item })).toBeVisible();
+function serveBuild(build: "a" | "b"): void {
+  rmSync("dist-static", { recursive: true });
+  cpSync(`tmp/static-pwa-${build}`, "dist-static", { recursive: true });
 }
 
 async function openSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-}
-
-/** Number of Yjs updates y-indexeddb has committed for the kitchen: the durability boundary a reload must not cross early. */
-async function persistedUpdateCount(page: Page, id: string): Promise<number> {
-  return page.evaluate(async (name) => new Promise<number>((resolve, reject) => {
-    const request = indexedDB.open(name);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const count = db.transaction("updates", "readonly").objectStore("updates").count();
-      count.onsuccess = () => { db.close(); resolve(count.result); };
-      count.onerror = () => { db.close(); reject(count.error); };
-    };
-  }), `enplace-kitchen-${id}`);
 }
 
 test("fresh visit creates and persists a seeded kitchen", async ({ page }) => {
@@ -63,22 +30,87 @@ test("fresh visit creates and persists a seeded kitchen", async ({ page }) => {
   expect(databases).toContain(`enplace-kitchen-${id}`);
 });
 
-test("shopping edits survive reload and the remembered kitchen reopens", async ({ page }) => {
+test("a waiting build activates once and keeps the persisted kitchen", async ({ page }) => {
+  serveBuild("a");
   const id = await openFreshKitchen(page);
+  await page.evaluate(async () => {
+    const controlled = new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true });
+    });
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await controlled;
+  });
   await openShopping(page);
-  await addShoppingItem(page, "oat milk");
+  await addShoppingItem(page, "update basil");
   const before = await persistedUpdateCount(page, id);
-  await page.getByText("oat milk", { exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: "oat milk" })).toBeChecked();
-  await expect.poll(() => persistedUpdateCount(page, id)).toBeGreaterThan(before);
+  await page.getByText("update basil", { exact: true }).click();
+  expect(await persistedUpdateCount(page, id)).toBeGreaterThan(before);
 
-  await page.reload();
-  await expect(page.getByRole("checkbox", { name: "oat milk" })).toBeChecked();
+  const keeper = await page.context().newPage();
+  await keeper.goto(page.url());
+  await expect(keeper.getByRole("heading", { name: "Shopping list" })).toBeVisible();
+  expect(await keeper.evaluate(() => navigator.serviceWorker.controller?.state)).toBe("activated");
+  try {
+    serveBuild("b");
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.update();
+      const worker = registration.waiting ?? registration.installing;
+      if (!worker) throw new Error("Build B did not install");
+      if (worker.state !== "installed") {
+        await new Promise<void>((resolve, reject) => {
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed") resolve();
+            if (worker.state === "redundant") reject(new Error("Build B became redundant"));
+          });
+        });
+      }
+    });
 
-  await page.goto("/");
-  await expect(page).toHaveURL(new RegExp(`#k=${id}$`));
-  await openShopping(page);
-  await expect(page.getByRole("checkbox", { name: "oat milk" })).toBeChecked();
+    const status = page.getByRole("status");
+    const action = status.getByRole("button", { name: "Reload to update", exact: true });
+    await expect(status.getByText("An Enplace update is ready.", { exact: true })).toBeVisible();
+    await expect(action).toBeEnabled();
+    await page.reload();
+    await expect(status.getByText("An Enplace update is ready.", { exact: true })).toBeVisible();
+    await expect(action).toBeEnabled();
+
+    await action.evaluate((button) => {
+      sessionStorage.setItem("mep-test-update-clicks", "0");
+      button.addEventListener("click", () => {
+        const clicks = Number(sessionStorage.getItem("mep-test-update-clicks"));
+        sessionStorage.setItem("mep-test-update-clicks", String(clicks + 1));
+      });
+    });
+    await page.evaluate(() => sessionStorage.setItem("mep-test-document-loads", "0"));
+    await page.addInitScript(() => {
+      const loads = Number(sessionStorage.getItem("mep-test-document-loads"));
+      sessionStorage.setItem("mep-test-document-loads", String(loads + 1));
+    });
+    const navigationUrls: string[] = [];
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) navigationUrls.push(frame.url());
+    });
+    await Promise.all([page.waitForEvent("load"), action.dblclick()]);
+
+    await expect(page.getByRole("checkbox", { name: "update basil" })).toBeChecked();
+    const documentLoads = await page.evaluate(() => sessionStorage.getItem("mep-test-document-loads"));
+    expect(documentLoads, `Navigation events: ${JSON.stringify(navigationUrls)}`).toBe("1");
+    expect(await page.evaluate(() => sessionStorage.getItem("mep-test-update-clicks"))).toBe("1");
+    expect(navigationUrls.length).toBeGreaterThan(0);
+    expect(navigationUrls.every((url) => url === page.url())).toBe(true);
+    expect(await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      return [registration.waiting, Boolean(registration.active), navigator.serviceWorker.controller === registration.active];
+    })).toEqual([null, true, true]);
+    await expect(page).toHaveURL(new RegExp(`/shopping#k=${id}$`));
+    await page.goto("/");
+    await expect(page).toHaveURL(new RegExp(`#k=${id}$`));
+    await openShopping(page);
+    await expect(page.getByRole("checkbox", { name: "update basil" })).toBeChecked();
+  } finally {
+    await keeper.close();
+  }
 });
 
 test("two separate browser contexts converge through the relay in both directions", async ({ page, browser }) => {

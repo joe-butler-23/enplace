@@ -31,13 +31,15 @@ Status: Active
 Run targeted unit tests first, then:
 
 ```bash
-npm run typecheck
+npm run typecheck        # app and production relay
 npm test
-npm run build:static
+npm run build:release    # static app, CLI, and relay dry-run bundle
 npm run test:static-pwa
 ```
 
-The static-PWA suite must use synthetic data and an in-process relay. It proves that a fresh visit gets a seeded kitchen, kitchen writes survive reload, two contexts sharing one link converge through the relay, the folder opt-in still works on Chromium, and the app shell reloads offline.
+`npm ci` runs once at the root and installs the `relay/` workspace from the sole lockfile. The release authority is `npm run preflight:release`; do not reproduce its sequence in another script.
+
+The static-PWA suite must use synthetic data and an in-process relay. It proves that a fresh visit gets a seeded kitchen, kitchen writes survive reload, two contexts sharing one link converge through the relay, file and zip transfers preserve cooking state, and the app shell reloads offline.
 
 Before a release, use a phone browser and desktop Chromium at the final static origin with a throwaway kitchen. Confirm the sample recipes appear, make one shopping edit on each device, watch it arrive on the other, reload, and verify the edit persists. Also verify `/` and `/shopping`, zip export, offline reload, and installability.
 

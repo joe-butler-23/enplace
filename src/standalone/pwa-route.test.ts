@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialViewForPathname,
   pathnameForView,
-  preserveKitchenHash,
-  shoppingShareUrl
+  preserveKitchenHash
 } from "./pwa-route";
 
 describe("initial view route resolution", () => {
@@ -47,14 +46,11 @@ describe("PWA route", () => {
     ]);
   });
 
-  it("maps views and shopping shares to their public paths", () => {
+  it("maps views to their public paths", () => {
     expect(pathnameForView("shopping")).toBe("/shopping");
     expect(pathnameForView("database")).toBe("/");
     expect(pathnameForView("settings")).toBe("/settings");
     expect(pathnameForView("planner")).toBe("/planner");
-    expect(shoppingShareUrl("https://mep.example.ts.net")).toBe(
-      "https://mep.example.ts.net/shopping"
-    );
   });
 
   it("ships a full-app install manifest with a /shopping shortcut", async () => {
@@ -96,11 +92,13 @@ describe("PWA route", () => {
     expect(worker).toContain('cache.match("/", { ignoreVary: true })');
     expect(worker).not.toContain('cache.match("/index.html"');
     expect(build).toContain('const files = new Set(["/", "/manifest.webmanifest"');
+    expect(build).toContain('output.fileName !== "index.html"');
     expect(build).not.toContain('const files = new Set(["/index.html"');
   });
 
-  it("releases the compact desktop sidebar width for the mobile shopping header", async () => {
+  it("preserves database contents layout and releases the mobile shopping sidebar width", async () => {
     const css = await readFile(new URL("../standalone.css", import.meta.url), "utf8");
+    expect(css).toContain(".mep-database-panel { display: contents; }");
     const mobileStyles = css.slice(css.indexOf("@media (max-width: 720px)"));
     expect(mobileStyles).toContain(`.mep-shell--shopping .mep-sidebar {
     width: 100% !important;
