@@ -33,6 +33,8 @@ describe("recipe read/edit boundary", () => {
     expect(markup).toContain("<table>");
     expect(markup).toContain('type="checkbox"');
     expect(markup).toContain('src="blob:soup"');
+    expect(markup).toContain('decoding="sync"');
+    expect(markup).not.toContain('loading=');
     expect(markup).toContain('title="hero"');
     expect(markup).toContain('<a href="https://example.com">https</a>');
     expect(markup).toContain('<a href="http://example.com">http</a>');
@@ -186,6 +188,9 @@ describe("recipe read/edit boundary", () => {
 
     expect((markup.match(/src="blob:soup"/g) ?? [])).toHaveLength(1);
     expect(markup).toContain('<div class="recipe-view__hero">');
+    expect(markup).toContain('decoding="sync"');
+    expect(markup).not.toContain("<picture");
+    expect(markup).not.toContain("srcset=");
   });
 
   it("drops the masthead image column when a recipe has no image", () => {

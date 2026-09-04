@@ -1,5 +1,5 @@
 import * as React from "react";
-import { mergeText, type MergeResult } from "@/kitchen/merge";
+import { mergeText, type MergeResult } from "@/cookbook/merge";
 import { parseRecipeDocument } from "@/recipe-document";
 import { formatCookLogDate, parseCookLog } from "@/modules/cooking/services/RecipeLogService";
 import {
@@ -10,7 +10,6 @@ import {
   stripStructuredSections
 } from "../utils/recipe-frontmatter";
 import { ReadDocument, ReadInline, type RecipeImageResources } from "./RecipeMarkdown";
-import { responsiveSampleCover } from "./responsive-sample-cover";
 
 type RecipeViewProps = RecipeImageResources & {
   path: string;
@@ -42,35 +41,9 @@ export function parsedListsMatch(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
-const SAMPLE_COVER_WIDTHS = [224, 672, 1288] as const;
-const HERO_COVER_SIZES = [
-  "(max-width: 720px) calc(100vw - 64px)",
-  "(max-width: 1212px) calc((100vw - 176px) / 1.618)",
-  "640.3px",
-].join(", ");
-
-/** Masthead image. Kept separate from body rendering so a warm cover paints with the first frame. */
+/** Masthead image. Kept separate from body rendering so the cover paints with the first frame. */
 function RecipeHero({ url, alt }: { url: string; alt: string }): React.ReactElement {
-  const responsiveCover = responsiveSampleCover(url, SAMPLE_COVER_WIDTHS);
-  const image = (
-    <img
-      src={url}
-      alt={alt}
-      decoding="async"
-      srcSet={responsiveCover?.webpSrcSet}
-      sizes={responsiveCover ? HERO_COVER_SIZES : undefined}
-    />
-  );
-  return (
-    <div className="recipe-view__hero">
-      {responsiveCover ? (
-        <picture style={{ display: "contents" }}>
-          <source type="image/avif" srcSet={responsiveCover.avifSrcSet} sizes={HERO_COVER_SIZES} />
-          {image}
-        </picture>
-      ) : image}
-    </div>
-  );
+  return <div className="recipe-view__hero"><img src={url} alt={alt} decoding="sync" /></div>;
 }
 
 type RecipeSaveState = "clean" | "dirty" | "saving" | "saved" | "error";

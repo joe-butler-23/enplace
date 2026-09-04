@@ -3,12 +3,12 @@ import { YServer } from "y-partyserver";
 import * as Y from "yjs";
 
 /**
- * The Enplace kitchen relay on Cloudflare.
+ * The Enplace cookbook relay on Cloudflare.
  *
- * One Durable Object per kitchen, named by the kitchen id. `YServer` speaks the y-websocket
+ * One Durable Object per cookbook, named by the cookbook id. `YServer` speaks the y-websocket
  * protocol the app and `mep mirror` already use, so a client connects to
- * `wss://<worker>/parties/kitchen/<kitchen-id>`. The document is kept in the object's
- * storage as chunks of one Yjs update, so a kitchen survives every client disconnecting
+ * `wss://<worker>/parties/kitchen/<cookbook-id>`. The document is kept in the object's
+ * storage as chunks of one Yjs update, so a cookbook survives every client disconnecting
  * and is there when the next device opens the link.
  */
 
@@ -23,6 +23,7 @@ function hasOpenConnection(connections: Iterable<Connection>, exceptId?: string)
   return [...connections].some((connection) => connection.id !== exceptId && connection.readyState <= 1);
 }
 
+// Historical Kitchen class name is a deployed wire identifier and must not change.
 export class Kitchen extends YServer<Env> {
   static callbackOptions = { debounceWait: 1_000, debounceMaxWait: 5_000, timeout: 5_000 };
 
@@ -72,7 +73,7 @@ export class Kitchen extends YServer<Env> {
   override async onAlarm(): Promise<void> {
     if (hasOpenConnection(this.getConnections())) return;
     await this.ctx.storage.deleteAll();
-    this.ctx.abort("Kitchen expired after 180 days without a connection");
+    this.ctx.abort("Cookbook expired after 180 days without a connection");
   }
 }
 
@@ -80,7 +81,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const match = /^\/parties\/kitchen\/([^/]+)$/.exec(url.pathname);
-    if (url.pathname === "/") return new Response("Enplace kitchen relay", { status: 200 });
+    if (url.pathname === "/") return new Response("Enplace cookbook relay", { status: 200 });
     if (!match || !ROOM_ID.test(match[1])) return new Response("Not found", { status: 404 });
     return (await routePartykitRequest(request, env)) ?? new Response("Not found", { status: 404 });
   },

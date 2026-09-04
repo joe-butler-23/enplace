@@ -1,20 +1,5 @@
 import * as React from "react";
 import type { RecipeIndexItem } from "../../modules/cooking/types";
-import { responsiveSampleCover } from "./responsive-sample-cover";
-
-// Card covers stop at 2x density: 672 px serves a 323 px phone card at 2.1x, and a 3x
-// photograph is not distinguishable from a 2x one at that pixel pitch (decision 2026-09-03).
-// The 1288 px files stay for the recipe hero, which renders the full viewport width.
-const SAMPLE_COVER_WIDTHS = [224, 672] as const;
-const CARD_COVER_SIZES = [
-  "(max-width: 516px) calc(100vw - 67px)",
-  "(max-width: 720px) calc((100vw - 81px) / 2)",
-  "(max-width: 796px) calc((100vw - 129px) / 2)",
-  "(max-width: 1028px) calc((100vw - 143px) / 3)",
-  "(max-width: 1260px) calc((100vw - 157px) / 4)",
-  "(max-width: 1492px) calc((100vw - 171px) / 5)",
-  "calc((100vw - 185px) / 6)",
-].join(", ");
 
 type RecipeCardProps = {
   recipe: RecipeIndexItem;
@@ -46,16 +31,8 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
     }
   };
 
-  const responsiveCover = coverPath ? responsiveSampleCover(coverPath, SAMPLE_COVER_WIDTHS) : null;
   const coverImage = coverPath ? (
-    <img
-      src={coverPath}
-      alt=""
-      decoding="async"
-      srcSet={responsiveCover?.webpSrcSet}
-      sizes={responsiveCover ? CARD_COVER_SIZES : undefined}
-      data-path={recipe.path}
-    />
+    <img src={coverPath} alt="" decoding="sync" data-path={recipe.path} />
   ) : null;
 
   return (
@@ -72,12 +49,7 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
         onClick={(e) => onOpenRecipe(recipe.path, e.ctrlKey || e.metaKey)}
       >
         <div className={`cooking-db__cover ${coverPath ? "" : "cooking-db__cover--empty"}`}>
-          {responsiveCover ? (
-            <picture style={{ display: "contents" }}>
-              <source type="image/avif" srcSet={responsiveCover.avifSrcSet} sizes={CARD_COVER_SIZES} />
-              {coverImage}
-            </picture>
-          ) : coverImage}
+          {coverImage}
         </div>
         <div className="cooking-db__body">
           <div

@@ -2,19 +2,19 @@
 
 Enplace is a static PWA. It has no backend logic, accounts, or native sidecar.
 Cloudflare Pages serves only the built application. The one network peer is a
-y-websocket relay that stores and fans out kitchen documents; it runs no
+y-websocket relay that stores and fans out cookbook documents; it runs no
 Enplace code and the app treats it as untrusted transport.
 
-## Kitchen Boundary
+## Cookbook Boundary
 
-- A kitchen is addressed by 130 random bits carried in the URL fragment, which
+- A cookbook is addressed by 130 random bits carried in the URL fragment, which
   browsers never send with the page request, so the static host never sees it.
   The relay does: the id is the room name in the WebSocket path, so relay
-  access logs hold it, and a relay operator can open any kitchen it hosts until
-  end-to-end encryption lands. Anyone holding the link holds the kitchen;
+  access logs hold it, and a relay operator can open any cookbook it hosts until
+  end-to-end encryption lands. Anyone holding the link holds the cookbook;
   sharing the link is the sharing model. The share dialog states, “Anyone with
-  this private link can view and change this kitchen.”
-- The kitchen document is the sole authority for user content and state. Every
+  this private link can view and change this cookbook.”
+- The cookbook document is the sole authority for user content and state. Every
   device keeps its own full copy in IndexedDB; the relay keeps a copy for
   fan-out. Clearing browser storage removes this device's copy only.
 - The relay URL is configured at build time with `VITE_ENPLACE_RELAY_URL`, so a
@@ -23,7 +23,7 @@ Enplace code and the app treats it as untrusted transport.
 - Export is always available as a zip of plain files, and `mep mirror` keeps a
   folder replica, so no data is reachable only through the app.
 - End-to-end encryption of the document with the key in the fragment is a
-  planned follow-up; until then the relay operator can read kitchen content.
+  planned follow-up; until then the relay operator can read cookbook content.
 
 ## Static Deployment Boundary
 
@@ -36,7 +36,7 @@ contains HTML, JavaScript, CSS, images, the web manifest, and the service worker
 `public/_redirects` maps browser navigation routes to `index.html`. The service
 worker precaches the application shell and serves the cached canonical root `/`
 for navigation requests. It does not cache or upload
-kitchen contents.
+cookbook contents.
 
 ## Security Headers
 

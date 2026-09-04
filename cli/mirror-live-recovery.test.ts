@@ -3,15 +3,15 @@ import { chmodSync, closeSync, existsSync, ftruncateSync, openSync, unlinkSync, 
 import { chmod, link, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { newKitchenId, readKitchenBytes, writeKitchenBytes } from "../src/kitchen/doc";
+import { newCookbookId, readCookbookBytes, writeCookbookBytes } from "../src/cookbook/doc";
 import { createPrivateOperation, unlinkIfPresent } from "./mirror-commit";
-import { cleanupReplacementScratch, mirrorKitchen } from "./mirror";
+import { cleanupReplacementScratch, mirrorCookbook } from "./mirror";
 import { MirrorTestFixture, waitFor } from "./mirror-test-support";
 
 const harness = new MirrorTestFixture();
 let relay: string;
 const folder = (): Promise<string> => harness.folder();
-const client = async (kitchen: string) => (await harness.client(kitchen)).doc;
+const client = async (cookbook: string) => (await harness.client(cookbook)).doc;
 
 async function onlyRecovery(root: string): Promise<string> {
   const found: string[] = [];
@@ -90,14 +90,14 @@ describe("mirror recovery lifecycle", () => {
 
   it("reports a retained recovery when a real retry becomes a local early exit", async () => {
     const root = await folder();
-    const kitchen = newKitchenId();
-    const doc = await client(kitchen);
+    const cookbook = newCookbookId();
+    const doc = await client(cookbook);
     const target = path.join(root, "cover.webp");
     const baseline = Uint8Array.from([0x01, 0x02, 0x03]);
     const logs: string[] = [];
-    writeKitchenBytes(doc, "cover.webp", baseline);
+    writeCookbookBytes(doc, "cover.webp", baseline);
     const controller = new AbortController();
-    const running = mirrorKitchen({ folder: root, kitchen, relay, signal: controller.signal, log: (line) => logs.push(line) });
+    const running = mirrorCookbook({ folder: root, cookbook, relay, signal: controller.signal, log: (line) => logs.push(line) });
     await waitFor(async () => expect(new Uint8Array(await readFile(target))).toEqual(baseline));
     const descriptor = openSync(target, "r+");
     let injected = false;
@@ -107,10 +107,10 @@ describe("mirror recovery lifecycle", () => {
       const local = Buffer.alloc(16 * 1024 * 1024, 0x7a);
       ftruncateSync(descriptor, 0);
       writeSync(descriptor, local, 0, local.length, 0);
-      writeKitchenBytes(doc, "cover.webp", baseline);
+      writeCookbookBytes(doc, "cover.webp", baseline);
     });
     try {
-      writeKitchenBytes(doc, "cover.webp", Uint8Array.from([0x09, 0x08, 0x07]));
+      writeCookbookBytes(doc, "cover.webp", Uint8Array.from([0x09, 0x08, 0x07]));
       await waitFor(() => expect(logs.some((line) => line.startsWith("retained local recovery; preserved local copy as "))).toBe(true));
       const recovery = await onlyRecovery(root);
       const relative = path.relative(root, recovery).split(path.sep).join("/");
@@ -126,13 +126,13 @@ describe("mirror recovery lifecycle", () => {
 
   it("restores a live local deletion that conflicts with a remote update", async () => {
     const root = await folder();
-    const kitchen = newKitchenId();
-    const doc = await client(kitchen);
+    const cookbook = newCookbookId();
+    const doc = await client(cookbook);
     const target = path.join(root, "notes.md");
     const logs: string[] = [];
-    writeKitchenBytes(doc, "notes.md", Buffer.from("baseline\n"));
+    writeCookbookBytes(doc, "notes.md", Buffer.from("baseline\n"));
     const controller = new AbortController();
-    const running = mirrorKitchen({ folder: root, kitchen, relay, signal: controller.signal, log: (line) => logs.push(line) });
+    const running = mirrorCookbook({ folder: root, cookbook, relay, signal: controller.signal, log: (line) => logs.push(line) });
     await waitFor(async () => expect(readFile(target, "utf8")).resolves.toBe("baseline\n"));
     let deleted = false;
     const watcher = watchDirectory(root, { recursive: true }, (_event, filename) => {
@@ -141,29 +141,29 @@ describe("mirror recovery lifecycle", () => {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     });
-    writeKitchenBytes(doc, "notes.md", Buffer.from("remote update\n"));
+    writeCookbookBytes(doc, "notes.md", Buffer.from("remote update\n"));
     await waitFor(async () => expect(readFile(target, "utf8")).resolves.toBe("remote update\n"));
     watcher.close();
     controller.abort();
     await running;
     expect(deleted).toBe(true);
-    expect(logs).toContain("restored notes.md; local deletion conflicted with kitchen change\n");
+    expect(logs).toContain("restored notes.md; local deletion conflicted with cookbook change\n");
   });
 
   it("imports an initially local-only non-UTF8 binary through --once semantics", async () => {
     const root = await folder();
-    const kitchen = newKitchenId();
-    const doc = await client(kitchen);
+    const cookbook = newCookbookId();
+    const doc = await client(cookbook);
     const bytes = Uint8Array.from([0x00, 0xff, 0x80, 0x41]);
     await writeFile(path.join(root, "cover.webp"), bytes);
-    await mirrorKitchen({ folder: root, kitchen, relay, once: true });
-    await waitFor(() => expect(readKitchenBytes(doc, "cover.webp")).toEqual(bytes));
+    await mirrorCookbook({ folder: root, cookbook, relay, once: true });
+    await waitFor(() => expect(readCookbookBytes(doc, "cover.webp")).toEqual(bytes));
   });
 
   it("recovers open-descriptor and hard-linked alias bytes across SIGKILL and restart", async () => {
     const root = await folder();
-    const kitchen = newKitchenId();
-    const doc = await client(kitchen);
+    const cookbook = newCookbookId();
+    const doc = await client(cookbook);
     const target = path.join(root, "cover.webp");
     const original = Buffer.alloc(64 * 1024 * 1024, 0x5a);
     const remote = Uint8Array.from([0xde, 0xad, 0x00, 0xbe]);
@@ -172,7 +172,7 @@ describe("mirror recovery lifecycle", () => {
     await chmod(target, 0o640);
     const alias = path.join(await folder(), "alias.webp");
     await link(target, alias);
-    writeKitchenBytes(doc, "cover.webp", remote);
+    writeCookbookBytes(doc, "cover.webp", remote);
     const child = spawn(process.execPath, ["node_modules/vitest/vitest.mjs", "run", "--config", "cli/vitest.process.config.ts"], {
       cwd: process.cwd(), detached: true, env: { ...process.env, MEP_PROCESS_LOSS_ROOT: root },
       stdio: ["ignore", "pipe", "pipe"],
@@ -193,9 +193,9 @@ describe("mirror recovery lifecycle", () => {
       expect((await stat(recovery)).mode & 0o777).toBe(0o640);
       expect(Buffer.from(await readFile(alias)).equals(late)).toBe(true);
       expect((await stat(alias)).mode & 0o777).toBe(0o640);
-      expect(recovery).not.toContain(kitchen);
+      expect(recovery).not.toContain(cookbook);
       expect(await readdir(path.dirname(recovery))).toContain("replacement");
-      await mirrorKitchen({ folder: root, kitchen, relay, once: true });
+      await mirrorCookbook({ folder: root, cookbook, relay, once: true });
       expect(new Uint8Array(await readFile(target))).toEqual(remote);
       expect(Buffer.from(await readFile(recovery)).equals(late)).toBe(true);
       expect(Buffer.from(await readFile(alias)).equals(late)).toBe(true);

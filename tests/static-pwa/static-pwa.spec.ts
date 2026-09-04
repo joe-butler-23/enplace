@@ -1,16 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { cpSync, rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { addShoppingItem, openFreshKitchen, openShopping, persistedUpdateCount } from "./helpers";
+import { addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
 
-const OFFLINE_RELOAD_TITLES = new Set(["the kitchen app shell reloads offline after its first visit"]);
+const OFFLINE_RELOAD_TITLES = new Set(["the cookbook app shell reloads offline after its first visit"]);
 test.beforeEach(async ({ browserName }, testInfo) => {
   if (browserName === "webkit" && OFFLINE_RELOAD_TITLES.has(testInfo.title)) testInfo.skip(true, "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 });
 
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
-function newKitchenId(): string {
+function newCookbookId(): string {
   return Array.from(randomBytes(26), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
 }
 
@@ -24,15 +24,15 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
-test("fresh visit creates and persists a seeded kitchen", async ({ page }) => {
-  const id = await openFreshKitchen(page);
+test("fresh visit creates and persists a seeded cookbook", async ({ page }) => {
+  const id = await openFreshCookbook(page);
   const databases = await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name));
   expect(databases).toContain(`enplace-kitchen-${id}`);
 });
 
-test("a waiting build activates once and keeps the persisted kitchen", async ({ page }) => {
+test("a waiting build activates once and keeps the persisted cookbook", async ({ page }) => {
   serveBuild("a");
-  const id = await openFreshKitchen(page);
+  const id = await openFreshCookbook(page);
   await page.evaluate(async () => {
     const controlled = new Promise<void>((resolve) => {
       navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true });
@@ -114,7 +114,7 @@ test("a waiting build activates once and keeps the persisted kitchen", async ({ 
 });
 
 test("two separate browser contexts converge through the relay in both directions", async ({ page, browser }) => {
-  await openFreshKitchen(page);
+  await openFreshCookbook(page);
   await openShopping(page);
   await addShoppingItem(page, "oat milk");
   await addShoppingItem(page, "eggs");
@@ -138,21 +138,21 @@ test("two separate browser contexts converge through the relay in both direction
   }
 });
 
-test("an untouched kitchen is local-only in the share dialog and exportable from Settings", async ({ page }) => {
-  await openFreshKitchen(page);
-  await page.getByRole("button", { name: "Share kitchen" }).click();
-  const share = page.getByRole("dialog", { name: "Share kitchen" });
-  await expect(share.getByText("This kitchen lives only on this device.", { exact: false })).toBeVisible();
-  await expect(share.getByText("Anyone with this private link can view and change this kitchen.", { exact: true })).toBeVisible();
+test("an untouched cookbook is local-only in the share dialog and exportable from Settings", async ({ page }) => {
+  await openFreshCookbook(page);
+  await page.getByRole("button", { name: "Share cookbook" }).click();
+  const share = page.getByRole("dialog", { name: "Share cookbook" });
+  await expect(share.getByText("This cookbook lives only on this device.", { exact: false })).toBeVisible();
+  await expect(share.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await openSettings(page);
-  await expect(page.getByRole("button", { name: "Download kitchen (.zip)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download cookbook (.zip)" })).toBeVisible();
 });
 
 test("Settings imports a synthetic recipe file", async ({ page }) => {
-  await openFreshKitchen(page);
+  await openFreshCookbook(page);
   await openSettings(page);
-  const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles({
     name: "browser-soup.md",
     mimeType: "text/markdown",
@@ -164,9 +164,9 @@ test("Settings imports a synthetic recipe file", async ({ page }) => {
   await expect(page.getByText("Browser Soup", { exact: true })).toBeVisible();
 });
 
-test("opening another kitchen shows its empty state", async ({ page }) => {
-  await openFreshKitchen(page);
-  const secondId = newKitchenId();
+test("opening another cookbook shows its empty state", async ({ page }) => {
+  await openFreshCookbook(page);
+  const secondId = newCookbookId();
   await openSettings(page);
   page.once("dialog", (dialog) => dialog.accept(secondId));
   await page.getByRole("button", { name: "Paste a link" }).click();
@@ -176,9 +176,9 @@ test("opening another kitchen shows its empty state", async ({ page }) => {
   await expect(page.getByText("11 recipes", { exact: true })).toHaveCount(0);
 });
 
-test("browser back and forward always mount the kitchen the URL names", async ({ page }) => {
-  const firstId = await openFreshKitchen(page);
-  const secondId = newKitchenId();
+test("browser back and forward always mount the cookbook the URL names", async ({ page }) => {
+  const firstId = await openFreshCookbook(page);
+  const secondId = newCookbookId();
   await openSettings(page);
   page.once("dialog", (dialog) => dialog.accept(secondId));
   await page.getByRole("button", { name: "Paste a link" }).click();
@@ -196,8 +196,8 @@ test("browser back and forward always mount the kitchen the URL names", async ({
   expect(await page.evaluate(() => localStorage.getItem("enplace-current-kitchen"))).toBe(secondId);
 });
 
-test("the kitchen app shell reloads offline after its first visit", async ({ page, context }) => {
-  await openFreshKitchen(page);
+test("the cookbook app shell reloads offline after its first visit", async ({ page, context }) => {
+  await openFreshCookbook(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));

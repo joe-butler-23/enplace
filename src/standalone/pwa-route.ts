@@ -1,4 +1,4 @@
-import { withKitchenHash } from "@/kitchen/doc";
+import { withCookbookHash } from "@/cookbook/doc";
 
 export type PathnameView = "planner" | "shopping" | "database" | "settings";
 
@@ -19,20 +19,20 @@ export function pathnameForView(view: string): string {
   return "/";
 }
 
-/** Keep the active kitchen fragment when app navigation changes the pathname. */
-export function preserveKitchenHash(
+/** Keep the active cookbook fragment when app navigation changes the pathname. */
+export function preserveCookbookHash(
   history: History,
   location: Pick<Location, "href" | "origin">,
   id: string,
 ): void {
-  const withKitchen = (value?: string | URL | null): string | URL | null | undefined => {
+  const withCookbook = (value?: string | URL | null): string | URL | null | undefined => {
     if (value == null) return value;
     const url = new URL(value, location.href);
     if (url.origin !== location.origin) return value;
-    return withKitchenHash(url.toString(), id);
+    return withCookbookHash(url.toString(), id);
   };
   const pushState = history.pushState.bind(history);
   const replaceState = history.replaceState.bind(history);
-  history.pushState = (data, unused, url) => pushState(data, unused, withKitchen(url));
-  history.replaceState = (data, unused, url) => replaceState(data, unused, withKitchen(url));
+  history.pushState = (data, unused, url) => pushState(data, unused, withCookbook(url));
+  history.replaceState = (data, unused, url) => replaceState(data, unused, withCookbook(url));
 }

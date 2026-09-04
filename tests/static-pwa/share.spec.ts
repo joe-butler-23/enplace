@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openFreshKitchen } from "./helpers";
+import { openFreshCookbook } from "./helpers";
 
 async function openSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -11,24 +11,24 @@ async function confirmNextDialog(page: Page): Promise<void> {
 }
 
 test("share dialog states the access contract and keeps the active route", async ({ page }) => {
-  const id = await openFreshKitchen(page);
+  const id = await openFreshCookbook(page);
   await page.getByRole("button", { name: "Shopping List" }).click();
   await expect(page).toHaveURL(new RegExp(`/shopping#k=${id}$`));
 
-  await page.getByRole("button", { name: "Share kitchen" }).click();
-  const dialog = page.getByRole("dialog", { name: "Share kitchen" });
+  await page.getByRole("button", { name: "Share cookbook" }).click();
+  const dialog = page.getByRole("dialog", { name: "Share cookbook" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Anyone with this private link can view and change this kitchen.", { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel("Kitchen link")).toHaveValue(`${new URL(page.url()).origin}/shopping#k=${id}`);
+  await expect(dialog.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel("Cookbook link")).toHaveValue(`${new URL(page.url()).origin}/shopping#k=${id}`);
   await expect(dialog.getByRole("button", { name: "Copy link" })).toBeVisible();
   await dialog.getByRole("button", { name: "Show QR code" }).click();
-  await expect(dialog.getByRole("img", { name: "QR code for this kitchen link" })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "QR code for this cookbook link" })).toBeVisible();
 });
 
 
 
-test("sample removal empties the kitchen", async ({ page }) => {
-  await openFreshKitchen(page);
+test("sample removal empties the cookbook", async ({ page }) => {
+  await openFreshCookbook(page);
   await openSettings(page);
   await confirmNextDialog(page);
   await page.getByRole("button", { name: "Remove sample recipes" }).click();
@@ -39,9 +39,9 @@ test("sample removal empties the kitchen", async ({ page }) => {
 });
 
 test("a javascript Markdown link renders inert", async ({ page }) => {
-  await openFreshKitchen(page);
+  await openFreshCookbook(page);
   await openSettings(page);
-  const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles({
     name: "unsafe-link.md",
     mimeType: "text/markdown",

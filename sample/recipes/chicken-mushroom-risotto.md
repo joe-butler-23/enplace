@@ -1,5 +1,5 @@
 ---
-cover: /samples/chicken-mushroom-risotto.webp
+cover: images/chicken-mushroom-risotto.webp
 title: Chicken and mushroom risotto
 tags: [weeknight, one-pan]
 ---

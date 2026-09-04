@@ -1,4 +1,4 @@
-import { setDayNote } from "../kitchen/plan-notes";
+import { setDayNote } from "../cookbook/plan-notes";
 import { DEFAULT_STANDALONE_SETTINGS, type StandaloneSettings } from "./settings";
 
 const SETTINGS_KEY = "enplace.preferences";

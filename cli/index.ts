@@ -20,23 +20,23 @@ export type ExecuteOptions = {
   signal?: AbortSignal;
 };
 
-const valueOptions = new Set(["--folder", "--week", "--kitchen", "--relay"]);
+const valueOptions = new Set(["--folder", "--week", "--cookbook", "--relay"]);
 const recipeCommands = new Set(["check", "add"]);
 
 function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
   if (!command || !["check", "add", "list", "shop", "mirror"].includes(command)) {
     throw new Error("usage: mep <check|add|list|shop|mirror> [options]\n"
-      + "       mep mirror --folder <dir> --kitchen <link-or-id> [--relay <wss-url>] [--once]");
+      + "       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]");
   }
   if (recipeCommands.has(command) && positional.length !== 1) throw new Error(`${command} needs one <file|->`);
   if (["list", "shop", "mirror"].includes(command) && positional.length) throw new Error(`${command} takes no file argument`);
   if (options.has("--week") && command !== "shop") throw new Error("--week is only valid with shop");
-  if ((options.has("--kitchen") || options.has("--relay") || options.has("--once")) && command !== "mirror") {
-    throw new Error("--kitchen, --relay, and --once are only valid with mirror");
+  if ((options.has("--cookbook") || options.has("--relay") || options.has("--once")) && command !== "mirror") {
+    throw new Error("--cookbook, --relay, and --once are only valid with mirror");
   }
   if (command === "mirror") {
     if (!options.has("--folder")) throw new Error("mirror needs --folder <dir>");
-    if (!options.has("--kitchen")) throw new Error("mirror needs --kitchen <link-or-id>");
+    if (!options.has("--cookbook")) throw new Error("mirror needs --cookbook <link-or-id>");
     if (options.has("--json")) throw new Error("--json is not valid with mirror");
   }
 }
@@ -68,7 +68,7 @@ function argumentsFor(argv: string[], cwd: string) {
     folder: folder === undefined ? cwd : path.resolve(cwd, folder),
     json: options.has("--json"),
     week: options.get("--week"),
-    kitchen: options.get("--kitchen"),
+    cookbook: options.get("--cookbook"),
     relay: options.get("--relay"),
     once: options.has("--once"),
   };
@@ -204,10 +204,10 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
   if (args.command === "mirror") {
     const relay = args.relay ?? process.env.ENPLACE_RELAY_URL;
     if (!relay) throw new Error("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL");
-    const { mirrorKitchen } = await import("./mirror.js");
-    await mirrorKitchen({
+    const { mirrorCookbook } = await import("./mirror.js");
+    await mirrorCookbook({
       folder: args.folder,
-      kitchen: args.kitchen!,
+      cookbook: args.cookbook!,
       relay,
       once: args.once,
       log: options.log,

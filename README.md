@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `d5c9f73cf375`, 2026-09-04.
+> Published snapshot of a private repository, refreshed at each release. Source commit `5583e7c415ba`, 2026-09-04.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -6,7 +6,7 @@
 
 # Enplace
 
-Enplace is a local-first meal-planning app for turning the recipes you already own into a practical week. Browse recipes, choose what to cook, plan each day, and build the shopping list. Open the link and your kitchen is there; send the link and your household is in it too.
+Enplace is a local-first meal-planning app for turning the recipes you already own into a practical week. Browse recipes, choose what to cook, plan each day, and build the shopping list. Open the link and your cookbook is there; send the link and your household is in it too.
 
 **[Open Enplace](https://enplace-trial.pages.dev/)**
 
@@ -21,13 +21,13 @@ Enplace is a local-first meal-planning app for turning the recipes you already o
 3. Drag each recipe onto a day in the planner.
 4. Build the shopping list and check items off as you shop.
 
-## Your kitchen
+## Your cookbook
 
-Opening Enplace makes a kitchen and gives it a private link. The kitchen lives on your device and works offline. To use it on another device or with a partner, share the link from Settings; everyone on the link sees the same recipes, plan, and shopping list, and ticks made in the shop appear on the other phone within a moment. There is no account and no sign-in: the link is the key, so treat it like one.
+Opening Enplace makes a cookbook and gives it a private link. The cookbook lives on your device and works offline. To use it on another device or with a partner, share the link from Settings; everyone on the link sees the same recipes, plan, and shopping list, and ticks made in the shop appear on the other phone within a moment. There is no account and no sign-in: the link is the key, so treat it like one.
 
 ## Your files
 
-Everything is plain Markdown. Download the whole kitchen as a zip from Settings at any time, or run `mep mirror` to keep a folder on disk in step with the kitchen in both directions, so Obsidian, Syncthing, and your own scripts work on ordinary files.
+Everything is plain Markdown. Download the whole cookbook as a zip from Settings at any time, or run `mep mirror` to keep a folder on disk in step with the cookbook in both directions, so Obsidian, Syncthing, and your own scripts work on ordinary files.
 
 ## Adding recipes
 
@@ -35,11 +35,11 @@ Paste a recipe as Markdown, import files or a zip from Settings, or let an assis
 
 ## Sharing and sync
 
-Devices sync through a small relay that speaks the Yjs websocket protocol. The hosted app points at one by default; you can run your own with `node scripts/kitchen-relay.mjs` and set `VITE_ENPLACE_RELAY_URL` when building the app. See [docs/relay.md](docs/relay.md).
+Devices sync through a small relay that speaks the Yjs websocket protocol. The hosted app points at one by default; you can run your own with `node scripts/cookbook-relay.mjs` and set `VITE_ENPLACE_RELAY_URL` when building the app. See [docs/relay.md](docs/relay.md).
 
 ## Optional CLI
 
-For terminal or agent-assisted workflows, the optional Node 22 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a kitchen. Build it from this repository with `npm run build:cli`; the web app does not require it.
+For terminal or agent-assisted workflows, the optional Node 22 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Build it from this repository with `npm run build:cli`; the web app does not require it.
 
 ## Development
 
@@ -51,7 +51,7 @@ npm run build:static
 npm run preview
 ```
 
-Open `http://127.0.0.1:4173/`; a fresh kitchen is created for you. Set `VITE_ENPLACE_RELAY_URL` at build time to sync through a relay.
+Open `http://127.0.0.1:4173/`; a fresh cookbook is created for you. Set `VITE_ENPLACE_RELAY_URL` at build time to sync through a relay.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making changes.
 

@@ -17,7 +17,7 @@
     "cli/index.ts",
     "cli/mirror.ts",
     "src/core.ts",
-    "src/kitchen/doc.ts",
-    "src/kitchen/merge.ts"
+    "src/cookbook/doc.ts",
+    "src/cookbook/merge.ts"
   ]
 }

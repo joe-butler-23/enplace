@@ -1,4 +1,4 @@
-import { currentKitchenConnection } from "../kitchen/current";
+import { currentCookbookConnection } from "../cookbook/current";
 
 type StoredFile = { path: string; bytes: Uint8Array };
 export type VaultStorageAdapter = {
@@ -11,8 +11,8 @@ export type VaultStorageAdapter = {
 };
 const decoder = new TextDecoder();
 const storage = (): VaultStorageAdapter => {
-  const connection = currentKitchenConnection();
-  if (!connection) throw new Error("No kitchen connection is active.");
+  const connection = currentCookbookConnection();
+  if (!connection) throw new Error("No cookbook connection is active.");
   return connection.adapter;
 };
 export const readText = async (path: string): Promise<string> => decoder.decode(await storage().readBytes(path));

@@ -34,7 +34,7 @@ export function assertBoundaryHeaders(response, expectedLink) {
 }
 
 export function assertGeneratedLink(html, line) {
-  const groups = { module: [], style: [], font: [], fetch: [] };
+  const groups = { module: [], style: [], font: [] };
   for (const [tag] of html.matchAll(/<link\b[^>]+>/gi)) {
     const href = tag.match(/\shref=["']([^"']+)["']/i)?.[1];
     const rel = tag.match(/\srel=["']([^"']+)["']/i)?.[1];
@@ -53,12 +53,9 @@ export function assertGeneratedLink(html, line) {
       assert.equal(type, "font/woff2", `${href} must declare font/woff2`);
       groups.font.push(`<${href}>; rel=preload; as=font; type="${type}"; crossorigin`);
     }
-    if (href?.endsWith(".pack")) {
-      assert.equal(`${rel}/${as}`, "preload/fetch", `${href} must preload as fetch`);
-      groups.fetch.push(`<${href}>; rel=preload; as=fetch; crossorigin`);
-    }
+    if (href?.endsWith(".pack")) assert.fail(`${href} must not be preloaded`);
   }
-  const expected = [...groups.module, ...groups.style, ...groups.font, ...groups.fetch].join(", ");
+  const expected = [...groups.module, ...groups.style, ...groups.font].join(", ");
   assert.equal(line, `  Link: ${expected}`);
   return expected;
 }
@@ -155,7 +152,6 @@ async function runPagesBoundary() {
       [asset("css"), /^text\/css/, "public, max-age=31536000, immutable"],
       ["/icons/icon-192.png", /^image\/png/, "public, max-age=31536000, immutable"],
       ["/fonts/fraunces-latin-opsz-normal.woff2", /^font\/woff2/, "public, max-age=31536000, immutable"],
-      ["/samples/banana-oat-loaf-224.webp", /^image\/webp/, "public, max-age=86400"],
     ]) await check(url, { type, cache });
     await check("/manifest.webmanifest", { type: /(?:manifest\+json|application\/json)/ });
     await check("/sw.js", { type: /javascript/, cache: "no-cache" });

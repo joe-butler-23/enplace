@@ -10,7 +10,7 @@ const allowedAttributes: Readonly<Record<string, ReadonlySet<string>>> = {
   code: new Set(["class"]),
   div: new Set(["aria-label", "class", "role"]),
   figure: new Set(["class"]),
-  img: new Set(["alt", "decoding", "loading", "src", "title"]),
+  img: new Set(["alt", "decoding", "src", "title"]),
   input: new Set(["checked", "disabled", "type"]),
   li: new Set(["class"]),
   ol: new Set(["start"]),
@@ -62,8 +62,7 @@ function isAllowedAttribute(tag: string, name: string, value: string): boolean {
   }
   if (name === "style") return tag === "span" && value === UNSAFE_LINK_STYLE;
   if (name === "role") return tag === "div" && value === "img";
-  if (name === "loading") return value === "eager";
-  if (name === "decoding") return value === "async";
+  if (name === "decoding") return value === "sync";
   if (name === "type") return tag === "input" && value === "checkbox";
   if (name === "checked" || name === "disabled") return tag === "input" && value === "";
   if (name === "start") return /^-?\d+$/.test(value);
@@ -106,7 +105,7 @@ function rendererFor(path: string, resolveImage: RecipeImageResources["resolveIm
       return `<figure class="recipe-view__image"><div class="recipe-view__image-error" role="img" aria-label="${escapeHtml(`${alt || "Image"} unavailable`)}">Image unavailable</div></figure>`;
     }
     const imageTitle = title ? ` title="${escapeHtml(title)}"` : "";
-    return `<figure class="recipe-view__image"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}"${imageTitle} loading="eager" decoding="async"></figure>`;
+    return `<figure class="recipe-view__image"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}"${imageTitle} decoding="sync"></figure>`;
   };
   renderer.link = function ({ href, title, text, tokens }: Tokens.Link) {
     if (!isAllowedTarget(href)) {

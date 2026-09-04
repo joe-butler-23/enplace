@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const commitStates = vi.hoisted(() => [] as boolean[]);
 vi.mock("./standalone/storage", () => ({ loadSettings: vi.fn().mockResolvedValue({}),
   prepareStandaloneStartup: vi.fn(async (settings: unknown) => settings), saveSettings: vi.fn() }));
-vi.mock("./kitchen/store", () => { const plan = { marked: [], days: new Map(), notes: new Map() };
+vi.mock("./cookbook/store", () => { const plan = { marked: [], days: new Map(), notes: new Map() };
   const snapshot = { revision: 1, files: [], imageUrls: new Map(), recipes: [], plan, shopping: { items: [] } };
-  return { getKitchenSnapshot: () => snapshot, useKitchenSlice: (slice: keyof typeof snapshot) => snapshot[slice], useKitchenText: () => null }; });
+  return { getCookbookSnapshot: () => snapshot, useCookbookSlice: (slice: keyof typeof snapshot) => snapshot[slice], useCookbookText: () => null }; });
 vi.mock("./standalone/AppSidebar", async () => { const React = await import("react"); return { AppSidebar: ({ activeView, onNavigate }:
   { activeView: string; onNavigate: (view: "database" | "shopping" | "planner") => void }) => { React.useLayoutEffect(() => {
     if (activeView === "database") commitStates.push(document.querySelector('[data-testid="database"]') !== null); }, [activeView]);
@@ -18,7 +18,7 @@ vi.mock("@/views/components/CookingDatabase", () => ({ CookingDatabase: () => <d
 vi.mock("./views/components/ShoppingListView", () => ({ ShoppingListView: () => <div data-testid="shopping">Shopping content</div> }));
 vi.mock("./views/components/AppOverlays", () => ({ CommandPalette: () => null, HelpDialog: () => null, Notices: () => null,
   SettingsDialog: () => null, StartupFailure: () => null }));
-vi.mock("./kitchen/KitchenPanel", () => ({ ShareKitchenDialog: () => null }));
+vi.mock("./cookbook/CookbookPanel", () => ({ ShareCookbookDialog: () => null }));
 vi.mock("./views/components/PreviewPane", () => ({ PreviewPane: () => null }));
 vi.mock("./views/components/RecipeView", () => ({ RecipeView: () => null }));
 import { PlannerOrderStore } from "./modules/organiser/utils/planner-order";

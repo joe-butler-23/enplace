@@ -1,38 +1,40 @@
 import "./fonts.css";
 import "../styles.css";
 import "./standalone.css";
-import { openKitchen } from "./host-client/kitchen-storage";
-import { setCurrentKitchenConnection } from "./kitchen/current";
+import { openCookbook } from "./host-client/cookbook-storage";
+import { setCurrentCookbookConnection } from "./cookbook/current";
 import {
-  kitchenIdFromUrl,
-  newKitchenId,
-  withKitchenHash,
-} from "./kitchen/doc";
+  cookbookIdFromUrl,
+  newCookbookId,
+  withCookbookHash,
+} from "./cookbook/doc";
 import {
-  clearCurrentKitchenId,
-  currentKitchenId,
-  setCurrentKitchenId,
-} from "./kitchen/registry";
-import { seedSamplePack } from "./kitchen/sample-pack";
-import { preserveKitchenHash } from "./standalone/pwa-route";
+  clearCurrentCookbookId,
+  currentCookbookId,
+  setCurrentCookbookId,
+} from "./cookbook/registry";
+import { seedSamplePack } from "./cookbook/sample-pack";
+import { backfillCookbookCovers } from "./cookbook/covers";
+import { preserveCookbookHash } from "./standalone/pwa-route";
 
-const UNPUBLISHED_KITCHENS_KEY = "enplace-unpublished-kitchens";
+// Historical kitchens key stays unchanged so unpublished state survives the rename.
+const UNPUBLISHED_COOKBOOKS_KEY = "enplace-unpublished-kitchens";
 
-function unpublishedKitchenIds(): Set<string> {
+function unpublishedCookbookIds(): Set<string> {
   try {
-    const ids = JSON.parse(localStorage.getItem(UNPUBLISHED_KITCHENS_KEY) ?? "[]") as unknown;
+    const ids = JSON.parse(localStorage.getItem(UNPUBLISHED_COOKBOOKS_KEY) ?? "[]") as unknown;
     return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []);
   } catch {
     return new Set();
   }
 }
 
-function setKitchenUnpublished(id: string, unpublished: boolean): void {
-  const ids = unpublishedKitchenIds();
+function setCookbookUnpublished(id: string, unpublished: boolean): void {
+  const ids = unpublishedCookbookIds();
   if (unpublished) ids.add(id);
   else ids.delete(id);
-  if (ids.size) localStorage.setItem(UNPUBLISHED_KITCHENS_KEY, JSON.stringify([...ids]));
-  else localStorage.removeItem(UNPUBLISHED_KITCHENS_KEY);
+  if (ids.size) localStorage.setItem(UNPUBLISHED_COOKBOOKS_KEY, JSON.stringify([...ids]));
+  else localStorage.removeItem(UNPUBLISHED_COOKBOOKS_KEY);
 }
 
 function configuredRelayUrl(): string | null {
@@ -41,9 +43,9 @@ function configuredRelayUrl(): string | null {
   }).env?.VITE_ENPLACE_RELAY_URL?.trim() || null;
 }
 
-type KitchenGate = { title: string; retry?: boolean };
+type CookbookGate = { title: string; retry?: boolean };
 
-function showKitchenGate({ title, retry = false }: KitchenGate): void {
+function showCookbookGate({ title, retry = false }: CookbookGate): void {
   const container = document.getElementById("root");
   if (!container) return;
   const main = document.createElement("main");
@@ -65,44 +67,49 @@ function showKitchenGate({ title, retry = false }: KitchenGate): void {
   container.replaceChildren(main);
 }
 
-async function openSharedKitchen(): Promise<boolean> {
-  const linkedId = kitchenIdFromUrl(window.location.href);
-  const rememberedId = currentKitchenId();
+async function openSharedCookbook(): Promise<boolean> {
+  const linkedId = cookbookIdFromUrl(window.location.href);
+  const rememberedId = currentCookbookId();
   const createdHere = linkedId === null && rememberedId === null;
-  const id = linkedId ?? rememberedId ?? newKitchenId();
-  if (createdHere) setKitchenUnpublished(id, true);
-  const unpublished = unpublishedKitchenIds().has(id);
-  setCurrentKitchenId(id);
-  window.history.replaceState(null, "", withKitchenHash(window.location.href, id));
-  preserveKitchenHash(window.history, window.location, id);
+  const id = linkedId ?? rememberedId ?? newCookbookId();
+  if (createdHere) setCookbookUnpublished(id, true);
+  const unpublished = unpublishedCookbookIds().has(id);
+  setCurrentCookbookId(id);
+  window.history.replaceState(null, "", withCookbookHash(window.location.href, id));
+  preserveCookbookHash(window.history, window.location, id);
   window.addEventListener("hashchange", () => {
-    if (kitchenIdFromUrl(window.location.href) !== id) window.location.reload();
+    if (cookbookIdFromUrl(window.location.href) !== id) window.location.reload();
   });
 
   try {
-    const connection = await openKitchen({
+    const connection = await openCookbook({
       id,
       relayUrl: configuredRelayUrl(),
       seed: createdHere ? seedSamplePack : undefined,
       deferRelayUntilLocalWrite: unpublished,
-      onFirstLocalWrite: () => setKitchenUnpublished(id, false),
+      onFirstLocalWrite: () => setCookbookUnpublished(id, false),
     });
-    setCurrentKitchenConnection(connection);
+    setCurrentCookbookConnection(connection);
     if (!createdHere && !connection.hasLocalCopy) {
-      showKitchenGate({ title: "Opening your shared kitchen…" });
+      showCookbookGate({ title: "Opening your shared cookbook…" });
       if (await connection.firstSync !== "synced") {
-        showKitchenGate({
-          title: "This device hasn't downloaded this kitchen yet. Connect to the internet once to open it.",
+        showCookbookGate({
+          title: "This device hasn't downloaded this cookbook yet. Connect to the internet once to open it.",
           retry: true,
         });
         return false;
       }
     }
+    void backfillCookbookCovers(connection.doc).then(async () => {
+      if (await connection.firstSync === "synced") await backfillCookbookCovers(connection.doc);
+    }).catch((error) => {
+      console.warn("Could not finish automatic cover optimization:", error);
+    });
     return true;
   } catch (error) {
     if (createdHere) {
-      clearCurrentKitchenId();
-      setKitchenUnpublished(id, false);
+      clearCurrentCookbookId();
+      setCookbookUnpublished(id, false);
     }
     throw error;
   }
@@ -111,7 +118,7 @@ async function openSharedKitchen(): Promise<boolean> {
 async function start(): Promise<void> {
   // Ask the browser to keep this site's storage; no prompt, no setting, just less eviction risk.
   if (navigator.storage?.persist) void navigator.storage.persist();
-  const [{ mountApp }, opened] = await Promise.all([import("./mount"), openSharedKitchen()]);
+  const [{ mountApp }, opened] = await Promise.all([import("./mount"), openSharedCookbook()]);
   if (opened) mountApp();
 }
 
@@ -124,11 +131,11 @@ function showStartupFailure(reason: unknown): void {
   const card = document.createElement("section");
   card.className = "mep-vault-gate__card";
   const title = document.createElement("h1");
-  title.textContent = "Enplace could not open your kitchen";
+  title.textContent = "Enplace could not open your cookbook";
   const detail = document.createElement("p");
   detail.textContent = reason instanceof Error
     ? reason.message
-    : "Reload Enplace and try opening the kitchen again.";
+    : "Reload Enplace and try opening the cookbook again.";
   const reload = document.createElement("button");
   reload.className = "mep-button";
   reload.type = "button";

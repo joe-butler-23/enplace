@@ -5,7 +5,7 @@ import path from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { WebSocket } from "ws";
 import * as Y from "yjs";
-import { startRelay } from "../scripts/kitchen-relay.mjs";
+import { startRelay } from "../scripts/cookbook-relay.mjs";
 
 export class MirrorTestFixture {
   readonly folders: string[] = [];
@@ -25,9 +25,9 @@ export class MirrorTestFixture {
     return value;
   }
 
-  async client(kitchen: string): Promise<{ doc: Y.Doc; provider: WebsocketProvider }> {
+  async client(cookbook: string): Promise<{ doc: Y.Doc; provider: WebsocketProvider }> {
     const doc = new Y.Doc();
-    const provider = new WebsocketProvider(this.relay, kitchen, doc, {
+    const provider = new WebsocketProvider(this.relay, cookbook, doc, {
       WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket, disableBc: true,
     });
     this.documents.push(doc);

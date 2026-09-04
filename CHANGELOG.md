@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Shared live kitchen: one merge document per household (Yjs), persisted on every device, synced through a y-websocket relay, addressed by an unguessable link in the URL fragment. Works on every browser and phone with no install or sign-in
-- Kitchen panel in Settings: share link and QR code, connection status, relay override, zip export, file, folder, and zip import, switching and forgetting kitchens, and the desktop folder opt-in
-- `mep mirror`: keeps a folder on disk and a kitchen in step in both directions through the relay, preserving differing local files as `.local-<stamp>` siblings
-- `scripts/kitchen-relay.mjs`: the reference relay for tests and self-hosting
+- Shared live cookbook: one merge document per household (Yjs), persisted on every device, synced through a y-websocket relay, addressed by an unguessable link in the URL fragment. Works on every browser and phone with no install or sign-in
+- Cookbook panel in Settings: share link and QR code, connection status, relay override, zip export, file, folder, and zip import, switching and forgetting cookbooks, and the desktop folder opt-in
+- `mep mirror`: keeps a folder on disk and a cookbook in step in both directions through the relay, preserving differing local files as `.local-<stamp>` siblings
+- `scripts/cookbook-relay.mjs`: the reference relay for tests and self-hosting
 
 - Pixel-art Enplace bowl mark at the foot of the left rail, held back at 55% opacity, on the page ground with no plate behind it
 - Full Enplace logo lockup at the top of the README
@@ -32,13 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The kitchen document is the only storage path. A folder on disk comes from `mep mirror` or the zip export
+- The cookbook document is the only storage path. A folder on disk comes from `mep mirror` or the zip export
 - Shopping and plan edits apply a pure function to the live shared text inside one transaction, keyed by item rather than line, so no stale snapshot exists to merge
 - Content-Security-Policy allows `wss:` connections for the relay
 
 ### Removed
 
-- Demo mode and the in-memory sample adapter; a fresh kitchen seeded with the sample pack replaces them
+- Demo mode and the in-memory sample adapter; a fresh cookbook seeded with the sample pack replaces them
 - The desktop File System Access folder mode, its gate screen, and the storage-mode and relay-override settings
 - The three-way snapshot merge; direct edits made it unnecessary
 

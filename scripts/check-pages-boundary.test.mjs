@@ -63,6 +63,10 @@ it("rejects an impostor shim even when it prints a matching banner and readiness
 it("rejects generator relation and live Link mutations", () => {
   const html = '<link rel="prefetch" crossorigin href="/app.js">';
   expect(() => assertGeneratedLink(html, "  Link: </app.js>; rel=prefetch; crossorigin")).toThrow("must be a modulepreload");
+  expect(() => assertGeneratedLink(
+    '<link rel="preload" href="/sample-pack.pack" as="fetch">',
+    "  Link: </sample-pack.pack>; rel=preload; as=fetch; crossorigin",
+  )).toThrow("must not be preloaded");
   const headers = new Headers({
     "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
     "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", link: "</wrong.js>; rel=modulepreload",

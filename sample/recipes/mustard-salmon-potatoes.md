@@ -1,5 +1,5 @@
 ---
-cover: /samples/mustard-salmon-potatoes.webp
+cover: images/mustard-salmon-potatoes.webp
 title: Mustard salmon with crushed potatoes
 tags: [weeknight, fish]
 ---

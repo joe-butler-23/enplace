@@ -1,5 +1,5 @@
 ---
-cover: /samples/chickpea-coconut-curry.webp
+cover: images/chickpea-coconut-curry.webp
 title: Chickpea and coconut curry
 tags: [weeknight, vegetarian]
 ---

@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
-import { startRelay } from "./kitchen-relay.mjs";
+import { startRelay } from "./cookbook-relay.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const COMMAND_DEADLINE_MS = 5 * 60_000;
@@ -161,8 +161,8 @@ async function main() {
       "dist-cli/cli/index.js",
       "dist-cli/cli/mirror.js",
       "dist-cli/src/core.js",
-      "dist-cli/src/kitchen/doc.js",
-      "dist-cli/src/kitchen/merge.js",
+      "dist-cli/src/cookbook/doc.js",
+      "dist-cli/src/cookbook/merge.js",
     ]) assert(packedPaths.has(required), `packed CLI is missing ${required}`);
     for (const packedPath of packedPaths) {
       assert(
@@ -220,10 +220,10 @@ async function main() {
         [["list", "--folder"], "mep: --folder needs a value\n"],
         [["check", "--folder", fixtureFromConsumer], "mep: check needs one <file|->\n"],
         [["list", "--week", "2026-09-07"], "mep: --week is only valid with shop\n"],
-        [["list", "--kitchen", "id"], "mep: --kitchen, --relay, and --once are only valid with mirror\n"],
+        [["list", "--cookbook", "id"], "mep: --cookbook, --relay, and --once are only valid with mirror\n"],
         [["mirror"], "mep: mirror needs --folder <dir>\n"],
-        [["mirror", "--folder", fixtureFromConsumer], "mep: mirror needs --kitchen <link-or-id>\n"],
-        [["mirror", "--folder", fixtureFromConsumer, "--kitchen", "id", "--json"], "mep: --json is not valid with mirror\n"],
+        [["mirror", "--folder", fixtureFromConsumer], "mep: mirror needs --cookbook <link-or-id>\n"],
+        [["mirror", "--folder", fixtureFromConsumer, "--cookbook", "id", "--json"], "mep: --json is not valid with mirror\n"],
       ];
       for (const [args, stderr] of invalidRoutes) {
         const invalidRoute = await cli.run(args);
@@ -243,12 +243,12 @@ async function main() {
       for (const [source, destination] of blocked.reverse()) await rename(destination, source);
     }
 
-    const { readKitchenText, writeKitchenText } = await import("../dist-cli/src/kitchen/doc.js");
+    const { readCookbookText, writeCookbookText } = await import("../dist-cli/src/cookbook/doc.js");
     const relayState = path.join(scratch, "relay-state");
     relay = await startRelay({ persist: relayState });
-    const nativeClient = async (kitchen) => {
+    const nativeClient = async (cookbook) => {
       const doc = new Y.Doc();
-      const provider = new WebsocketProvider(relay.url, kitchen, doc, { disableBc: true });
+      const provider = new WebsocketProvider(relay.url, cookbook, doc, { disableBc: true });
       assert.equal(provider._WS, globalThis.WebSocket, "y-websocket did not select Node 22 native WebSocket");
       providers.push(provider);
       documents.push(doc);
@@ -259,28 +259,28 @@ async function main() {
     const onceFolder = path.join(scratch, "mirror-once");
     await mkdir(onceFolder);
     await writeFile(path.join(onceFolder, "once.md"), "once through native WebSocket\n");
-    const onceKitchen = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const { doc: onceDoc } = await nativeClient(onceKitchen);
+    const onceCookbook = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const { doc: onceDoc } = await nativeClient(onceCookbook);
     const once = await cli.successful([
-      "mirror", "--folder", path.relative(consumer, onceFolder), "--kitchen", onceKitchen, "--relay", relay.url, "--once",
+      "mirror", "--folder", path.relative(consumer, onceFolder), "--cookbook", onceCookbook, "--relay", relay.url, "--once",
     ]);
     assert.equal(once.stdout, "");
     assert.equal(once.stderr, "");
-    await waitFor("one-shot mirror upload", () => readKitchenText(onceDoc, "once.md") === "once through native WebSocket\n");
+    await waitFor("one-shot mirror upload", () => readCookbookText(onceDoc, "once.md") === "once through native WebSocket\n");
 
     const continuousFolder = path.join(scratch, "mirror-continuous");
     await mkdir(continuousFolder);
-    const continuousKitchen = "bbbbbbbbbbbbbbbbbbbbbbbbbb";
-    const { doc: continuousDoc, provider: continuousProvider } = await nativeClient(continuousKitchen);
+    const continuousCookbook = "bbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const { doc: continuousDoc, provider: continuousProvider } = await nativeClient(continuousCookbook);
     continuous = cli.start([
-      "mirror", "--folder", path.relative(consumer, continuousFolder), "--kitchen", continuousKitchen, "--relay", relay.url,
+      "mirror", "--folder", path.relative(consumer, continuousFolder), "--cookbook", continuousCookbook, "--relay", relay.url,
     ]);
     const mirrorFailure = async () => {
       if (continuous.child.exitCode === null && continuous.child.signalCode === null) return null;
       const result = await continuous.closed;
       return new Error(`continuous mirror exited early (${result.code ?? result.signal}):\n${result.stderr}${result.stdout}`);
     };
-    writeKitchenText(continuousDoc, "remote.md", "remote through native WebSocket\n");
+    writeCookbookText(continuousDoc, "remote.md", "remote through native WebSocket\n");
     const mirroredFile = path.join(continuousFolder, "remote.md");
     await waitFor("continuous relay-to-disk mirror", async () => {
       try { return await readFile(mirroredFile, "utf8") === "remote through native WebSocket\n"; }
@@ -289,7 +289,7 @@ async function main() {
     await writeFile(mirroredFile, "disk through native WebSocket\n");
     await waitFor(
       "continuous disk-to-relay mirror",
-      () => readKitchenText(continuousDoc, "remote.md") === "disk through native WebSocket\n",
+      () => readCookbookText(continuousDoc, "remote.md") === "disk through native WebSocket\n",
       mirrorFailure,
     );
 
@@ -300,7 +300,7 @@ async function main() {
     assert.equal(continuous.child.exitCode, null, "continuous mirror exited during a transient relay interruption");
     relay = await startRelay({ port: relayPort, persist: relayState });
     await waitFor("native client to reconnect", () => continuousProvider.synced, mirrorFailure);
-    writeKitchenText(continuousDoc, "remote.md", "remote after reconnect\n");
+    writeCookbookText(continuousDoc, "remote.md", "remote after reconnect\n");
     await waitFor("post-reconnect relay-to-disk mirror", async () => {
       try { return await readFile(mirroredFile, "utf8") === "remote after reconnect\n"; }
       catch (error) { if (error?.code === "ENOENT") return false; throw error; }
@@ -309,7 +309,7 @@ async function main() {
     await writeFile(localAfterReconnect, "disk after reconnect\n");
     await waitFor(
       "post-reconnect disk-to-relay mirror",
-      () => readKitchenText(continuousDoc, "local-after-reconnect.md") === "disk after reconnect\n",
+      () => readCookbookText(continuousDoc, "local-after-reconnect.md") === "disk after reconnect\n",
       mirrorFailure,
     );
 
@@ -317,9 +317,9 @@ async function main() {
     continuous = undefined;
     assert.equal(stopped.stderr, "");
     assert.match(stopped.stdout, /wrote remote\.md\n/);
-    assert.match(stopped.stdout, /updated kitchen from remote\.md\n/);
+    assert.match(stopped.stdout, /updated cookbook from remote\.md\n/);
     assert.match(stopped.stdout, /preserved local copy as .*remote\.local-/);
-    assert.match(stopped.stdout, /updated kitchen from local-after-reconnect\.md\n/);
+    assert.match(stopped.stdout, /updated cookbook from local-after-reconnect\.md\n/);
 
     console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node 22 production-only install.`);
     console.log("Ordinary check/add/list/shop commands loaded no mirror dependencies.");

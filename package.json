@@ -13,7 +13,7 @@
     "build:cli": "tsc -p tsconfig.cli.json",
     "build:release": "npm run build:static && npm run build:cli && npm run build --workspace=enplace-relay",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
-    "relay": "node scripts/kitchen-relay.mjs",
+    "relay": "node scripts/cookbook-relay.mjs",
     "lint:provider-residue": "./scripts/lint-provider-residue.sh",
     "precommit": "./scripts/pre-commit.sh",
     "prepush": "./scripts/pre-push.sh",

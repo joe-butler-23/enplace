@@ -1,5 +1,5 @@
 ---
-cover: /samples/smoky-lentil-soup.webp
+cover: images/smoky-lentil-soup.webp
 title: Smoky lentil soup
 tags: [soup, vegetarian]
 ---

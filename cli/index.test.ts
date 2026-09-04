@@ -52,8 +52,8 @@ describe("mep CLI", () => {
   });
 
   it.each([
-    { argv: [], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --kitchen <link-or-id> [--relay <wss-url>] [--once]" },
-    { argv: ["unknown"], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --kitchen <link-or-id> [--relay <wss-url>] [--once]" },
+    { argv: [], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
+    { argv: ["unknown"], error: "usage: mep <check|add|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
     { argv: ["--"], error: "unknown option: --" },
     { argv: ["list", "--other"], error: "unknown option: --other" },
     { argv: ["list", "--folder"], error: "--folder needs a value" },
@@ -64,9 +64,9 @@ describe("mep CLI", () => {
     { argv: ["shop", "file"], error: "shop takes no file argument" },
     { argv: ["mirror", "file"], error: "mirror takes no file argument" },
     { argv: ["list", "--week", "2026-09-07"], error: "--week is only valid with shop" },
-    { argv: ["list", "--kitchen", "id"], error: "--kitchen, --relay, and --once are only valid with mirror" },
-    { argv: ["list", "--relay", "wss://relay.test"], error: "--kitchen, --relay, and --once are only valid with mirror" },
-    { argv: ["list", "--once"], error: "--kitchen, --relay, and --once are only valid with mirror" },
+    { argv: ["list", "--cookbook", "id"], error: "--cookbook, --relay, and --once are only valid with mirror" },
+    { argv: ["list", "--relay", "wss://relay.test"], error: "--cookbook, --relay, and --once are only valid with mirror" },
+    { argv: ["list", "--once"], error: "--cookbook, --relay, and --once are only valid with mirror" },
     { argv: ["mirror"], error: "mirror needs --folder <dir>" },
   ])("rejects $argv with the literal argument error", async ({ argv, error }) => {
     await expect(execute(argv)).rejects.toThrow(error);
@@ -74,8 +74,8 @@ describe("mep CLI", () => {
 
   it("keeps mirror validation order and relative folder resolution", async () => {
     const root = await folder();
-    await expect(execute(["mirror", "--folder", root])).rejects.toThrow("mirror needs --kitchen <link-or-id>");
-    await expect(execute(["mirror", "--folder", root, "--kitchen", "id", "--json"]))
+    await expect(execute(["mirror", "--folder", root])).rejects.toThrow("mirror needs --cookbook <link-or-id>");
+    await expect(execute(["mirror", "--folder", root, "--cookbook", "id", "--json"]))
       .rejects.toThrow("--json is not valid with mirror");
     await expect(execute(["list", "--folder", "missing"], { cwd: root }))
       .rejects.toThrow(`folder not found: ${path.join(root, "missing")}`);

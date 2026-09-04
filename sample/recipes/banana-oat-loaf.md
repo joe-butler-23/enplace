@@ -1,5 +1,5 @@
 ---
-cover: /samples/banana-oat-loaf.webp
+cover: images/banana-oat-loaf.webp
 title: Banana oat loaf
 tags: [bake, vegetarian]
 ---

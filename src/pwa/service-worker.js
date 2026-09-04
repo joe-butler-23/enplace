@@ -42,7 +42,7 @@ self.addEventListener("fetch", (event) => {
     const cached = await cache.match(request, { ignoreVary: true });
     if (cached) return cached;
     const response = await fetch(request);
-    if (response.ok && /^\/(?:assets|fonts|samples)\//.test(url.pathname)) event.waitUntil(cache.put(request, response.clone()));
+    if (response.ok && /^\/(?:assets|fonts)\//.test(url.pathname)) event.waitUntil(cache.put(request, response.clone()));
     return response;
   })());
 });

@@ -69,7 +69,7 @@ export function browserSuiteConfig(options: BrowserSuiteOptions): PlaywrightTest
     expect: { timeout: options.expectTimeout ?? 10_000 },
     webServer: options.relay ? [
       {
-        command: `node scripts/kitchen-relay.mjs --port ${relayPort}`,
+        command: `node scripts/cookbook-relay.mjs --port ${relayPort}`,
         port: relayPort,
         reuseExistingServer: false,
       },

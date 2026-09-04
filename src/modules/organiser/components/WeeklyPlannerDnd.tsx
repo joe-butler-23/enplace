@@ -96,7 +96,7 @@ export function PlannerCard({
             style={{ touchAction: "none" }}
             onClick={(event) => onOpen?.(event, entry.filePath)}
           >
-            <img src={coverUrl} alt={entry.item.title} decoding="async" draggable={false} />
+            <img src={coverUrl} alt={entry.item.title} decoding="sync" draggable={false} />
           </div>
         ) : null}
         <button

@@ -56,7 +56,7 @@ installed-PWA checks, and the deployed CDN edge remain external.
 
 ## Ground rules
 
-- Recipes and planner content belong to the user's kitchen; exported or mirrored
+- Recipes and planner content belong to the user's cookbook; exported or mirrored
   files are projections. Never treat live personal data as a test fixture.
 - Do not create a second implementation of semantics already owned by a
   contract in [docs/](docs/).

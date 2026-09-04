@@ -17,9 +17,12 @@ describe("recipe database markup", () => {
     const props: Partial<Props> = { recipes: [recipe({ cover: "images/test.png" })], resolveCover: () => "/covers/test.png" };
     const covered = render(props); const none = render({ ...props, resolveCover: () => null });
     expect(covered).toContain('src="/covers/test.png"');
+    expect(covered).toContain('decoding="sync"');
+    expect(covered).not.toContain("<picture");
+    expect(covered).not.toContain("srcset=");
     expect(covered).not.toContain("cooking-db__cover--empty"); expect(none).toContain("cooking-db__cover--empty");
   });
-  it("guides an empty kitchen", () => {
+  it("guides an empty cookbook", () => {
     const markup = render(); expect(markup).toContain("No recipes yet"); expect(markup).toContain("## Ingredients");
     expect(markup).toContain("Import recipe");
   });

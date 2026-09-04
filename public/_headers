@@ -16,10 +16,6 @@
 /enplace-mark.png
   Cache-Control: public, max-age=31536000, immutable
 
-# Sample covers may be refreshed without changing their paths.
-/samples/*
-  Cache-Control: public, max-age=86400
-
 /sw.js
   Cache-Control: no-cache
 

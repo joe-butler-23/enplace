@@ -5,8 +5,8 @@ import { buildDatabaseView, databaseQuery, initialDatabaseState } from "./databa
 const recipe = (index: number, overrides: Partial<Recipe> = {}): Recipe => ({ path: `recipes/recipe-${index}.md`,
   title: `Recipe ${index}`, ingredients: [], cover: null, added: null, tags: [], link: `Recipe ${index}`, ...overrides });
 const plan = (overrides: Partial<Plan> = {}): Plan => ({ marked: [], days: new Map(), notes: new Map(), ...overrides });
-const paths = (recipes: readonly Recipe[], query: Parameters<typeof buildDatabaseView>[2] = {}, kitchenPlan = plan()) =>
-  buildDatabaseView(recipes, kitchenPlan, query).items.map(({ path }) => path);
+const paths = (recipes: readonly Recipe[], query: Parameters<typeof buildDatabaseView>[2] = {}, cookbookPlan = plan()) =>
+  buildDatabaseView(recipes, cookbookPlan, query).items.map(({ path }) => path);
 afterEach(() => vi.useRealTimers());
 describe("database query projection", () => {
   it("starts from saved preferences", () => expect(initialDatabaseState({ ...SETTINGS, databaseSort: "title-desc",

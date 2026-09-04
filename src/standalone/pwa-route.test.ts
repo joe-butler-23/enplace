@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialViewForPathname,
   pathnameForView,
-  preserveKitchenHash
+  preserveCookbookHash
 } from "./pwa-route";
 
 describe("initial view route resolution", () => {
@@ -26,13 +26,13 @@ describe("initial view route resolution", () => {
 });
 
 describe("PWA route", () => {
-  it("keeps the kitchen fragment across in-app history changes", () => {
+  it("keeps the cookbook fragment across in-app history changes", () => {
     const urls: Array<string | URL | null | undefined> = [];
     const history = {
       pushState: (_data: unknown, _unused: string, url?: string | URL | null) => { urls.push(url); },
       replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => { urls.push(url); },
     } as unknown as History;
-    preserveKitchenHash(history, {
+    preserveCookbookHash(history, {
       href: "https://enplace.example/planner#k=old",
       origin: "https://enplace.example",
     }, "abcdefghijklmnopqrstuvwxyz");

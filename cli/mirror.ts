@@ -4,10 +4,10 @@ import path from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import {
-  deleteKitchenPath, hasKitchenDirectory, hasKitchenFile, isKitchenId, isTextPath, kitchenIdFromUrl,
-  listKitchenPaths, observeKitchen, readKitchenBytes, writeKitchenBytes, writeKitchenText,
-} from "../src/kitchen/doc.js";
-import { mergeText } from "../src/kitchen/merge.js";
+  deleteCookbookPath, hasCookbookDirectory, hasCookbookFile, isCookbookId, isTextPath, cookbookIdFromUrl,
+  listCookbookPaths, observeCookbook, readCookbookBytes, writeCookbookBytes, writeCookbookText,
+} from "../src/cookbook/doc.js";
+import { mergeText } from "../src/cookbook/merge.js";
 import { atomicCommit, createPrivateOperation, equal, optionalLstat, readOptional, unlinkIfPresent, type Bytes } from "./mirror-commit.js";
 
 export const MIRROR_ORIGIN = Symbol("mep-mirror");
@@ -17,7 +17,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 type MirrorOptions = {
-  folder: string; kitchen: string; relay: string; once?: boolean;
+  folder: string; cookbook: string; relay: string; once?: boolean;
   log?: (line: string) => void; signal?: AbortSignal; now?: () => Date;
 };
 async function cleanupPrivateRoot(privateRoot: string, parent: string): Promise<void> {
@@ -80,9 +80,9 @@ export function createPathScheduler(run: (paths: readonly string[]) => Promise<v
 
 type Decision = "equal" | "local" | "remote" | "conflict";
 
-function kitchenId(value: string): string {
-  const id = isKitchenId(value) ? value : kitchenIdFromUrl(value);
-  if (!id) throw new Error("--kitchen needs a kitchen link or valid kitchen id");
+function cookbookId(value: string): string {
+  const id = isCookbookId(value) ? value : cookbookIdFromUrl(value);
+  if (!id) throw new Error("--cookbook needs a cookbook link or valid cookbook id");
   return id;
 }
 function skipped(relative: string): boolean {
@@ -145,8 +145,8 @@ async function diskFiles(folder: string, start = ""): Promise<Map<string, Buffer
 
 
 function writeDoc(doc: Y.Doc, relative: string, bytes: Uint8Array): void {
-  if (isTextPath(relative)) writeKitchenText(doc, relative, decoder.decode(bytes), MIRROR_ORIGIN);
-  else writeKitchenBytes(doc, relative, new Uint8Array(bytes), MIRROR_ORIGIN);
+  if (isTextPath(relative)) writeCookbookText(doc, relative, decoder.decode(bytes), MIRROR_ORIGIN);
+  else writeCookbookBytes(doc, relative, new Uint8Array(bytes), MIRROR_ORIGIN);
 }
 export function localCopyPath(file: string, now: Date): string {
   const parsed = path.parse(file);
@@ -164,11 +164,11 @@ function diskPlan(
     const merged = mergeText(decoder.decode(baseline ?? new Uint8Array()), decoder.decode(local), decoder.decode(remote));
     const plural = merged.conflicts === 1 ? "" : "s";
     const detail = merged.conflicts ? `; kept ${merged.conflicts} conflict${plural}` : "";
-    return { desired: encoder.encode(merged.text), merged: merged.text, message: `merged local changes with kitchen for ${relative}${detail}` };
+    return { desired: encoder.encode(merged.text), merged: merged.text, message: `merged local changes with cookbook for ${relative}${detail}` };
   }
   let message = `wrote ${relative}`;
   if (local === null && known && baseline !== null) {
-    message = `restored ${relative}; local deletion conflicted with kitchen change`;
+    message = `restored ${relative}; local deletion conflicted with cookbook change`;
   } else if (remote === null) message = `deleted ${relative}`;
   return { desired: remote, message };
 }
@@ -194,7 +194,7 @@ async function waitForInitialSync(provider: WebsocketProvider, signal: AbortSign
 
 
 
-export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
+export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
   const requestedFolder = path.resolve(options.folder);
   const folder = await realpath(requestedFolder).catch(() => null);
   if (!folder || !(await stat(folder).catch(() => null))?.isDirectory()) {
@@ -202,7 +202,7 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
   }
   if (path.dirname(folder) === folder) throw new Error("refusing to mirror a filesystem root");
   if (folder !== requestedFolder) options.log?.(`resolved mirror folder ${requestedFolder} to ${folder}\n`);
-  const id = kitchenId(options.kitchen);
+  const id = cookbookId(options.cookbook);
   let relay: URL;
   try { relay = new URL(options.relay); }
   catch { throw new Error("--relay needs a valid ws:// or wss:// URL"); }
@@ -237,14 +237,14 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
     baselines.set(relative, bytes === null ? null : new Uint8Array(bytes));
   };
   const deleteDoc = (relative: string): void => {
-    if (hasKitchenFile(doc, relative) || hasKitchenDirectory(doc, relative)) {
-      deleteKitchenPath(doc, relative, true, MIRROR_ORIGIN);
-      log(`removed ${relative} from kitchen`);
+    if (hasCookbookFile(doc, relative) || hasCookbookDirectory(doc, relative)) {
+      deleteCookbookPath(doc, relative, true, MIRROR_ORIGIN);
+      log(`removed ${relative} from cookbook`);
     }
   };
   const applyLocal = (relative: string, local: Bytes): void => {
     if (local === null) deleteDoc(relative);
-    else { writeDoc(doc, relative, local); log(`updated kitchen from ${relative}`); }
+    else { writeDoc(doc, relative, local); log(`updated cookbook from ${relative}`); }
     remember(relative, local);
   };
 
@@ -258,12 +258,12 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
     for (let attempt = 0; attempt <= MAX_PATH_SYNC_RETRIES; attempt += 1) {
       const file = absolutePath(folder, relative);
       await rejectSymlinks(folder, relative);
-      const remote = readKitchenBytes(doc, relative);
+      const remote = readCookbookBytes(doc, relative);
       const local = await readOptional(file);
       const known = baselines.has(relative);
       const baseline = baselines.get(relative) ?? null;
       const decision = reconciliationDecision(known, baseline, local, remote);
-      if (!equal(readKitchenBytes(doc, relative), remote)) continue;
+      if (!equal(readCookbookBytes(doc, relative), remote)) continue;
       if (decision === "equal") { remember(relative, remote); reportRecoveries(); return; }
       if (decision === "local") { applyLocal(relative, local); reportRecoveries(); return; }
       const plan = diskPlan(relative, decision, known, baseline, local, remote);
@@ -272,12 +272,12 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
         await rejectSymlinks(folder, relative);
       }
       const committed = await atomicCommit(file, local, plan.desired, {
-        current: () => equal(readKitchenBytes(doc, relative), remote),
+        current: () => equal(readCookbookBytes(doc, relative), remote),
         recoveryName: path.basename(localCopyPath(file, options.now?.() ?? new Date())),
       });
       if (committed.recovery && !recoveries.includes(committed.recovery)) recoveries.push(committed.recovery);
       if (committed.result === "committed") {
-        if (plan.merged) writeKitchenText(doc, relative, plan.merged, MIRROR_ORIGIN);
+        if (plan.merged) writeCookbookText(doc, relative, plan.merged, MIRROR_ORIGIN);
         remember(relative, plan.desired);
         log(`${plan.message}${recoverySuffix()}`, decision === "conflict" || plan.message.startsWith("restored"));
         return;
@@ -306,24 +306,24 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
     await rejectSymlinks(folder, relative);
     const info = await optionalLstat(absolutePath(folder, relative));
     if (!info?.isDirectory()) {
-      const paths = listKitchenPaths(doc).filter((key) => key === relative || key.startsWith(`${relative}/`));
+      const paths = listCookbookPaths(doc).filter((key) => key === relative || key.startsWith(`${relative}/`));
       if (info?.isFile() || paths.length === 0) await reconcilePath(relative);
       else for (const key of paths) await reconcilePath(key);
       return;
     }
-    if (hasKitchenFile(doc, relative)) {
+    if (hasCookbookFile(doc, relative)) {
       await replaceBlockingDirectory(relative);
       return;
     }
     const found = await diskFiles(folder, relative);
-    const remote = listKitchenPaths(doc).filter((value) => value.startsWith(`${relative}/`));
+    const remote = listCookbookPaths(doc).filter((value) => value.startsWith(`${relative}/`));
     for (const key of new Set([...found.keys(), ...remote])) await reconcilePath(key);
   };
   const reconcileAll = async (): Promise<void> => {
-    const remote = listKitchenPaths(doc);
+    const remote = listCookbookPaths(doc);
     let disk = await diskFiles(folder);
     for (const relative of disk.keys()) {
-      if (hasKitchenDirectory(doc, relative) && !hasKitchenFile(doc, relative)) {
+      if (hasCookbookDirectory(doc, relative) && !hasCookbookFile(doc, relative)) {
         const recovery = await preservePath(relative);
         log(`preserved file blocking projected directory ${relative} as ${recovery}`, true);
       }
@@ -358,7 +358,7 @@ export async function mirrorKitchen(options: MirrorOptions): Promise<void> {
   try {
     if (!await waitForInitialSync(provider, signal)) return;
     if (options.once) { await reconcileAll(); await cleanupReplacementScratch(folder); return; }
-    stopObserving = observeKitchen(doc, (paths, origin) => {
+    stopObserving = observeCookbook(doc, (paths, origin) => {
       if (origin !== MIRROR_ORIGIN) for (const relative of paths) schedule(relative);
     });
     provider.on("closed", onProviderClosed);

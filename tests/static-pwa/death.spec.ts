@@ -7,6 +7,7 @@ test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cann
 import { unzipSync } from "fflate";
 
 const SAMPLE_RECIPE_PATHS = readdirSync("sample/recipes").filter((name) => name.endsWith(".md")).sort();
+const SAMPLE_IMAGE_PATHS = readdirSync("sample/images").map((name) => `images/${name}`).sort();
 
 async function ensureServiceWorkerControl(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -18,14 +19,14 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
-test("a used kitchen remains useful and exportable after both origins disappear", async ({ page, context }) => {
+test("a used cookbook remains useful and exportable after both origins disappear", async ({ page, context }) => {
   await page.goto("/");
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
   const id = new URL(page.url()).hash.slice(3);
   const beforeImport = await persistedUpdateCount(page, id);
 
   await openSettings(page);
-  const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles([
     {
       name: "Plan.md",
@@ -70,14 +71,15 @@ test("a used kitchen remains useful and exportable after both origins disappear"
 
   await openSettings(page);
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download kitchen (.zip)" }).click();
+  await page.getByRole("button", { name: "Download cookbook (.zip)" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("enplace-kitchen.zip");
+  expect(download.suggestedFilename()).toBe("enplace-cookbook.zip");
   const downloadPath = await download.path();
   expect(downloadPath).not.toBeNull();
   const entries = unzipSync(await readFile(downloadPath!));
   expect(Object.keys(entries).sort()).toEqual([
     "Plan.md",
+    ...SAMPLE_IMAGE_PATHS,
     ...SAMPLE_RECIPE_PATHS,
     "Shopping.md",
   ].sort());

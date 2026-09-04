@@ -1,5 +1,5 @@
 import * as React from "react";
-import { currentKitchenConnection, onCurrentKitchenConnection } from "../../kitchen/current";
+import { currentCookbookConnection, onCurrentCookbookConnection } from "../../cookbook/current";
 
 export type ShoppingListItem = {
   id: string;
@@ -107,7 +107,7 @@ function ShoppingItemRow({
 
 
 function currentRelayState(): string {
-  const connection = currentKitchenConnection();
+  const connection = currentCookbookConnection();
   if (!connection?.relayUrl) return "none";
   const status = typeof navigator !== "undefined" && !navigator.onLine ? "offline" : connection.status();
   return `${connection.id}:${status}`;
@@ -117,9 +117,9 @@ function subscribeRelayState(listener: () => void): () => void {
   let unsubscribeStatus: () => void = () => undefined;
   const bind = () => {
     unsubscribeStatus();
-    unsubscribeStatus = currentKitchenConnection()?.onStatus(listener) ?? (() => undefined);
+    unsubscribeStatus = currentCookbookConnection()?.onStatus(listener) ?? (() => undefined);
   };
-  const unsubscribeConnection = onCurrentKitchenConnection(() => { bind(); listener(); });
+  const unsubscribeConnection = onCurrentCookbookConnection(() => { bind(); listener(); });
   window.addEventListener("online", listener);
   window.addEventListener("offline", listener);
   bind();

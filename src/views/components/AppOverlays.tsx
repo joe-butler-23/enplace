@@ -1,5 +1,5 @@
 import * as React from "react";
-import { KitchenPanel } from "@/kitchen/KitchenPanel";
+import { CookbookPanel } from "@/cookbook/CookbookPanel";
 import { normalizeWeeklyColumnMinWidth } from "@/modules/organiser/utils/weekly-layout";
 import { setIcon } from "@/platform-primitives";
 import type { StandaloneSettings } from "@/standalone/settings";
@@ -41,7 +41,7 @@ export function SettingsDialog({ settings, onChange, onClose }: SettingsProps): 
       <label>Marked recipes<select value={settings.databaseMarkedFilter} onChange={(event) => void onChange({ databaseMarkedFilter: event.target.value as StandaloneSettings["databaseMarkedFilter"] })}><option value="all">All</option><option value="marked">Marked</option><option value="unmarked">Unmarked</option></select></label>
       <label>Scheduled recipes<select value={settings.databaseScheduledFilter} onChange={(event) => void onChange({ databaseScheduledFilter: event.target.value as StandaloneSettings["databaseScheduledFilter"] })}><option value="all">All</option><option value="scheduled">Scheduled</option><option value="unscheduled">Unscheduled</option></select></label>
       <label>Marked column width<input type="number" min="180" max="520" value={settings.weeklyOrganiserMarkedWidth} onChange={(event) => void onChange({ weeklyOrganiserMarkedWidth: normalizeWeeklyColumnMinWidth(Number(event.target.value)) })} /></label>
-    </div><KitchenPanel /></div>
+    </div><CookbookPanel /></div>
   </div></dialog>;
 }
 export function StartupFailure({ phase, error, events, onRetry }: { phase: string; error: string; events: string[]; onRetry: () => void }): React.JSX.Element {

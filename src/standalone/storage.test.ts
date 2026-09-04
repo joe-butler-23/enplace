@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readText } from "../host-client/browser-storage";
-import { openKitchen, type KitchenConnection } from "../host-client/kitchen-storage";
-import { setCurrentKitchenConnection } from "../kitchen/current";
+import { openCookbook, type CookbookConnection } from "../host-client/cookbook-storage";
+import { setCurrentCookbookConnection } from "../cookbook/current";
 import { DEFAULT_STANDALONE_SETTINGS } from "./settings";
 import { loadSettings, prepareStandaloneStartup, saveSettings } from "./storage";
 
@@ -19,12 +19,12 @@ const storage: Storage = {
 beforeEach(() => {
   values.clear();
   Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
-  setCurrentKitchenConnection(null);
+  setCurrentCookbookConnection(null);
 });
 
-let connection: KitchenConnection | null = null;
+let connection: CookbookConnection | null = null;
 afterEach(async () => {
-  setCurrentKitchenConnection(null);
+  setCurrentCookbookConnection(null);
   await connection?.close();
   connection = null;
 });
@@ -51,8 +51,8 @@ describe("browser-local preferences", () => {
   });
 
   it("moves legacy day notes into Plan.md once and removes them from preferences", async () => {
-    connection = await openKitchen({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
-    setCurrentKitchenConnection(connection);
+    connection = await openCookbook({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
+    setCurrentCookbookConnection(connection);
     window.localStorage.setItem("enplace.preferences", JSON.stringify({
       ...DEFAULT_STANDALONE_SETTINGS,
       dayNotes: { "2026-09-04": "Grandma visiting, cook early" },

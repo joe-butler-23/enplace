@@ -2,7 +2,7 @@
   "name": "enplace-relay",
   "private": true,
   "version": "0.1.0",
-  "description": "Enplace kitchen relay: one Durable Object per kitchen speaking the y-websocket protocol.",
+  "description": "Enplace cookbook relay: one Durable Object per cookbook speaking the y-websocket protocol.",
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",

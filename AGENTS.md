@@ -1,8 +1,8 @@
 # Purpose — mise-en-place
 
-Enplace is a local-first cooking application for recipe import, weekly planning, cooking, and shopping. It is one static PWA over a **shared kitchen**: one merge document per household, keyed by folder-relative path, held on every device and synced through a relay, addressed by an unguessable link. Plain Markdown is the schema; a folder on disk is a mirror of the kitchen, never a second authority.
+Enplace is a local-first cooking application for recipe import, weekly planning, cooking, and shopping. It is one static PWA over a **shared cookbook**: one merge document per household, keyed by folder-relative path, held on every device and synced through a relay, addressed by an unguessable link. Plain Markdown is the schema; a folder on disk is a mirror of the cookbook, never a second authority.
 
-Success means the kitchen document remains the sole authority; recipe provenance stays visible; shopping changes merge deterministically across devices; the kitchen is always exportable as plain files; and the interface remains fast and coherent.
+Success means the cookbook document remains the sole authority; recipe provenance stays visible; shopping changes merge deterministically across devices; the cookbook is always exportable as plain files; and the interface remains fast and coherent.
 
 <!-- clai:instructions:coding:start -->
 <!-- source-sha256:125fbd0ba45f15bcd8964ecd8bb5dd139da49002dbaf2db8229a6156593a274e -->
@@ -21,11 +21,11 @@ Success means the kitchen document remains the sole authority; recipe provenance
 
 ## Repository Boundaries
 
-- The kitchen document (`src/kitchen/doc.ts`) is the sole authority for recipe Markdown, `Plan.md`, and `Shopping.md`. Browser storage holds the kitchen's own persisted copy, the current kitchen id, and UI preferences. A folder on disk is only a mirror made by the CLI or a plain-file export.
-- Storage adapters live in `src/host-client/`: `kitchen-storage.ts` implements the browser adapter over Yjs, IndexedDB, and the relay; `browser-storage.ts` defines the adapter contract and storage helpers. Shared recipe, planning, and shopping rules belong in the pure TypeScript `src/core.ts`.
-- The optional `mep` Node CLI lives in `cli/`, uses plain filesystem access, imports the same `src/core.ts` and `src/kitchen/doc.ts`, and owns the folder mirror (`mep mirror`).
-- The only network transport is the y-websocket relay connection for the kitchen document. Frontend features must not add another transport, a second store for kitchen content, accounts, or provider sign-in. Recipe extraction stays outside the app (paste, chat-assistant prompt, agents).
-- `cooking/enplace-shared-kitchen.md` in the vault records the design decision and the provider-API evidence behind it.
+- The cookbook document (`src/cookbook/doc.ts`) is the sole authority for recipe Markdown, `Plan.md`, and `Shopping.md`. Browser storage holds the cookbook's own persisted copy, the current cookbook id, and UI preferences. A folder on disk is only a mirror made by the CLI or a plain-file export.
+- Storage adapters live in `src/host-client/`: `cookbook-storage.ts` implements the browser adapter over Yjs, IndexedDB, and the relay; `browser-storage.ts` defines the adapter contract and storage helpers. Shared recipe, planning, and shopping rules belong in the pure TypeScript `src/core.ts`.
+- The optional `mep` Node CLI lives in `cli/`, uses plain filesystem access, imports the same `src/core.ts` and `src/cookbook/doc.ts`, and owns the folder mirror (`mep mirror`).
+- The only network transport is the y-websocket relay connection for the cookbook document. Frontend features must not add another transport, a second store for cookbook content, accounts, or provider sign-in. Recipe extraction stays outside the app (paste, chat-assistant prompt, agents).
+- `cooking/enplace-shared-cookbook.md` in the vault records the design decision and the provider-API evidence behind it.
 - `.agents/skills/recipe-extraction/SKILL.md` owns agent-led extraction and CLI addition. `.agents/skills/recipe-qa/SKILL.md` owns read-only QA of existing recipes.
 
 ## Working Contract
@@ -46,7 +46,7 @@ npm test -- <focused-test>
 
 Run `npm run prepush` before pushing a normal code tranche.
 
-Browser smoke tests use synthetic data and an in-process relay. Verify primary-surface changes against a real browser boot of the static PWA, including a fresh kitchen, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
+Browser smoke tests use synthetic data and an in-process relay. Verify primary-surface changes against a real browser boot of the static PWA, including a fresh cookbook, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
 
 For project-skill changes, run:
 

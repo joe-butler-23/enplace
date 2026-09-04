@@ -1,6 +1,6 @@
 # Image credits
 
-Each cover is a cropped WebP conversion of the linked photograph and is redistributed under the Pexels License.
+Each photograph is stored as a capped WebP cover and a centre-cropped 448 px WebP card thumbnail, and is redistributed under the Pexels License.
 - `images/white-bean-tomato-stew.webp` — “Delicious Homemade Bean Soup in White Bowl” — photographer: IARA MELO — photo page: <https://www.pexels.com/photo/delicious-homemade-bean-soup-in-white-bowl-30635687/> — licence: [Pexels License](https://www.pexels.com/license/)
 - `images/lemon-chicken-traybake.webp` — “Cooked Chicken With Potatoes on Black Metal Tray” — photographer: ArtHouse Studio — photo page: <https://www.pexels.com/photo/cooked-chicken-with-potatoes-on-black-metal-tray-4589138/> — licence: [Pexels License](https://www.pexels.com/license/)
 - `images/smoky-lentil-soup.webp` — “Delicious Bowl of Lentil Soup Garnished with Fresh Herbs” — photographer: pedro furtado — photo page: <https://www.pexels.com/photo/delicious-bowl-of-lentil-soup-garnished-with-fresh-herbs-28902900/> — licence: [Pexels License](https://www.pexels.com/license/)

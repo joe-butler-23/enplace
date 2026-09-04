@@ -74,17 +74,17 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .mep-settings input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font: inherit; color: var(--ink); }
 .mep-settings input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mep-settings input[readonly] { background: var(--hover); color: var(--muted); }
-.mep-kitchen-panel { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
-.mep-kitchen-panel h3,
-.mep-kitchen-panel h4 { margin: 0; }
-.mep-kitchen-panel h3 { font-size: 1.08rem; }
-.mep-kitchen-panel h4 { font-family: var(--font-sans); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.mep-kitchen-panel__section { display: grid; gap: 10px; margin-top: 18px; }
-.mep-kitchen-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.mep-kitchen-panel__qr { width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 10px; }
-.mep-kitchen-panel__status { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
-.mep-kitchen-panel__file-button { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 0 !important; font-size: inherit !important; }
-.mep-kitchen-panel__file-button input { display: none; }
+.mep-cookbook-panel { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.mep-cookbook-panel h3,
+.mep-cookbook-panel h4 { margin: 0; }
+.mep-cookbook-panel h3 { font-size: 1.08rem; }
+.mep-cookbook-panel h4 { font-family: var(--font-sans); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.mep-cookbook-panel__section { display: grid; gap: 10px; margin-top: 18px; }
+.mep-cookbook-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mep-cookbook-panel__qr { width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 10px; }
+.mep-cookbook-panel__status { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+.mep-cookbook-panel__file-button { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 0 !important; font-size: inherit !important; }
+.mep-cookbook-panel__file-button input { display: none; }
 .mep-modal-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 28%, transparent); display: grid; place-items: center; z-index: 20; }
 .mep-modal { background: var(--surface); border-radius: 16px; padding: 20px; min-width: 320px; max-width: 90vw; box-shadow: var(--shadow); }
 .mep-command { background: var(--surface); border: 0; color: inherit; border-radius: 16px; padding: 16px; width: min(520px, 90vw); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; }

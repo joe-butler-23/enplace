@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addShoppingItem, openFreshKitchen, openShopping, persistedUpdateCount } from "./helpers";
+import { addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
 
 test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 
@@ -9,15 +9,15 @@ async function ensureServiceWorkerControl(page: Page): Promise<void> {
 }
 
 async function expectConnected(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Share kitchen", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Share kitchen" })).toBeVisible();
+  await page.getByRole("button", { name: "Share cookbook", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Share cookbook" })).toBeVisible();
   await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close share kitchen" }).click();
-  await expect(page.getByRole("dialog", { name: "Share kitchen" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close share cookbook" }).click();
+  await expect(page.getByRole("dialog", { name: "Share cookbook" })).toHaveCount(0);
 }
 
 test("an offline tick survives an immediate reload after IndexedDB persists it", async ({ page, context }) => {
-  const id = await openFreshKitchen(page);
+  const id = await openFreshCookbook(page);
   await openShopping(page);
   await addShoppingItem(page, "offline parsley");
   await ensureServiceWorkerControl(page);
@@ -39,7 +39,7 @@ test("an offline tick survives an immediate reload after IndexedDB persists it",
 });
 
 test("two shoppers edit offline, reload, reconnect in either order, and retain the merge", async ({ page, context, browser }) => {
-  const id = await openFreshKitchen(page);
+  const id = await openFreshCookbook(page);
   await openShopping(page);
   await addShoppingItem(page, "market apples");
   await addShoppingItem(page, "market bread");
@@ -80,13 +80,13 @@ test("two shoppers edit offline, reload, reconnect in either order, and retain t
       await expect.poll(() => current.getByRole("checkbox", { name: "market bread" }).isChecked()).toBe(true);
     }
 
-    const kitchenUrl = page.url();
+    const cookbookUrl = page.url();
     await page.close();
     await second.close();
     page = await context.newPage();
     second = await secondContext.newPage();
-    await page.goto(kitchenUrl);
-    await second.goto(kitchenUrl);
+    await page.goto(cookbookUrl);
+    await second.goto(cookbookUrl);
     for (const current of [page, second]) {
       await expect(current.getByRole("checkbox", { name: "market apples" })).toBeChecked();
       await expect(current.getByRole("checkbox", { name: "market bread" })).toBeChecked();

@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { MergeResult } from "@/kitchen/merge";
+import type { MergeResult } from "@/cookbook/merge";
 import { RecipeView, type RecipeViewHandle } from "./RecipeView";
 
 class PreviewErrorBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {

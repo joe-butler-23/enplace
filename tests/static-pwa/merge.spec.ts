@@ -14,25 +14,25 @@ const relayReadyFile = {
   buffer: Buffer.from("---\ntitle: Relay Ready\n---\n\n# Relay Ready\n\n## Ingredients\n- water\n\n## Method\n1. Wait.\n"),
 };
 
-async function createKitchenWithRecipe(page: Page): Promise<void> {
+async function createCookbookWithRecipe(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Settings" }).click();
-  const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(recipeFile);
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
   await page.getByTitle("Close settings").click();
   await expect(page.getByText("Merge Soup", { exact: true })).toBeVisible();
 }
 
-async function joinKitchen(browser: Browser, url: string, owner: Page): Promise<{ context: BrowserContext; page: Page }> {
+async function joinCookbook(browser: Browser, url: string, owner: Page): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(url);
   await expect(page.getByText("Merge Soup", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).dispatchEvent("click");
-  const input = page.locator(".mep-kitchen-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  const input = page.locator(".mep-cookbook-panel__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(relayReadyFile);
   await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
   await page.getByTitle("Close settings").click();
@@ -87,8 +87,8 @@ async function expectBothEditors(left: Locator, right: Locator, values: string[]
 }
 
 test("two devices keep disjoint recipe paragraphs", async ({ page, browser }) => {
-  await createKitchenWithRecipe(page);
-  const peer = await joinKitchen(browser, page.url(), page);
+  await createCookbookWithRecipe(page);
+  const peer = await joinCookbook(browser, page.url(), page);
   try {
     const [aliceDraft, bobDraft] = await Promise.all([openEditor(page), openEditor(peer.page)]);
     await editTogether(
@@ -106,8 +106,8 @@ test("two devices keep disjoint recipe paragraphs", async ({ page, browser }) =>
 });
 
 test("two devices show both overlapping recipe versions", async ({ page, browser }) => {
-  await createKitchenWithRecipe(page);
-  const peer = await joinKitchen(browser, page.url(), page);
+  await createCookbookWithRecipe(page);
+  const peer = await joinCookbook(browser, page.url(), page);
   try {
     const [aliceDraft, bobDraft] = await Promise.all([openEditor(page), openEditor(peer.page)]);
     await editTogether(
@@ -128,8 +128,8 @@ test("two devices show both overlapping recipe versions", async ({ page, browser
 });
 
 test("two devices keep a recipe paragraph edit beside its deletion", async ({ page, browser }) => {
-  await createKitchenWithRecipe(page);
-  const peer = await joinKitchen(browser, page.url(), page);
+  await createCookbookWithRecipe(page);
+  const peer = await joinCookbook(browser, page.url(), page);
   try {
     const [aliceDraft, bobDraft] = await Promise.all([openEditor(page), openEditor(peer.page)]);
     await editTogether(
@@ -148,7 +148,7 @@ test("two devices keep a recipe paragraph edit beside its deletion", async ({ pa
 
 
 test("deletes a recipe and returns to the database", async ({ page }) => {
-  await createKitchenWithRecipe(page);
+  await createCookbookWithRecipe(page);
   await page.getByRole("button", { name: "Open recipe Merge Soup" }).dispatchEvent("click");
   await expect(page.getByRole("heading", { name: "Merge Soup" })).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());

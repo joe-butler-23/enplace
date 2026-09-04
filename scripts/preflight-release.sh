@@ -35,8 +35,8 @@ echo "==> Cloudflare Pages boundary"
 npm run test:pages-boundary
 
 echo "==> MANUAL STEP REQUIRED: installed-PWA verification"
-echo "Open the static site in desktop Chromium with a throwaway kitchen, install Enplace,"
-echo "and confirm a kitchen edit survives reload, offline launch, /, /shopping, and zip export."
+echo "Open the static site in desktop Chromium with a throwaway cookbook, install Enplace,"
+echo "and confirm a cookbook edit survives reload, offline launch, /, /shopping, and zip export."
 
 echo "==> Public snapshot"
 echo "After certification, publish this commit to the public repository with:"

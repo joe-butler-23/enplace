@@ -66,7 +66,7 @@ export function WeeklyReviewPanel({
                 <div className="weekly-review-row-info">
                   {entry.coverUrl ? (
                     <div className="weekly-review-thumb">
-                      <img src={entry.coverUrl} alt="" loading="lazy" aria-hidden="true" />
+                      <img src={entry.coverUrl} alt="" decoding="sync" aria-hidden="true" />
                     </div>
                   ) : null}
                   <div className="weekly-review-row-title">

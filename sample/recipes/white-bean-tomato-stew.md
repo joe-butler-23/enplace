@@ -1,5 +1,5 @@
 ---
-cover: /samples/white-bean-tomato-stew.webp
+cover: images/white-bean-tomato-stew.webp
 title: White bean and tomato stew
 tags: [weeknight, vegetarian]
 ---

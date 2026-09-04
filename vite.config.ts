@@ -28,11 +28,8 @@ function appShellServiceWorker(): Plugin {
       const mount = outputs.find((output) =>
         output.type === "chunk" && output.facadeModuleId?.endsWith("/src/mount.tsx")
       );
-      const samplePack = outputs.find((output) =>
-        output.type === "asset" && /(?:^|\/)sample-pack-[^/]+\.pack$/.test(output.fileName)
-      );
       const html = bundle["index.html"];
-      if (!mount || !samplePack || html?.type !== "asset") this.error("Could not create cold-boot preload hints.");
+      if (!mount || html?.type !== "asset") this.error("Could not create cold-boot preload hints.");
       const htmlSource = String(html.source);
       if (!htmlSource.includes("  </head>")) this.error("Could not insert cold-boot preload hints.");
 
@@ -55,7 +52,6 @@ function appShellServiceWorker(): Plugin {
         ...importedCss.map((fileName) =>
           `    <link rel="stylesheet" crossorigin href="/${fileName}">`
         ),
-        `    <link rel="preload" href="/${samplePack.fileName}" as="fetch" crossorigin>`,
       ].join("\n");
       html.source = htmlSource.replace("  </head>", `${hints}\n  </head>`);
 
@@ -67,7 +63,6 @@ function appShellServiceWorker(): Plugin {
         ...modulePreloads.map((fileName) => `</${fileName}>; rel=modulepreload; crossorigin`),
         ...stylesheets.map((href) => `<${href}>; rel=preload; as=style; crossorigin`),
         ...fontPreloads.map((href) => `<${href}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
-        `</${samplePack.fileName}>; rel=preload; as=fetch; crossorigin`,
       ];
       const linkHeader = `  Link: ${earlyHints.join(", ")}`;
       if (linkHeader.length > HEADER_LINE_LIMIT) {

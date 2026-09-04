@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-export async function openFreshKitchen(page: Page): Promise<string> {
+export async function openFreshCookbook(page: Page): Promise<string> {
   await page.goto("/");
   await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
@@ -19,7 +19,7 @@ export async function addShoppingItem(page: Page, item: string): Promise<void> {
   await expect(page.getByRole("checkbox", { name: item })).toBeVisible();
 }
 
-/** Number of Yjs updates y-indexeddb has committed for the kitchen: the durability boundary a reload must not cross early. */
+/** Number of Yjs updates y-indexeddb has committed for the cookbook: the durability boundary a reload must not cross early. */
 export async function persistedUpdateCount(page: Page, id: string): Promise<number> {
   return page.evaluate(async (name) => new Promise<number>((resolve, reject) => {
     const request = indexedDB.open(name);

@@ -1,5 +1,5 @@
 ---
-cover: /samples/sausage-apple-bake.webp
+cover: images/sausage-apple-bake.webp
 title: Sausage and apple bake
 tags: [weeknight, one-tray]
 ---
