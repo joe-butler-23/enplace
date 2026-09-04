@@ -25,7 +25,7 @@ function hasOpenConnection(connections: Iterable<Connection>, exceptId?: string)
 
 // Historical Kitchen class name is a deployed wire identifier and must not change.
 export class Kitchen extends YServer<Env> {
-  static callbackOptions = { debounceWait: 1_000, debounceMaxWait: 5_000, timeout: 5_000 };
+  static callbackOptions = { debounceWait: 1_000, debounceMaxWait: 5_000 };
 
   async onLoad(): Promise<void> {
     const count = (await this.ctx.storage.get<number>(CHUNK_COUNT_KEY)) ?? 0;
@@ -33,7 +33,7 @@ export class Kitchen extends YServer<Env> {
     const keys = Array.from({ length: count }, (_, index) => `chunk:${index}`);
     const chunks = await this.ctx.storage.get<Uint8Array>(keys);
     const parts = keys.map((key) => chunks.get(key)).filter((part): part is Uint8Array => part !== undefined);
-    if (parts.length !== count) return;
+    if (parts.length !== count) throw new Error(`Incomplete cookbook snapshot: expected ${count} chunks, found ${parts.length}.`);
     const update = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
     let offset = 0;
     for (const part of parts) { update.set(part, offset); offset += part.byteLength; }

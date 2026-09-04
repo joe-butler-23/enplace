@@ -181,3 +181,27 @@ describe("cookbook relay", () => {
     expect(readCookbookText(right.doc, "Shopping.md")).toBe(merged);
   });
 });
+
+
+describe("local readiness and remote synchronization", () => {
+  it("does not claim durable readiness when browser storage is unavailable", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    await expect(openCookbook({ id: newCookbookId(), relayUrl: null })).rejects.toThrow("storage is unavailable");
+  });
+  it("keeps seeded readiness separate from the first remote sync used by cover backfill", async () => {
+    const connection = await open({
+      id: newCookbookId(), relayUrl: relay.url, WebSocketPolyfill,
+      deferRelayUntilLocalWrite: true,
+      seed: () => {},
+    });
+    expect(connection.localCopy()).toBe("ready");
+    expect(connection.remoteSynced()).toBe(false);
+    const synced = new Promise<void>((resolve) => {
+      const stop = connection.onRemoteSync(() => { stop(); resolve(); });
+    });
+    await connection.adapter.writeBytes("Plan.md", new TextEncoder().encode("# Plan"));
+    await synced;
+    expect(connection.remoteSynced()).toBe(true);
+    expect(connection.localCopy()).toBe("ready");
+  });
+});

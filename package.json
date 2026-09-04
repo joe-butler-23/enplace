@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Enplace — local-first cooking app.",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "type": "module",
   "scripts": {

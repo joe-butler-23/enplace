@@ -1,8 +1,8 @@
 {
   description = "Enplace release and three-engine Playwright environment";
   inputs = {
-    # Node 22.23.1 post-dates Playwright 1.58.2 in nixpkgs, so each comes from its exact revision.
-    nixpkgs.url = "github:NixOS/nixpkgs/af9b23694821dcabf121681a98437e76722e0536";
+    # Node LTS and the version-matched Playwright browsers have independent release pins.
+    nixpkgs.url = "github:NixOS/nixpkgs/0968519e14f7aa7d3e9b389682bd74d2b51c8ce8";
     playwright-nixpkgs.url = "github:NixOS/nixpkgs/7f6a6fb1c76e09426d6125e7e2543efe2a7f74e3";
   };
   outputs = { nixpkgs, playwright-nixpkgs, ... }:
@@ -14,7 +14,7 @@
           browserDriver = (import playwright-nixpkgs { inherit system; }).playwright-driver;
         in {
           default = pkgs.mkShell {
-            packages = [ pkgs.nodejs_22 ];
+            packages = [ pkgs.nodejs_24 ];
             PLAYWRIGHT_BROWSERS_PATH = "${browserDriver.browsers}";
             PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
             ENPLACE_NIX_PLAYWRIGHT_VERSION = browserDriver.version;

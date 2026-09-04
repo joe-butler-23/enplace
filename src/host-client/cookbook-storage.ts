@@ -8,7 +8,7 @@ import {
 } from "../cookbook/doc";
 
 export type CookbookStatus = "local-only" | "connecting" | "connected" | "offline";
-export type FirstSyncState = "synced" | "unreachable";
+export type LocalCopyState = "pending" | "ready" | Error;
 export type OpenCookbookOptions = {
   id: string;
   relayUrl: string | null;
@@ -17,30 +17,81 @@ export type OpenCookbookOptions = {
   deferRelayUntilLocalWrite?: boolean;
   onFirstLocalWrite?: () => void;
   WebSocketPolyfill?: typeof WebSocket;
+  signal?: AbortSignal;
 };
 export type CookbookConnection = {
   id: string;
   doc: Y.Doc;
   adapter: VaultStorageAdapter;
   relayUrl: string | null;
-  hasLocalCopy: boolean;
-  firstSync: Promise<FirstSyncState>;
+  localCopy: () => LocalCopyState;
+  onLocalCopy: (listener: () => void) => () => void;
+  remoteSynced: () => boolean;
+  onRemoteSync: (listener: () => void) => () => void;
   status: () => CookbookStatus;
   onStatus: (listener: (status: CookbookStatus) => void) => () => void;
   close: () => Promise<void>;
 };
 const LOCAL_ORIGIN = Symbol("enplace-cookbook-local-write");
-const FIRST_SYNC_SAFETY_DEADLINE_MS = 5_000;
 const LOCAL_COPY_KEY = "has-local-copy";
 // Historical kitchen database prefix stays unchanged so existing IndexedDB data still opens.
 const databaseName = (id: string): string => `enplace-kitchen-${id}`;
 
+// Own database-open errors: y-indexeddb.whenSynced only resolves, even if opening fails.
+// Use the same two stores as the atomic first-copy write and y-indexeddb.
+async function prepareDatabase(name: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(name);
+    let finished = false;
+    const finish = (error?: unknown): void => {
+      if (finished) return;
+      finished = true;
+      signal?.removeEventListener("abort", abort);
+      if (error) reject(error); else resolve();
+    };
+    const abort = (): void => finish(signal?.reason);
+    signal?.addEventListener("abort", abort, { once: true });
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("updates", { autoIncrement: true });
+      request.result.createObjectStore("custom");
+    };
+    request.onerror = () => finish(request.error ?? new Error("Could not open cookbook storage."));
+    request.onblocked = () => finish(new Error("Cookbook storage is blocked by another tab. Close it and reload."));
+    request.onsuccess = () => {
+      const db = request.result;
+      const valid = db.objectStoreNames.contains("updates") && db.objectStoreNames.contains("custom");
+      db.close();
+      finish(valid ? undefined : new Error("Cookbook storage is missing its required stores."));
+    };
+  });
+}
+
 export async function openCookbook(options: OpenCookbookOptions): Promise<CookbookConnection> {
+  const persist = options.persist !== false;
+  if (persist && typeof indexedDB === "undefined") throw new Error("Cookbook storage is unavailable in this browser.");
+  if (persist) await prepareDatabase(databaseName(options.id), options.signal);
+  options.signal?.throwIfAborted();
   const doc = new Y.Doc();
-  const persistence = options.persist !== false && typeof indexedDB !== "undefined"
-    ? new IndexeddbPersistence(databaseName(options.id), doc) : null;
-  if (persistence) await persistence.whenSynced;
-  let hasLocalCopy = await persistence?.get(LOCAL_COPY_KEY) === 1;
+  const persistence = persist ? new IndexeddbPersistence(databaseName(options.id), doc) : null;
+  let hasLocalCopy: boolean;
+  const cancelInitialization = (): void => {
+    void persistence?.destroy().catch(() => {});
+    doc.destroy();
+  };
+  options.signal?.addEventListener("abort", cancelInitialization, { once: true });
+  try {
+    hasLocalCopy = persistence ? await Promise.all([
+      persistence.whenSynced, persistence.get(LOCAL_COPY_KEY),
+    ]).then(([, marker]) => marker === 1) : false;
+    options.signal?.throwIfAborted();
+  } catch (error) {
+    void persistence?.destroy().catch(() => {});
+    doc.destroy();
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", cancelInitialization);
+  }
   const markLocalCopy = (): Promise<void> => {
     if (!persistence) return Promise.resolve();
     const db = persistence.db;
@@ -62,37 +113,32 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     });
   };
   if (options.seed && !hasLocalCopy) {
-    await options.seed(doc);
-    await markLocalCopy();
-    hasLocalCopy = true;
+    try {
+      await options.seed(doc);
+      options.signal?.throwIfAborted();
+      await markLocalCopy();
+      options.signal?.throwIfAborted();
+      hasLocalCopy = true;
+    } catch (error) {
+      await persistence?.destroy();
+      doc.destroy();
+      throw error;
+    }
   }
   const listeners = new Set<(status: CookbookStatus) => void>();
   const deferredRelay = Boolean(options.relayUrl && options.deferRelayUntilLocalWrite);
   let status: CookbookStatus = options.relayUrl && !deferredRelay ? "connecting" : "local-only";
   let provider: WebsocketProvider | null = null;
   let localWriteListener: ((transaction: Y.Transaction) => void) | null = null;
-  let firstSyncDeadline: ReturnType<typeof setTimeout> | null = null;
-  let firstSyncSettled = false;
-  let firstSyncMarker: Promise<void> | null = null;
-  let settleFirstSync!: (state: FirstSyncState) => void;
-  let rejectFirstSync!: (reason: unknown) => void;
-  const firstSync = new Promise<FirstSyncState>((resolve, reject) => {
-    settleFirstSync = resolve;
-    rejectFirstSync = reject;
-  });
-  void firstSync.catch(() => {});
-  const settleFirstSyncOnce = (settle: () => void): void => {
-    if (firstSyncSettled) return;
-    firstSyncSettled = true;
-    if (firstSyncDeadline !== null) clearTimeout(firstSyncDeadline);
-    firstSyncDeadline = null;
-    settle();
-  };
-  const finishFirstSync = (state: FirstSyncState): void => {
-    settleFirstSyncOnce(() => settleFirstSync(state));
-  };
-  const failFirstSync = (reason: unknown): void => {
-    settleFirstSyncOnce(() => rejectFirstSync(reason));
+  let localCopy: LocalCopyState = hasLocalCopy ? "ready" : "pending";
+  let firstCopyWrite: Promise<void> | null = null;
+  const copyListeners = new Set<() => void>();
+  const syncListeners = new Set<() => void>();
+  let remoteSynced = false;
+  const setLocalCopy = (next: LocalCopyState): void => {
+    if (closed || localCopy === next) return;
+    localCopy = next;
+    copyListeners.forEach((listener) => listener());
   };
   let closed = false;
   const write = (path: string, bytes: Uint8Array): void => writeCookbookBytes(doc, path, bytes, LOCAL_ORIGIN);
@@ -152,28 +198,22 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       connect: false, WebSocketPolyfill: options.WebSocketPolyfill,
     });
     provider.on("sync", (synced: boolean) => {
-      if (!synced || firstSyncMarker) return;
-      if (hasLocalCopy) {
-        finishFirstSync("synced");
-        return;
+      if (!synced || closed) return;
+      if (!remoteSynced) {
+        remoteSynced = true;
+        syncListeners.forEach((listener) => listener());
       }
-      firstSyncMarker = markLocalCopy();
-      void firstSyncMarker.then(() => {
-        hasLocalCopy = true;
-        finishFirstSync("synced");
-      }, failFirstSync);
+      if (localCopy === "ready" || firstCopyWrite) return;
+      firstCopyWrite = markLocalCopy();
+      void firstCopyWrite.then(() => setLocalCopy("ready"), (error) => {
+        setLocalCopy(error instanceof Error ? error : new Error("Could not persist the cookbook."));
+      });
     });
     provider.on("status", ({ status: next }) => {
-      setStatus(next === "disconnected" ? "offline" : next);
-      if (next === "disconnected" && !firstSyncMarker) finishFirstSync("unreachable");
+      if (!closed) setStatus(next === "disconnected" ? "offline" : next);
     });
-    // This deadline only bounds the wait if the transport emits neither sync nor disconnect.
-    firstSyncDeadline = setTimeout(() => {
-      if (!firstSyncMarker) finishFirstSync("unreachable");
-    }, FIRST_SYNC_SAFETY_DEADLINE_MS);
     provider.connect();
   };
-  if (!options.relayUrl) finishFirstSync("unreachable");
   if (deferredRelay || options.onFirstLocalWrite) {
     localWriteListener = (transaction: Y.Transaction): void => {
       if (transaction.origin !== LOCAL_ORIGIN || transaction.changed.size === 0) return;
@@ -186,7 +226,11 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
   }
   if (options.relayUrl && !deferredRelay) connectRelay();
   return {
-    id: options.id, doc, adapter, relayUrl: options.relayUrl, hasLocalCopy, firstSync,
+    id: options.id, doc, adapter, relayUrl: options.relayUrl,
+    localCopy: () => localCopy,
+    onLocalCopy(listener) { copyListeners.add(listener); return () => copyListeners.delete(listener); },
+    remoteSynced: () => remoteSynced,
+    onRemoteSync(listener) { syncListeners.add(listener); return () => syncListeners.delete(listener); },
     status: () => status,
     onStatus(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async close() {
@@ -195,13 +239,13 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       if (localWriteListener) doc.off("afterTransaction", localWriteListener);
       localWriteListener = null;
       provider?.destroy();
-      if (provider) setStatus("offline");
-      try {
-        if (firstSyncMarker) await firstSyncMarker;
-      } finally {
-        finishFirstSync("unreachable");
-        await persistence?.destroy();
-      }
+      listeners.clear();
+      copyListeners.clear();
+      syncListeners.clear();
+      // IDBDatabase.close lets active transactions finish; cancellation need not await
+      // their acknowledgement. The write handler ignores completion after close.
+      try { await persistence?.destroy(); }
+      finally { doc.destroy(); }
     },
   };
 }

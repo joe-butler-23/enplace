@@ -107,8 +107,8 @@ async function releaseState() {
 
 function assertReleaseContract(state) {
   const { rootPackage, relayPackage, lock } = state;
-  assert.match(state.nodePin.trim(), /^22\.\d+\.\d+$/);
-  assert.equal(rootPackage.engines.node, "22.x");
+  assert.match(state.nodePin.trim(), /^\d+\.\d+\.\d+$/);
+  assert.equal(rootPackage.engines.node, state.nodePin.trim().split(".")[0] + ".x");
   assert.equal(state.npmrc.trim(), "engine-strict=true");
   assert.deepEqual(rootPackage.workspaces, ["relay"]);
   assert.equal(state.relayLockExists, false);
@@ -122,7 +122,7 @@ function assertReleaseContract(state) {
 
   const lockRoot = lock.packages[""];
   assert.deepEqual(lockRoot.workspaces, ["relay"]);
-  assert.equal(lockRoot.engines.node, "22.x");
+  assert.equal(lockRoot.engines.node, rootPackage.engines.node);
   assert.equal(lockRoot.devDependencies.wrangler, "4.128.0");
   assert.ok(lock.packages.relay);
   assert.equal(lock.packages["node_modules/enplace-relay"]?.link, true);

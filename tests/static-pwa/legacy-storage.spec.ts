@@ -5,7 +5,10 @@ const PRE_RENAME_COOKBOOK_ID = "prerenamecookbookproofabcd";
 const PRE_RENAME_UPDATE = "AQL36ZrpDQAoAQVmaWxlcxNwcmUtcmVuYW1lLXByb29mLm1kAXcEdGV4dAQBGHRleHQ6cHJlLXJlbmFtZS1wcm9vZi5tZLQBLS0tCnRpdGxlOiBQcmUtcmVuYW1lIHByb29mIHNvdXAKdGFnczogW2ZpeHR1cmVdCi0tLQpBIHJlY2lwZSBwZXJzaXN0ZWQgYmVmb3JlIHRoZSBjb29rYm9vayByZW5hbWUuCgojIyBJbmdyZWRpZW50cwotIG9uZSBjb21wYXRpYmlsaXR5IGNoZWNrCgojIyBNZXRob2QKMS4gT3BlbiB0aGUgZXhpc3RpbmcgZGF0YS4KAA==";
 
 async function installPreRenameFixture(page: Page): Promise<void> {
-  await page.goto("/manifest.webmanifest");
+  // A manifest is a download in Firefox. Use an inert same-origin document so
+  // fixture setup never boots the app or changes the persistence under test.
+  await page.route("**/__legacy_fixture__", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
+  await page.goto("/__legacy_fixture__");
   await page.evaluate(async ({ id, encodedUpdate }) => new Promise<void>((resolve, reject) => {
     // Historical kitchen database prefix is the compatibility surface under test.
     const request = indexedDB.open(`enplace-kitchen-${id}`, 1);
@@ -25,6 +28,7 @@ async function installPreRenameFixture(page: Page): Promise<void> {
       transaction.onabort = () => { db.close(); reject(transaction.error); };
     };
   }), { id: PRE_RENAME_COOKBOOK_ID, encodedUpdate: PRE_RENAME_UPDATE });
+  await page.unroute("**/__legacy_fixture__");
 }
 
 test("a pre-rename IndexedDB cookbook still opens", async ({ page }) => {

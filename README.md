@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `8114bb266da8`, 2026-09-04.
+> Published snapshot of a private repository, refreshed at each release. Source commit `b1c982ef99c7`, 2026-09-04.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -39,7 +39,7 @@ Devices sync through a small relay that speaks the Yjs websocket protocol. The h
 
 ## Optional CLI
 
-For terminal or agent-assisted workflows, the optional Node 22 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Build it from this repository with `npm run build:cli`; the web app does not require it.
+For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Build it from this repository with `npm run build:cli`; the web app does not require it.
 
 ## Development
 

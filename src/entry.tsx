@@ -2,7 +2,7 @@ import "./fonts.css";
 import "../styles.css";
 import "./standalone.css";
 import type * as Y from "yjs";
-import { openCookbook } from "./host-client/cookbook-storage";
+import { openCookbookAttempt } from "./cookbook/opening";
 import { setCurrentCookbookConnection } from "./cookbook/current";
 import {
   cookbookIdFromUrl,
@@ -70,7 +70,7 @@ function showCookbookGate({ title, retry = false }: CookbookGate): void {
 
 type CookbookSession = { doc: Y.Doc; seededHere: boolean };
 
-async function openSharedCookbook(): Promise<CookbookSession | null> {
+async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession | null> {
   const linkedId = cookbookIdFromUrl(window.location.href);
   const rememberedId = currentCookbookId();
   const createdHere = linkedId === null && rememberedId === null;
@@ -81,36 +81,48 @@ async function openSharedCookbook(): Promise<CookbookSession | null> {
   window.history.replaceState(null, "", withCookbookHash(window.location.href, id));
   preserveCookbookHash(window.history, window.location, id);
   window.addEventListener("hashchange", () => {
-    if (cookbookIdFromUrl(window.location.href) !== id) window.location.reload();
-  });
+    if (cookbookIdFromUrl(window.location.href) !== id) {
+      opening.abort();
+      window.location.reload();
+    }
+  }, { signal });
 
   try {
-    const connection = await openCookbook({
+    const connection = await openCookbookAttempt({
       id,
       relayUrl: configuredRelayUrl(),
       seed: createdHere ? seedSamplePack : undefined,
       deferRelayUntilLocalWrite: unpublished,
       onFirstLocalWrite: () => setCookbookUnpublished(id, false),
-    });
+    }, signal, (warning) => showCookbookGate({
+      title: warning === "storage"
+        ? "Cookbook storage is taking longer than expected. Close other Enplace tabs or reload."
+        : "This device hasn't downloaded this cookbook yet. Check your connection; it will open automatically when available.",
+      retry: true,
+    }));
+    if (!connection || signal.aborted) { void connection?.close(); return null; }
     setCurrentCookbookConnection(connection);
-    if (!createdHere && !connection.hasLocalCopy) {
-      showCookbookGate({ title: "Opening your shared cookbook…" });
-      if (await connection.firstSync !== "synced") {
-        showCookbookGate({
-          title: "This device hasn't downloaded this cookbook yet. Connect to the internet once to open it.",
-          retry: true,
-        });
-        return null;
-      }
-    }
-    void backfillCookbookCovers(connection.doc).then(async () => {
-      if (await connection.firstSync === "synced") await backfillCookbookCovers(connection.doc);
-    }).catch((error) => {
-      console.warn("Could not finish automatic cover optimization:", error);
+    const close = (): void => {
+      stopRemote();
+      setCurrentCookbookConnection(null);
+      void connection.close().catch(() => {});
+    };
+    signal.addEventListener("abort", close, { once: true });
+    const backfill = async (): Promise<void> => {
+      if (!signal.aborted) await backfillCookbookCovers(connection.doc).catch((error) => {
+        console.warn("Could not finish automatic cover optimization:", error);
+      });
+    };
+    const initialBackfill = backfill();
+    let stopRemote = (): void => {};
+    stopRemote = connection.onRemoteSync(() => {
+      stopRemote();
+      void initialBackfill.then(backfill);
     });
+    if (connection.remoteSynced()) stopRemote();
     return { doc: connection.doc, seededHere: createdHere };
   } catch (error) {
-    if (createdHere) {
+    if (createdHere && !signal.aborted) {
       clearCurrentCookbookId();
       setCookbookUnpublished(id, false);
     }
@@ -118,11 +130,17 @@ async function openSharedCookbook(): Promise<CookbookSession | null> {
   }
 }
 
+const opening = new AbortController();
+window.addEventListener("pagehide", () => opening.abort(), { once: true });
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) window.location.reload();
+});
+
 async function start(): Promise<void> {
   // Ask the browser to keep this site's storage; no prompt, no setting, just less eviction risk.
   if (navigator.storage?.persist) void navigator.storage.persist();
-  const [{ mountApp }, session] = await Promise.all([import("./mount"), openSharedCookbook()]);
-  if (!session) return;
+  const [{ mountApp }, session] = await Promise.all([import("./mount"), openSharedCookbook(opening.signal)]);
+  if (!session || opening.signal.aborted) return;
   mountApp();
   // Only a cookbook this visit seeded is missing its full covers, so no existing-cookbook
   // visit ever fetches this pack. Nothing on screen waits for it.
@@ -157,4 +175,9 @@ function showStartupFailure(reason: unknown): void {
   container.replaceChildren(main);
 }
 
-void start().catch(showStartupFailure);
+void start().catch((error) => {
+  if (!opening.signal.aborted) {
+    opening.abort();
+    showStartupFailure(error);
+  }
+});

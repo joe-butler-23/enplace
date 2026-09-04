@@ -1,17 +1,18 @@
 import { randomBytes } from "node:crypto";
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
 
 const OFFLINE_RELOAD_TITLES = new Set([
   "cached shell offline rejects an unknown cookbook without mounting an editor",
   "a persisted cookbook emptied before close reopens offline without a first-sync gate",
   "a linked device persists successful first sync for offline reopen",
+  "a first sync of an empty cookbook reopens offline",
 ]);
 test.beforeEach(async ({ browserName }, testInfo) => {
   if (browserName === "webkit" && OFFLINE_RELOAD_TITLES.has(testInfo.title)) testInfo.skip(true, "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 });
 
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
-const NOT_DOWNLOADED = "This device hasn't downloaded this cookbook yet. Connect to the internet once to open it.";
+const NOT_DOWNLOADED = /This device hasn't downloaded this cookbook yet/;
 
 function newCookbookId(): string {
   return Array.from(randomBytes(26), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
@@ -75,13 +76,11 @@ async function cookbookPersistenceCounts(page: Page, id: string): Promise<{ upda
 
 async function recordFalseEmpty(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const state = window as typeof window & { __sawFalseEmpty?: boolean; __sawOpeningGate?: boolean };
+    const state = window as typeof window & { __sawFalseEmpty?: boolean; };
     state.__sawFalseEmpty = false;
-    state.__sawOpeningGate = false;
     const inspect = (): void => {
       const text = document.body?.innerText ?? "";
       if (text.includes("No recipes yet")) state.__sawFalseEmpty = true;
-      if (text.includes("Opening your shared cookbook")) state.__sawOpeningGate = true;
     };
     new MutationObserver(inspect).observe(document, { childList: true, subtree: true, characterData: true });
     document.addEventListener("DOMContentLoaded", inspect, { once: true });
@@ -114,7 +113,6 @@ test("partner join waits for first sync without showing a false empty cookbook",
     });
     await partner.goto(`/#k=${id}`, { waitUntil: "domcontentloaded" });
     await expect(partner.getByText("11 recipes", { exact: true })).toBeVisible();
-    expect(await partner.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(true);
     expect(await partner.evaluate(() => (window as typeof window & { __sawFalseEmpty?: boolean }).__sawFalseEmpty)).toBe(false);
   } finally {
     await partnerContext.close();
@@ -127,13 +125,13 @@ test("cached shell offline rejects an unknown cookbook without mounting an edito
   await goOffline(context);
 
   await page.goto(`/settings#k=${newCookbookId()}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByText(NOT_DOWNLOADED, { exact: true })).toBeVisible();
+  await expect(page.getByText(NOT_DOWNLOADED)).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No recipes yet" })).toHaveCount(0);
   await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText(NOT_DOWNLOADED, { exact: true })).toBeVisible();
+  await expect(page.getByText(NOT_DOWNLOADED)).toBeVisible();
   await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
 });
 
@@ -154,7 +152,6 @@ test("a persisted cookbook emptied before close reopens offline without a first-
   await recordFalseEmpty(page);
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
-  expect(await page.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(false);
 });
 
 test("a linked device persists successful first sync for offline reopen", async ({ page, browser }) => {
@@ -174,7 +171,6 @@ test("a linked device persists successful first sync for offline reopen", async 
     await recordFalseEmpty(linked);
     await linked.goto(url, { waitUntil: "domcontentloaded" });
     await expect(linked.getByRole("checkbox", { name: "linked sync proof" })).toBeVisible();
-    expect(await linked.evaluate(() => (window as typeof window & { __sawOpeningGate?: boolean }).__sawOpeningGate)).toBe(false);
   } finally {
     await linkedContext.close();
   }
@@ -220,4 +216,154 @@ test("fresh sample cookbook reaches the relay only after its first edit", async 
   } finally {
     await partnerContext.close();
   }
+});
+
+
+// Buffer the client's initial handshake while delaying the transport; dropping it would
+// create a different protocol failure rather than a late successful connection.
+function delaySocket(socket: WebSocketRoute): () => void {
+  const messages: Array<string | Buffer> = [];
+  socket.onMessage((message) => messages.push(message));
+  return () => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    for (const message of messages) server.send(message);
+  };
+}
+
+test("a join recovers after its deadline without reload and mounts only once", async ({ page, browser }) => {
+  const id = await openFreshCookbook(page);
+  await addShoppingItem(page, "deadline recovery");
+  const context = await browser.newContext();
+  const partner = await context.newPage();
+  let release!: () => void;
+  let reconnect = (): void => {};
+  let available = false;
+  let connections = 0;
+  await context.routeWebSocket(/.*/, (socket) => {
+    connections += 1;
+    if (available) socket.connectToServer();
+    else {
+      release = () => { available = true; delay(); };
+      const delay = delaySocket(socket);
+      reconnect = () => socket.close();
+    }
+  });
+  try {
+    await recordFalseEmpty(partner);
+    await partner.goto(`/shopping#k=${id}`);
+    await expect(partner.getByText(NOT_DOWNLOADED)).toBeVisible();
+    const navigations: string[] = [];
+    partner.on("framenavigated", (frame) => { if (frame === partner.mainFrame()) navigations.push(frame.url()); });
+    release();
+    await expect(partner.getByRole("checkbox", { name: "deadline recovery" })).toBeVisible();
+    expect(navigations).toEqual([]);
+    expect(await partner.evaluate(() => (window as typeof window & { __sawFalseEmpty?: boolean }).__sawFalseEmpty)).toBe(false);
+    await partner.evaluate(() => {
+      const state = window as typeof window & { __originalShell?: Element | null };
+      state.__originalShell = document.querySelector('.mep-shell');
+    });
+    reconnect();
+    await expect.poll(() => connections).toBeGreaterThan(1);
+    // A new handshake and remote update must leave the mounted shell intact.
+    await addShoppingItem(page, "second sync proof");
+    await expect(partner.getByRole("checkbox", { name: "second sync proof" })).toBeVisible();
+    expect(await partner.evaluate(() => (window as typeof window & { __originalShell?: Element }).__originalShell === document.querySelector('.mep-shell'))).toBe(true);
+  } finally { await context.close(); }
+});
+
+test("a disconnected first join recovers through the provider reconnect", async ({ page, browser }) => {
+  const id = await openFreshCookbook(page);
+  await addShoppingItem(page, "reconnect recovery");
+  const context = await browser.newContext();
+  const partner = await context.newPage();
+  let available = false;
+  await context.routeWebSocket(/.*/, (socket) => {
+    if (available) socket.connectToServer(); else socket.close();
+  });
+  try {
+    await partner.goto(`/shopping#k=${id}`);
+    await expect(partner.getByText(NOT_DOWNLOADED)).toBeVisible();
+    available = true;
+    await expect(partner.getByRole("checkbox", { name: "reconnect recovery" })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test("a cancelled opening cannot mount when the delayed relay responds", async ({ page, browser }) => {
+  const id = await openFreshCookbook(page);
+  await addShoppingItem(page, "cancelled recovery");
+  const context = await browser.newContext();
+  const partner = await context.newPage();
+  let release!: () => void;
+  await context.routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });
+  try {
+    await partner.goto(`/shopping#k=${id}`);
+    await expect(partner.getByText(NOT_DOWNLOADED)).toBeVisible();
+    await partner.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+    release();
+    await expect(partner.locator('.mep-shell')).toHaveCount(0);
+    await expect(partner.getByText(NOT_DOWNLOADED)).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test("database-open failure is a storage error without an unhandled rejection", async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const open = indexedDB.open.bind(indexedDB);
+    indexedDB.open = ((name: string, version?: number) => {
+      if (!name.startsWith('enplace-kitchen-')) return open(name, version);
+      const request = { error: new DOMException('Storage denied', 'UnknownError'), onerror: null as null | (() => void) };
+      queueMicrotask(() => request.onerror?.());
+      return request as unknown as IDBOpenDBRequest;
+    }) as typeof indexedDB.open;
+  });
+  await page.goto(`/#k=${newCookbookId()}`);
+  await expect(page.getByRole('heading', { name: 'Enplace could not open your cookbook' })).toBeVisible();
+  await expect(page.getByText('Storage denied', { exact: true })).toBeVisible();
+  await expect(page.locator('.mep-shell')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("an asynchronous first-copy abort after the warning reports storage failure", async ({ page }) => {
+  const id = newCookbookId();
+  let release!: () => void;
+  await page.routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });
+  await page.addInitScript(() => {
+    const transaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args: Parameters<typeof transaction>) {
+      const tx = transaction.apply(this, args);
+      if (this.name.startsWith('enplace-kitchen-') && tx.objectStoreNames.contains('updates') && tx.objectStoreNames.contains('custom')) {
+        const store = tx.objectStore('custom');
+        const put = store.put.bind(store);
+        store.put = (...putArgs: Parameters<typeof put>) => {
+          const request = put(...putArgs);
+          request.addEventListener('success', () => tx.abort());
+          return request;
+        };
+        const objectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => name === 'custom' ? store : objectStore(name);
+      }
+      return tx;
+    };
+  });
+  await page.goto(`/#k=${id}`);
+  await expect(page.getByText(NOT_DOWNLOADED)).toBeVisible();
+  release();
+  await expect(page.getByRole('heading', { name: 'Enplace could not open your cookbook' })).toBeVisible();
+  await expect(page.locator('.mep-shell')).toHaveCount(0);
+  expect((await cookbookPersistenceCounts(page, id)).markers).toBe(0);
+});
+
+
+test("a first sync of an empty cookbook reopens offline", async ({ page, context }) => {
+  const id = newCookbookId();
+  await page.goto(`/#k=${id}`);
+  await expect(page.getByRole('heading', { name: 'No recipes yet' })).toBeVisible();
+  expect((await cookbookPersistenceCounts(page, id)).markers).toBe(1);
+  await cacheControlledShell(page);
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'No recipes yet' })).toBeVisible();
+  await expect(page.getByText(NOT_DOWNLOADED)).toHaveCount(0);
 });

@@ -12,7 +12,7 @@ const [nodeVersion, pkg, lock, core, browsers] = await Promise.all([
   json("node_modules/playwright-core/browsers.json"),
 ]);
 const npmVersion = pkg.devDependencies?.["@playwright/test"];
-assert.match(nodeVersion, /^22\.\d+\.\d+$/, ".nvmrc must pin an exact Node 22 release");
+assert.match(nodeVersion, /^\d+\.\d+\.\d+$/, ".nvmrc must pin an exact Node release");
 assert.equal(process.versions.node, nodeVersion, `expected Node ${nodeVersion}, found ${process.versions.node}`);
 assert.equal(lock.packages?.[""]?.devDependencies?.["@playwright/test"], npmVersion, "npm lock root mismatch");
 assert.equal(lock.packages?.["node_modules/playwright-core"]?.version, npmVersion, "npm Playwright packages mismatch");

@@ -27,7 +27,7 @@ Enplace code and the app treats it as untrusted transport.
 
 ## Static Deployment Boundary
 
-The release uses the exact Node 22 pinned in `.nvmrc`. One root `npm ci`
+The release uses the exact Node 24 pinned in `.nvmrc`. One root `npm ci`
 installs the app, CLI, and production relay workspace from one lockfile.
 `npm run build:release` checks the static app output, CLI compile, and relay
 Wrangler dry-run; Cloudflare Pages publishes `dist-static`. The deployment

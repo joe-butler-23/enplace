@@ -135,8 +135,8 @@ async function killAndClose(running) {
 
 async function main() {
   assert.equal(process.platform, "linux", `CLI package verification requires Linux process-group signals; found ${process.platform}`);
-  assert.equal(process.versions.node.split(".")[0], "22", `CLI package verification requires Node 22; found ${process.version}`);
-  assert.equal(globalThis.WebSocket?.name, "WebSocket", "Node 22 native WebSocket is unavailable");
+  assert.equal(process.versions.node.split(".")[0] + ".x", JSON.parse(await readFile("package.json", "utf8")).engines.node, `CLI package verification requires the supported Node major; found ${process.version}`);
+  assert.equal(globalThis.WebSocket?.name, "WebSocket", "Node native WebSocket is unavailable");
 
   const scratch = await mkdtemp(path.join(os.tmpdir(), "enplace-cli-package-"));
   const packDirectory = path.join(scratch, "pack");
@@ -249,7 +249,7 @@ async function main() {
     const nativeClient = async (cookbook) => {
       const doc = new Y.Doc();
       const provider = new WebsocketProvider(relay.url, cookbook, doc, { disableBc: true });
-      assert.equal(provider._WS, globalThis.WebSocket, "y-websocket did not select Node 22 native WebSocket");
+      assert.equal(provider._WS, globalThis.WebSocket, "y-websocket did not select Node native WebSocket");
       providers.push(provider);
       documents.push(doc);
       await waitForSync(provider);
@@ -321,9 +321,9 @@ async function main() {
     assert.match(stopped.stdout, /preserved local copy as .*remote\.local-/);
     assert.match(stopped.stdout, /updated cookbook from local-after-reconnect\.md\n/);
 
-    console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node 22 production-only install.`);
+    console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node production-only install.`);
     console.log("Ordinary check/add/list/shop commands loaded no mirror dependencies.");
-    console.log("One-shot and restart-safe continuous mirror converged over Node 22 native WebSocket.");
+    console.log("One-shot and restart-safe continuous mirror converged over Node native WebSocket.");
   } finally {
     if (continuous) await killAndClose(continuous);
     for (const provider of providers) provider.destroy();

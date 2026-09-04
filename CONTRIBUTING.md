@@ -15,7 +15,7 @@ agent-developed, so the engineering contract lives in agent-readable form.
 Contributor tooling and tracked verification scripts are written for Bash. On
 Windows, use Git Bash or WSL for contributing.
 
-On NixOS, the flake supplies exact Node 22.23.1 and version-matched
+On NixOS, the flake supplies exact Node 24.19.0 and version-matched
 Playwright 1.58.2 browsers. Do not run `playwright install` in this shell.
 
 ```bash
@@ -23,6 +23,10 @@ nix develop --command npm ci
 nix develop --command npm run check:playwright-runtime  # no browser launch
 nix develop --command npm run setup:hooks
 ```
+
+The exact Node pin makes release certification reproducible; it is not a dependency on
+Node 22. The supported runtime is Node 24 LTS. Keep `.nvmrc` and the flake together
+when updating the certified release; Playwright has its own matching browser pin.
 
 Outside NixOS, use the exact Node release in `.nvmrc` and Playwright's browser
 installer. Always install the root workspace only; never install in `relay/`.
