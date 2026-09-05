@@ -46,7 +46,7 @@ npm test -- <focused-test>
 
 Run `npm run prepush` before pushing a normal code tranche.
 
-Browser smoke tests use synthetic data and an in-process relay. Verify primary-surface changes against a real browser boot of the static PWA, including a fresh cookbook, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
+Browser smoke tests use synthetic data and an in-process relay. Never run two browser suites at once in one checkout: the suite rebuilds and serves the shared `dist-static`, so concurrent runs fail each other broadly (Beads bug filed 2026-09-05). Verify primary-surface changes against a real browser boot of the static PWA, including a fresh cookbook, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
 
 For project-skill changes, run:
 

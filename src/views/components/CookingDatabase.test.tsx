@@ -22,9 +22,13 @@ describe("recipe database markup", () => {
     expect(covered).not.toContain("srcset=");
     expect(covered).not.toContain("cooking-db__cover--empty"); expect(none).toContain("cooking-db__cover--empty");
   });
-  it("guides an empty cookbook", () => {
-    const markup = render(); expect(markup).toContain("No recipes yet"); expect(markup).toContain("https://recipemd.org/specification.html");
-    expect(markup).toContain("Import recipe");
+  it("guides an empty cookbook and always exposes Add recipe", () => {
+    const empty = render();
+    const seeded = render({ recipes: [recipe()] });
+    expect(empty).toContain("No recipes yet");
+    expect(empty).toContain("Add recipe");
+    expect(seeded).toContain("Add recipe");
+    expect(seeded).not.toContain("No recipes yet");
   });
   it("distinguishes filtered zero results", () => {
     const markup = render({ recipes: [recipe()], settings: { ...SETTINGS, databaseMarkedFilter: "marked" } });

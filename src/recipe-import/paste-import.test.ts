@@ -8,9 +8,23 @@ vi.mock("../cookbook/covers", async (importOriginal) => {
   return { ...actual, createCoverFiles };
 });
 vi.mock("../host-client/browser-storage", () => ({ writeNewBytesBatch }));
-import { importPastedRecipe } from "./paste-import";
+import { importPastedRecipe, RECIPE_REJECTION_MESSAGE } from "./paste-import";
 
-describe("paste recipe import covers", () => {
+const markdown = `# Tomato Soup
+
+A simple soup.
+
+---
+
+- *4* tomatoes
+- *1 litre* stock
+
+---
+
+1. Simmer.
+`;
+
+describe("pasted RecipeMD import", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     writeNewBytesBatch.mockResolvedValue(3);
@@ -19,12 +33,12 @@ describe("paste recipe import covers", () => {
     });
   });
 
-  it("stores only the capped WebP and deterministic card thumbnail", async () => {
+  it("validates and stores complete Markdown with optimized cover files", async () => {
     const raw = new Uint8Array([1, 2, 3]);
     const cover = new File([raw], "Huge Camera.JPG", { type: "image/jpeg" });
-    await expect(importPastedRecipe({
-      title: "Tomato Soup", source: "", ingredients: "tomatoes", method: "Simmer", cover,
-    })).resolves.toEqual({ markdownPath: "tomato-soup.md" });
+    await expect(importPastedRecipe({ markdown, cover })).resolves.toEqual({
+      markdownPath: "tomato-soup.md", title: "Tomato Soup", ingredientCount: 2,
+    });
 
     expect(createCoverFiles).toHaveBeenCalledWith(cover);
     const [entries, existing] = writeNewBytesBatch.mock.calls[0];
@@ -36,5 +50,11 @@ describe("paste recipe import covers", () => {
     expect(entries[1][1]).toEqual(new Uint8Array([4, 5]));
     expect(entries[2][1]).toEqual(new Uint8Array([6]));
     expect(entries.some(([, bytes]: readonly [string, Uint8Array]) => bytes === raw)).toBe(false);
+  });
+
+  it("rejects non-recipe Markdown with a plain-language message", async () => {
+    await expect(importPastedRecipe({ markdown: "# Travel notes\n\nRemember the market." }))
+      .rejects.toThrow(RECIPE_REJECTION_MESSAGE);
+    expect(writeNewBytesBatch).not.toHaveBeenCalled();
   });
 });

@@ -3,7 +3,7 @@ import type { Plan, Recipe } from "@/core";
 import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import type { StandaloneSettings } from "@/standalone/settings";
 import { databaseQuery, initialDatabaseState, projectDatabaseView } from "./database-query";
-import { importPastedRecipe, PasteRecipeInput } from "../../recipe-import/paste-import";
+import { importPastedRecipe } from "../../recipe-import/paste-import";
 import { RecipeCard } from "./RecipeCard";
 
 export type MarkedFilter = "all" | "marked" | "unmarked";
@@ -94,20 +94,22 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   onPointerDownRecipe,
 }: CookingDatabaseProps): React.JSX.Element {
   const [state, setState] = React.useState<DatabaseState>(() => initialDatabaseState(settings));
-  const [showImport, setShowImport] = React.useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("share-target"));
+  const [showImport, setShowImport] = React.useState(false);
   const [importPending, setImportPending] = React.useState(false);
   const [coverFile, setCoverFile] = React.useState<File | null>(null);
   const [importError, setImportError] = React.useState("");
-  const [paste, setPaste] = React.useState<PasteRecipeInput>(() => {
-    const shared = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
-    return { title: shared?.get("title") ?? "", source: shared?.get("url") ?? "", ingredients: shared?.get("text") ?? "", method: "" };
-  });
+  const [importSuccess, setImportSuccess] = React.useState("");
+  const [markdown, setMarkdown] = React.useState("");
   const submitPasteImport = async (event: React.FormEvent) => {
     event.preventDefault();
     setImportPending(true);
     setImportError("");
+    setImportSuccess("");
     try {
-      await importPastedRecipe({ ...paste, cover: coverFile });
+      const imported = await importPastedRecipe({ markdown, cover: coverFile });
+      setImportSuccess(`Added ${imported.title} with ${imported.ingredientCount} ingredient${imported.ingredientCount === 1 ? "" : "s"}.`);
+      setMarkdown("");
+      setCoverFile(null);
       setShowImport(false);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : String(error));
@@ -115,8 +117,12 @@ export const CookingDatabase = React.memo(function CookingDatabase({
       setImportPending(false);
     }
   };
-  const updatePaste = (field: keyof PasteRecipeInput) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setPaste(current => ({ ...current, [field]: event.target.value }));
+  const readMarkdownFile = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    setImportError("");
+    try { setMarkdown(await file.text()); }
+    catch { setImportError("Could not read that Markdown file."); }
+  };
 
   React.useEffect(() => setState((current) => (
     current.sort === settings.databaseSort && current.marked === settings.databaseMarkedFilter
@@ -263,28 +269,30 @@ export const CookingDatabase = React.memo(function CookingDatabase({
       </div>
     );
   }
-  if (showImport || (recipes.length === 0 && !hasActiveQuery(state))) {
+  if (recipes.length === 0 && !hasActiveQuery(state)) {
     databaseContent = (
       <div className="cooking-db__empty cooking-db__onboarding">
         <h2>No recipes yet</h2>
-        <p>
-          Recipes use <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>, a published Markdown format you can give to any recipe assistant.
-          Your library stays readable in any text editor or Obsidian vault.
-        </p>
-        <p>Paste the title, ingredient lines, and method steps to import a recipe.</p>
-        {!showImport ? (
-          <button type="button" className="cooking-db__filter-action" onClick={() => setShowImport(true)}>Import recipe</button>
-        ) : (
-          <form className="cooking-db__paste-import" onSubmit={submitPasteImport}>
-            <label>Title<input aria-label="Recipe title" value={paste.title} onChange={updatePaste("title")} required /></label>
-            <label>Source URL (optional)<input aria-label="Recipe source URL" type="url" value={paste.source} onChange={updatePaste("source")} /></label>
-            <label>Ingredients<textarea aria-label="Recipe ingredients" value={paste.ingredients} onChange={updatePaste("ingredients")} placeholder="One ingredient per line" required /></label>
-            <label>Method<textarea aria-label="Recipe method" value={paste.method} onChange={updatePaste("method")} placeholder="Cook until tender." required /></label>
-            <label>Cover image (optional)<input aria-label="Recipe cover image" type="file" accept="image/*" onChange={(event) => setCoverFile(event.currentTarget.files?.[0] ?? null)} /></label>
-            {importError && <p role="alert">{importError}</p>}
-            <button type="submit" className="cooking-db__filter-action" disabled={importPending}>{importPending ? "Importing…" : "Import recipe"}</button>
-          </form>
-        )}
+        <p>Add complete recipe Markdown to start your cookbook.</p>
+        <button type="button" className="cooking-db__filter-action" onClick={() => setShowImport(true)}>Add recipe</button>
+      </div>
+    );
+  }
+  if (showImport) {
+    databaseContent = (
+      <div className="cooking-db__empty cooking-db__onboarding">
+        <h2>Add recipe</h2>
+        <form className="cooking-db__paste-import" onSubmit={submitPasteImport}>
+          <label>Recipe Markdown<textarea aria-label="Recipe Markdown" value={markdown} onChange={(event) => setMarkdown(event.currentTarget.value)} required /></label>
+          <label>Or choose a Markdown file<input aria-label="Recipe Markdown file" type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void readMarkdownFile(event.currentTarget.files?.[0])} /></label>
+          <label>Cover image (optional)<input aria-label="Recipe cover image" type="file" accept="image/*" onChange={(event) => setCoverFile(event.currentTarget.files?.[0] ?? null)} /></label>
+          {importError && <p role="alert">{importError}</p>}
+          <div className="mep-settings__actions">
+            <button type="submit" className="mep-button" disabled={importPending}>{importPending ? "Adding…" : "Add recipe"}</button>
+            <button type="button" className="mep-button mep-button--ghost" disabled={importPending} onClick={() => setShowImport(false)}>Cancel</button>
+          </div>
+        </form>
+        <p>Ask any recipe assistant for <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>.</p>
       </div>
     );
   }
@@ -297,6 +305,11 @@ export const CookingDatabase = React.memo(function CookingDatabase({
         <div className="cooking-db__count">
           {sourceError ? "Unavailable" : formatVisibleCount(recipes, totalCount)}
         </div>
+        <button type="button" className="cooking-db__select cooking-db__add" onClick={() => {
+          setImportError("");
+          setImportSuccess("");
+          setShowImport(true);
+        }}>Add recipe</button>
 
         <div className="cooking-db__searchbox">
           {state.tags.length > 0 && (
@@ -482,6 +495,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
         </div>
       </div>
 
+      {importSuccess ? <p className="cooking-db__import-success" role="status">{importSuccess}</p> : null}
       <div className="cooking-db__grid-container">
         {databaseContent}
       </div>

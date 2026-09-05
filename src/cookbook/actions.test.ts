@@ -76,7 +76,7 @@ describe("browser shopping recipe selection", () => {
     expect(updateText).toHaveBeenCalledTimes(1);
     expect(updateText.mock.calls[0]?.[0]).toBe("Shopping.md");
     await expect(readText("Shopping.md")).resolves.toBe(
-      "# Handwritten\r\nKeep this exactly.\r\n\r\n## Manual\r\n- [ ] note\r\n\n## Same\n- [ ] first only\n\n## Same\n- [x] second only\n",
+      "# Handwritten\r\nKeep this exactly.\r\n\r\n## Manual\r\n- [ ] note\r\n\n## Same\n- [ ] first only\n\n## Same\n- [ ] second only\n",
     );
   });
 

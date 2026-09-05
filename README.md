@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `4e1f8fdd1d93`, 2026-09-05.
+> Published snapshot of a private repository, refreshed at each release. Source commit `f518cf13566a`, 2026-09-05.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -39,7 +39,7 @@ Devices sync through a small relay that speaks the Yjs websocket protocol. The h
 
 ## Optional CLI
 
-For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Build it from this repository with `npm run build:cli`; the web app does not require it.
+For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Start a mirror with `mep mirror --folder <dir> --cookbook <link-or-id> --relay <wss-url>` (or `ENPLACE_RELAY_URL`); later runs need only `mep mirror --folder <dir>` because `.mep-mirror/association.json` retains the cookbook and relay association and exact merge baselines. Supplying a different cookbook or relay is an error. Build the CLI from this repository with `npm run build:cli`; the web app does not require it.
 
 ## Development
 

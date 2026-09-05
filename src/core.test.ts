@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendShoppingItem,
   buildShoppingMarkdown,
+  canonicalShoppingMarkdown,
   parsePlan,
   parseRecipe,
   parseShopping,
@@ -12,6 +13,7 @@ import {
   resolveRelativePath,
   scanRecipes,
   serializePlan,
+  setShoppingAisle,
   shoppingPlainText,
   toggleShoppingItem,
   withRecipePlanning,
@@ -106,8 +108,30 @@ describe("Shopping.md", () => {
     const current = "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## Same\r\n- [x] SALT\r\n- [ ] stale\r\n\r\n## AI grouping\r\n- [x] batteries\r\n";
     const duplicatePath = { ...sameB, title: "Ignored duplicate", ingredients: ["wrong"] };
     expect(buildShoppingMarkdown(current, [sameB, sameA, duplicatePath], [sameA, sameB])).toBe(
-      "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## AI grouping\r\n- [x] batteries\r\n\n## Same\n- [x] salt\n- [ ] pears\n\n## Same\n- [ ] apples\n",
+      "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## AI grouping\r\n- [x] batteries\r\n\n## Same\n- [x] salt\n- [ ] pears\n\n## Same\n- [ ] Salt\n- [ ] apples\n",
     );
+  });
+
+  it("keeps equal ingredient text in each recipe block with independent state", () => {
+    const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- 1 onion\n- salt\n- SALT\n")!;
+    const pie = parseRecipe("pie.md", "# Pie\n\n## Ingredients\n- 1 onion\n")!;
+    const current = "## Pie\n- [x] 1 onion <!-- aisle: Produce -->\n\n## Soup\n- [ ] 1 onion\n";
+    expect(buildShoppingMarkdown(current, [pie, soup], [pie, soup])).toBe(
+      "## Pie\n- [x] 1 onion <!-- aisle: Produce -->\n\n## Soup\n- [ ] 1 onion\n- [ ] salt\n",
+    );
+  });
+
+  it("canonicalises every checklist marker on each local shopping write", () => {
+    const malformed = "## Soup\n- [xx] onion\n- [  ] stock\n";
+    expect(canonicalShoppingMarkdown(malformed)).toBe("## Soup\n- [x] onion\n- [ ] stock\n");
+    expect(canonicalShoppingMarkdown(canonicalShoppingMarkdown(malformed))).toBe(canonicalShoppingMarkdown(malformed));
+    expect(toggleShoppingItem(malformed, 1, "onion", false)).toBe("## Soup\n- [ ] onion\n- [ ] stock\n");
+    expect(appendShoppingItem(malformed, "salt")).not.toMatch(/\[(?:xx|  )\]/);
+    expect(removeShoppingItem(malformed, 1, "onion")).toBe("## Soup\n- [ ] stock\n");
+    expect(setShoppingAisle(malformed, 1, "onion", "Produce")).toBe(
+      "## Soup\n- [x] onion <!-- aisle: Produce -->\n- [ ] stock\n",
+    );
+    expect(buildShoppingMarkdown(malformed, [], [])).toBe("## Soup\n- [x] onion\n- [ ] stock\n");
   });
 
   it("adds under Other and removes exactly the selected Markdown line", () => {
@@ -157,13 +181,13 @@ describe("paste import", () => {
       .toContain("# Soup\n\nSource: https://example.com\n\n---\n\n- one onion\n\n---\n\n1. Stir\n");
   });
 
-  it("keeps an item whose box was doubled by a concurrent tick and repairs it on the next toggle", () => {
+  it("keeps malformed concurrent boxes readable until a write repairs every marker", () => {
     const merged = "## Soup\n- [xx] onion\n- [  ] stock\n";
     expect(parseShopping(merged)).toEqual([
       { line: 1, heading: "Soup", text: "onion", checked: true },
       { line: 2, heading: "Soup", text: "stock", checked: false },
     ]);
-    expect(toggleShoppingItem(merged, 1, "onion", false)).toBe("## Soup\n- [ ] onion\n- [  ] stock\n");
-    expect(toggleShoppingItem(merged, 2, "stock", true)).toBe("## Soup\n- [xx] onion\n- [x] stock\n");
+    expect(toggleShoppingItem(merged, 1, "onion", false)).toBe("## Soup\n- [ ] onion\n- [ ] stock\n");
+    expect(toggleShoppingItem(merged, 2, "stock", true)).toBe("## Soup\n- [x] onion\n- [x] stock\n");
   });
 });

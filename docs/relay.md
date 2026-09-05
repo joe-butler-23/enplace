@@ -5,7 +5,7 @@ A cookbook syncs between devices through a y-websocket relay: a small server tha
 ## Configuration
 
 - Build-time default: `.env.static` carries the production relay URL, so `npm run build:static` always bakes it in; a `VITE_ENPLACE_RELAY_URL` in the environment overrides it, which the browser suite uses for its local relay.
-- CLI: `mep mirror --relay wss://…` or `ENPLACE_RELAY_URL`.
+- CLI first run: `mep mirror --folder <dir> --cookbook <link-or-id> --relay wss://…`, or use `ENPLACE_RELAY_URL`. The mirror stores that relay association under `.mep-mirror/`; later runs need only `--folder`, and a supplied mismatch is rejected.
 
 When a mirror folder is a symlink, the CLI resolves it once, logs the physical directory, and uses that physical directory as the configured root for descendant path and symlink checks. Mirror filesystem safety assumes the caller owns that physical root and its ancestors: no hostile process may exchange an ancestor symlink or mount while an operation is awaiting Node filesystem calls. Pre-existing symlinks are still refused, and ordinary concurrent file writers are handled by atomic quarantine, no-clobber publication, and recovery. This is a local concurrency contract, not a security boundary against a hostile same-user process or mount administrator.
 

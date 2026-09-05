@@ -43,7 +43,10 @@ async function binaryConflict(relative = "cover.webp", local = "local bytes", re
 async function recoveryFiles(root: string): Promise<string[]> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   return entries
-    .filter((entry) => entry.isFile() && entry.parentPath.split(path.sep).includes(".mep-mirror"))
+    // Recovery inodes only: baseline and association state under .mep-mirror is written
+    // asynchronously after a commit and is not a recovery artefact.
+    .filter((entry) => entry.isFile() && entry.parentPath.split(path.sep).includes(".mep-mirror")
+      && !entry.parentPath.split(path.sep).includes("baselines") && entry.name !== "association.json")
     .map((entry) => path.join(entry.parentPath, entry.name));
 }
 async function recoveryWith(root: string, contents: string | Uint8Array): Promise<string> {
@@ -72,6 +75,9 @@ async function startedMirrorFile(relative: string, contents: string | Uint8Array
 }
 async function mirrorOnce(root: string, cookbook: string, options: StartOptions = {}): Promise<void> {
   await execute(["mirror", "--folder", root, "--cookbook", cookbook, "--relay", relay, "--once"], options);
+}
+async function mirrorAssociatedOnce(root: string, options: StartOptions = {}): Promise<void> {
+  await execute(["mirror", "--folder", root, "--once"], options);
 }
 beforeAll(async () => { await harness.start(); relay = harness.relay; });
 afterEach(async () => {
@@ -145,8 +151,19 @@ describe("mep mirror", () => {
     expect(after.ino).toBe(before.ino);
     expect(after.mtimeNs).toBe(before.mtimeNs);
     expect(new Uint8Array(await readFile(target))).toEqual(bytes);
-    expect(await readdir(root)).toEqual(["cover.webp"]);
-    await expect(stat(path.join(root, ".mep-mirror"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(root)).toEqual([".mep-mirror", "cover.webp"]);
+    expect((await readdir(path.join(root, ".mep-mirror"))).sort()).toEqual(["association.json", "baselines"]);
+    const baselineFiles = await readdir(path.join(root, ".mep-mirror", "baselines"));
+    expect(baselineFiles).toHaveLength(1);
+    expect((await stat(path.join(root, ".mep-mirror"))).mode & 0o777).toBe(0o700);
+    const associationPath = path.join(root, ".mep-mirror", "association.json");
+    const baselinePath = path.join(root, ".mep-mirror", "baselines", baselineFiles[0]);
+    expect((await stat(associationPath)).mode & 0o777).toBe(0o600);
+    expect((await stat(baselinePath)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await readFile(associationPath, "utf8"))).toEqual({ version: 1, cookbook, relay: new URL(relay).toString() });
+    expect(JSON.parse(await readFile(baselinePath, "utf8"))).toEqual({
+      version: 1, path: "cover.webp", base64: Buffer.from(bytes).toString("base64"),
+    });
     expect(logs).toEqual([]);
   });
   it("round-trips user files and directories containing .local-", async () => {
@@ -282,6 +299,65 @@ describe("mep mirror", () => {
     await waitFor(() => expect(readCookbookText(client.doc, "notes.md")).toBe(merged));
     expect(logs.some((line) => line.startsWith("merged local changes with cookbook for notes.md"))).toBe(true);
   });
+  it("uses its persisted baseline for an edit made while stopped and reuses the association", async () => {
+    const root = await folder();
+    const original = "Method\nCook for 10 minutes\n";
+    const edited = "Method\nCook for 20 minutes\n";
+    const { cookbook, client } = await remoteFile("notes.md", original);
+    await mirrorOnce(root, cookbook);
+    await writeFile(path.join(root, "notes.md"), edited);
+
+    await mirrorAssociatedOnce(root);
+
+    await expect(readFile(path.join(root, "notes.md"), "utf8")).resolves.toBe(edited);
+    await waitFor(() => expect(readCookbookText(client.doc, "notes.md")).toBe(edited));
+    expect((edited.match(/^Cook for /gm) ?? [])).toHaveLength(1);
+  });
+
+  it("propagates a local deletion made while stopped", async () => {
+    const root = await folder();
+    const { cookbook, client } = await remoteFile("notes.md", "agreed\n");
+    await mirrorOnce(root, cookbook);
+    await unlink(path.join(root, "notes.md"));
+
+    await mirrorAssociatedOnce(root);
+
+    await expect(readFile(path.join(root, "notes.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    await waitFor(() => expect(readCookbookText(client.doc, "notes.md")).toBeNull());
+    await mirrorAssociatedOnce(root);
+    await expect(readFile(path.join(root, "notes.md"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("restores a stopped local deletion when the cookbook changed", async () => {
+    const root = await folder();
+    const { cookbook, client } = await remoteFile("notes.md", "agreed\n");
+    await mirrorOnce(root, cookbook);
+    await unlink(path.join(root, "notes.md"));
+    writeCookbookText(client.doc, "notes.md", "remote update\n");
+    const verifier = await syncedClient(cookbook);
+    expect(readCookbookText(verifier.doc, "notes.md")).toBe("remote update\n");
+    verifier.provider.destroy();
+    verifier.doc.destroy();
+    const logs: string[] = [];
+
+    await mirrorAssociatedOnce(root, { log: (line) => logs.push(line) });
+
+    await expect(readFile(path.join(root, "notes.md"), "utf8")).resolves.toBe("remote update\n");
+    expect(logs).toContain("restored notes.md; local deletion conflicted with cookbook change\n");
+  });
+
+  it("rejects cookbook and relay mismatches for an associated folder", async () => {
+    const root = await folder();
+    const cookbook = newCookbookId();
+    await mirrorOnce(root, cookbook);
+    await expect(execute([
+      "mirror", "--folder", root, "--cookbook", newCookbookId(), "--once",
+    ])).rejects.toThrow("mirror folder is already associated with a different cookbook");
+    await expect(execute([
+      "mirror", "--folder", root, "--relay", "ws://127.0.0.1:1", "--once",
+    ])).rejects.toThrow("mirror folder is already associated with a different relay");
+  });
+
   it("writes both sides of an overlapping text edit with conflict markers", () => {
     const [baseline, local, remote] = ["first: base\nsecond: base\n", "first: disk\nsecond: base\n", "first: cookbook\nsecond: base\n"].map((text) => encoder.encode(text));
     const plan = diskPlan("notes.md", "conflict", true, baseline, local, remote);

@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
-import { finalizeRecipes, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe } from "../core";
+import {
+  canonicalShoppingMarkdown, finalizeRecipes, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe,
+} from "../core";
 import {
   hasCookbookFile, isTextPath, listCookbookPaths, observeCookbook, readCookbookBytes, readCookbookText,
 } from "./doc";
@@ -29,6 +31,14 @@ const shoppingList = (text: string): ShoppingList => ({ items: parseShopping(tex
 })) });
 const sameReferences = <T,>(left: readonly T[], right: readonly T[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
+
+function healShoppingMarkdown(text: string | undefined): void {
+  if (!bound || text === undefined || canonicalShoppingMarkdown(text) === text) return;
+  const connection = bound;
+  void connection.adapter.updateText("Shopping.md", canonicalShoppingMarkdown).catch((error: unknown) => {
+    console.error("Could not repair Shopping.md checklist markers.", error);
+  });
+}
 
 function imageUrl(path: string): string | null {
   if (!bound) return null;
@@ -66,6 +76,7 @@ function bootstrap(): void {
     revision: snapshot.revision + 1,
   };
   emit();
+  healShoppingMarkdown(texts.get("Shopping.md"));
 }
 
 function projectFiles(changed: ReadonlySet<string>): CookbookFile[] {
@@ -144,6 +155,7 @@ function rebuild(changed: ReadonlySet<string>): void {
     revision: snapshot.revision + 1,
   };
   emit();
+  if (textProjection.paths.has("Shopping.md")) healShoppingMarkdown(textProjection.texts.get("Shopping.md"));
 }
 
 function bind(): void {

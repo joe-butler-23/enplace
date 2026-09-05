@@ -16,7 +16,7 @@ Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs d
 - `src/entry.tsx` boots the cookbook id from the link or the registry, otherwise a new seeded cookbook.
 - `src/App.tsx` is routing, planner wiring, settings, the command palette, and view composition; views under `src/views/` render from the store.
 - `src/pwa/` owns the offline app shell.
-- `cli/index.ts` is the optional Node CLI: `check`, `add`, `list`, `shop` on a folder, and `mirror`, which keeps a folder and a cookbook in step through the relay.
+- `cli/index.ts` is the optional Node CLI: `check`, `add`, `list`, `shop` on a folder, and `mirror`, which keeps a folder and a cookbook in step through the relay. Mirror association and exact last-agreed per-path merge baselines persist under the walk-skipped `.mep-mirror/` namespace so stopped edits and deletions remain distinguishable after restart.
 - `tests/static-pwa/` is the primary browser contract: fresh cookbook, persistence across reload, two contexts converging through a relay, import and export, offline reload, and installability.
 
 ## Layering rules

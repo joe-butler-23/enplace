@@ -7,6 +7,9 @@ import * as Y from "yjs";
  * by folder-relative path. A text file (Markdown and friends) is marked `"text"` in the map and
  * its content lives in the top-level shared text named `text:<path>`; every other file stores
  * its bytes in the map directly. Directories are implied by the paths of the files inside them.
+ * Deleting a text file removes only its map membership: the orphaned shared text remains so a
+ * concurrent edit can restore the file without losing content. Those orphan bytes are the cost
+ * of preserving delete-versus-edit correctness.
  *
  * Text content is a top-level type rather than a value nested under the map key on purpose:
  * two devices creating the same file at the same moment then edit one shared text instead of
@@ -255,7 +258,9 @@ export function writeCookbookText(doc: Y.Doc, path: string, next: string, origin
   const key = writableRawCookbookPath(doc, path);
   const files = cookbookFiles(doc);
   doc.transact(() => {
-    if (files.get(key) !== TEXT_MARK) files.set(key, TEXT_MARK);
+    // Always publish membership. A fresh Y.Map set must race a concurrent delete even when this
+    // peer still sees the old marker locally.
+    files.set(key, TEXT_MARK);
     applyTextDiff(cookbookText(doc, key), next);
   }, origin);
 }
@@ -270,12 +275,7 @@ export function writeCookbookBytes(doc: Y.Doc, path: string, bytes: Uint8Array, 
 }
 
 function deleteEntry(doc: Y.Doc, key: string): void {
-  const files = cookbookFiles(doc);
-  if (files.get(key) === TEXT_MARK) {
-    const text = cookbookText(doc, key);
-    if (text.length) text.delete(0, text.length);
-  }
-  files.delete(key);
+  cookbookFiles(doc).delete(key);
 }
 
 /** Removes a file, or every file under a directory when `recursive` is set. Returns the removed paths. */

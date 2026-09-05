@@ -172,6 +172,19 @@ describe("cookbook app store", () => {
     expect(revoke.mock.calls).toEqual([["blob:a1"], ["blob:a2"], ["blob:b1"]]);
   });
 
+  it("repairs malformed observed shopping boxes through the adapter without a write loop", async () => {
+    connection = await openCookbook({ id: "repairabcdefghijklmnopqrs", relayUrl: null, persist: false });
+    writeCookbookText(connection.doc, "Shopping.md", "## Soup\n- [xx] onion\n- [  ] stock\n");
+    const update = vi.spyOn(connection.adapter, "updateText");
+    setCurrentCookbookConnection(connection);
+    expect(readCookbookText(connection.doc, "Shopping.md")).toBe("## Soup\n- [x] onion\n- [ ] stock\n");
+    expect(getCookbookSnapshot().texts.get("Shopping.md")).toBe("## Soup\n- [x] onion\n- [ ] stock\n");
+    expect(update).toHaveBeenCalledOnce();
+
+    writeCookbookText(connection.doc, "Shopping.md", "## Soup\n- [x] onion\n- [ ] stock\n");
+    expect(update).toHaveBeenCalledOnce();
+  });
+
   it("clears and switches authority without a catalogue revision", async () => {
     expect(catalogRevisionAbsent).toBe(true);
     await open({ "Shopping.md": "- [ ] first\n" });

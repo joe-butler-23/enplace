@@ -222,7 +222,7 @@ async function main() {
         [["list", "--week", "2026-09-07"], "mep: --week is only valid with shop\n"],
         [["list", "--cookbook", "id"], "mep: --cookbook, --relay, and --once are only valid with mirror\n"],
         [["mirror"], "mep: mirror needs --folder <dir>\n"],
-        [["mirror", "--folder", fixtureFromConsumer], "mep: mirror needs --cookbook <link-or-id>\n"],
+        [["mirror", "--folder", fixtureFromConsumer], "mep: mirror needs --cookbook <link-or-id> for an unassociated folder\n"],
         [["mirror", "--folder", fixtureFromConsumer, "--cookbook", "id", "--json"], "mep: --json is not valid with mirror\n"],
       ];
       for (const [args, stderr] of invalidRoutes) {

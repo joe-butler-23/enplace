@@ -8,6 +8,25 @@ type CommitContext = {
 };
 type CommitResult = { result: "committed" | "retry"; recovery?: string };
 
+/** Atomically publishes mirror-owned state inside an already validated private directory. */
+export async function writePrivateFile(
+  file: string,
+  bytes: Uint8Array,
+  existing: "replace" | "keep" = "replace",
+): Promise<"written" | "exists"> {
+  const operation = await mkdtemp(path.join(path.dirname(file), ".write-"));
+  const replacement = path.join(operation, "replacement");
+  try {
+    await writeFile(replacement, bytes, { flag: "wx", mode: 0o600 });
+    if (existing === "keep") return await noClobberLink(replacement, file) ? "written" : "exists";
+    await rename(replacement, file);
+    return "written";
+  } finally {
+    await unlinkIfPresent(replacement);
+    await rmdir(operation);
+  }
+}
+
 export async function createPrivateOperation(parent: string): Promise<string> {
   const privateRoot = await privateDirectory(parent, [".mep-mirror"], "mirror recovery");
   return mkdtemp(path.join(privateRoot, "operation-"));

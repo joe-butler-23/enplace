@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readdir, realpath, rename, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -8,7 +9,10 @@ import {
   listCookbookPaths, observeCookbook, readCookbookBytes, writeCookbookBytes, writeCookbookText,
 } from "../src/cookbook/doc.js";
 import { mergeText } from "../src/cookbook/merge.js";
-import { atomicCommit, createPrivateOperation, equal, optionalLstat, readOptional, unlinkIfPresent, type Bytes } from "./mirror-commit.js";
+import {
+  atomicCommit, createPrivateOperation, equal, optionalLstat, privateDirectory, readOptional, unlinkIfPresent,
+  writePrivateFile, type Bytes,
+} from "./mirror-commit.js";
 
 export const MIRROR_ORIGIN = Symbol("mep-mirror");
 const INITIAL_SYNC_DEADLINE_MS = 15_000;
@@ -17,9 +21,13 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 type MirrorOptions = {
-  folder: string; cookbook: string; relay: string; once?: boolean;
+  folder: string; cookbook?: string; relay?: string; once?: boolean;
   log?: (line: string) => void; signal?: AbortSignal; now?: () => Date;
 };
+type MirrorAssociation = { version: 1; cookbook: string; relay: string };
+type MirrorState = { association: MirrorAssociation | null; baselines: Map<string, Bytes> };
+const ASSOCIATION_FILE = "association.json";
+const BASELINES_DIRECTORY = "baselines";
 async function cleanupPrivateRoot(privateRoot: string, parent: string): Promise<void> {
   const operations = await readdir(privateRoot, { withFileTypes: true });
   for (const operationEntry of operations) {
@@ -99,6 +107,102 @@ function safeRelative(value: string): string {
 }
 function absolutePath(folder: string, relative: string): string {
   return path.join(folder, ...safeRelative(relative).split("/"));
+}
+function relayUrl(value: string): string {
+  let relay: URL;
+  try { relay = new URL(value); }
+  catch { throw new Error("--relay needs a valid ws:// or wss:// URL"); }
+  if (relay.protocol !== "ws:" && relay.protocol !== "wss:") {
+    throw new Error("--relay needs a valid ws:// or wss:// URL");
+  }
+  return relay.toString();
+}
+function baselineFileName(relative: string): string {
+  return `${createHash("sha256").update(relative).digest("hex")}.json`;
+}
+async function readStateFile(file: string, label: string): Promise<Buffer | null> {
+  const info = await optionalLstat(file);
+  if (info === null) return null;
+  if (info.isSymbolicLink() || !info.isFile()) throw new Error(`refusing invalid mirror ${label}: ${file}`);
+  return readOptional(file);
+}
+function parseJson(bytes: Buffer, label: string): unknown {
+  try { return JSON.parse(bytes.toString("utf8")); }
+  catch { throw new Error(`invalid mirror ${label}`); }
+}
+function parseAssociation(bytes: Buffer): MirrorAssociation {
+  const value = parseJson(bytes, "association") as Partial<MirrorAssociation>;
+  if (!value || value.version !== 1 || typeof value.cookbook !== "string" || typeof value.relay !== "string") {
+    throw new Error("invalid mirror association");
+  }
+  let id: string;
+  let relay: string;
+  try { id = cookbookId(value.cookbook); relay = relayUrl(value.relay); }
+  catch { throw new Error("invalid mirror association"); }
+  if (id !== value.cookbook || relay !== value.relay) throw new Error("invalid mirror association");
+  return { version: 1, cookbook: id, relay };
+}
+async function loadMirrorState(folder: string): Promise<MirrorState> {
+  const privateRoot = path.join(folder, ".mep-mirror");
+  const rootInfo = await optionalLstat(privateRoot);
+  if (rootInfo === null) return { association: null, baselines: new Map() };
+  if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) {
+    throw new Error(`refusing invalid mirror recovery directory: ${privateRoot}`);
+  }
+  const associationBytes = await readStateFile(path.join(privateRoot, ASSOCIATION_FILE), "association file");
+  const baselineRoot = path.join(privateRoot, BASELINES_DIRECTORY);
+  const baselineInfo = await optionalLstat(baselineRoot);
+  if (baselineInfo !== null && (baselineInfo.isSymbolicLink() || !baselineInfo.isDirectory())) {
+    throw new Error(`refusing invalid mirror baselines directory: ${baselineRoot}`);
+  }
+  if (!associationBytes && baselineInfo !== null) throw new Error("mirror baselines exist without an association");
+  const association = associationBytes ? parseAssociation(associationBytes) : null;
+  const baselines = new Map<string, Bytes>();
+  if (baselineInfo !== null) {
+    for (const entry of await readdir(baselineRoot, { withFileTypes: true })) {
+      const file = path.join(baselineRoot, entry.name);
+      if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith(".json")) {
+        throw new Error(`refusing invalid mirror baseline: ${file}`);
+      }
+      const bytes = await readStateFile(file, "baseline file");
+      if (!bytes) throw new Error(`invalid mirror baseline: ${file}`);
+      const value = parseJson(bytes, "baseline") as { version?: unknown; path?: unknown; base64?: unknown };
+      if (!value || value.version !== 1 || typeof value.path !== "string"
+          || !(value.base64 === null || typeof value.base64 === "string")) {
+        throw new Error(`invalid mirror baseline: ${file}`);
+      }
+      let relative: string;
+      try { relative = safeRelative(value.path); }
+      catch { throw new Error(`invalid mirror baseline: ${file}`); }
+      if (relative !== value.path || entry.name !== baselineFileName(relative) || baselines.has(relative)) {
+        throw new Error(`invalid mirror baseline: ${file}`);
+      }
+      let baseline: Bytes = null;
+      if (typeof value.base64 === "string") {
+        if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.base64)) {
+          throw new Error(`invalid mirror baseline: ${file}`);
+        }
+        baseline = Buffer.from(value.base64, "base64");
+        if (Buffer.from(baseline).toString("base64") !== value.base64) throw new Error(`invalid mirror baseline: ${file}`);
+      }
+      baselines.set(relative, baseline);
+    }
+  }
+  return { association, baselines };
+}
+async function saveAssociation(folder: string, association: MirrorAssociation): Promise<void> {
+  const privateRoot = await privateDirectory(folder, [".mep-mirror"], "mirror state");
+  const file = path.join(privateRoot, ASSOCIATION_FILE);
+  const bytes = encoder.encode(`${JSON.stringify(association)}\n`);
+  const result = await writePrivateFile(file, bytes, "keep");
+  if (result === "written") return;
+  const existing = await readStateFile(file, "association file");
+  if (!existing || !equal(existing, bytes)) throw new Error("mirror folder association changed concurrently");
+}
+async function saveBaseline(folder: string, relative: string, bytes: Bytes): Promise<void> {
+  const baselineRoot = await privateDirectory(folder, [".mep-mirror", BASELINES_DIRECTORY], "mirror state");
+  const value = { version: 1, path: relative, base64: bytes === null ? null : Buffer.from(bytes).toString("base64") };
+  await writePrivateFile(path.join(baselineRoot, baselineFileName(relative)), encoder.encode(`${JSON.stringify(value)}\n`));
 }
 async function rejectSymlinks(folder: string, relative: string): Promise<void> {
   let candidate = folder;
@@ -202,13 +306,21 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
   }
   if (path.dirname(folder) === folder) throw new Error("refusing to mirror a filesystem root");
   if (folder !== requestedFolder) options.log?.(`resolved mirror folder ${requestedFolder} to ${folder}\n`);
-  const id = cookbookId(options.cookbook);
-  let relay: URL;
-  try { relay = new URL(options.relay); }
-  catch { throw new Error("--relay needs a valid ws:// or wss:// URL"); }
-  if (relay.protocol !== "ws:" && relay.protocol !== "wss:") {
-    throw new Error("--relay needs a valid ws:// or wss:// URL");
+  const state = await loadMirrorState(folder);
+  const requestedCookbook = options.cookbook === undefined ? undefined : cookbookId(options.cookbook);
+  const requestedRelay = options.relay === undefined ? undefined : relayUrl(options.relay);
+  if (state.association && requestedCookbook && requestedCookbook !== state.association.cookbook) {
+    throw new Error("mirror folder is already associated with a different cookbook");
   }
+  if (state.association && requestedRelay && requestedRelay !== state.association.relay) {
+    throw new Error("mirror folder is already associated with a different relay");
+  }
+  const id = requestedCookbook ?? state.association?.cookbook;
+  const relay = requestedRelay ?? state.association?.relay;
+  if (!id) throw new Error("mirror needs --cookbook <link-or-id> for an unassociated folder");
+  if (!relay) throw new Error("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL for an unassociated folder");
+  const association: MirrorAssociation = { version: 1, cookbook: id, relay };
+  const needsAssociation = state.association === null;
 
   const ownAbort = options.signal ? null : new AbortController();
   const signal = options.signal ?? ownAbort!.signal;
@@ -217,10 +329,10 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
   if (signal.aborted) { if (ownAbort) process.off("SIGINT", onSigint); return; }
 
   const doc = new Y.Doc();
-  const provider = new WebsocketProvider(relay.toString(), id, doc, { disableBc: true });
+  const provider = new WebsocketProvider(relay, id, doc, { disableBc: true });
   let watcher: FSWatcher | null = null;
   let stopObserving: (() => void) | null = null;
-  const baselines = new Map<string, Bytes>();
+  const baselines = state.baselines;
   let fatal: unknown;
   let scheduler: ReturnType<typeof createPathScheduler> | null = null;
   let stopMirror: (() => void) | undefined;
@@ -233,7 +345,9 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
   const log = (message: string, always = false): void => {
     if (!options.once || always) options.log?.(`${message}\n`);
   };
-  const remember = (relative: string, bytes: Bytes): void => {
+  const remember = async (relative: string, bytes: Bytes): Promise<void> => {
+    if (baselines.has(relative) && equal(baselines.get(relative) ?? null, bytes)) return;
+    await saveBaseline(folder, relative, bytes);
     baselines.set(relative, bytes === null ? null : new Uint8Array(bytes));
   };
   const deleteDoc = (relative: string): void => {
@@ -242,10 +356,10 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
       log(`removed ${relative} from cookbook`);
     }
   };
-  const applyLocal = (relative: string, local: Bytes): void => {
+  const applyLocal = async (relative: string, local: Bytes): Promise<void> => {
     if (local === null) deleteDoc(relative);
     else { writeDoc(doc, relative, local); log(`updated cookbook from ${relative}`); }
-    remember(relative, local);
+    await remember(relative, local);
   };
 
   const reconcilePath = async (relativeValue: string): Promise<void> => {
@@ -264,8 +378,8 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
       const baseline = baselines.get(relative) ?? null;
       const decision = reconciliationDecision(known, baseline, local, remote);
       if (!equal(readCookbookBytes(doc, relative), remote)) continue;
-      if (decision === "equal") { remember(relative, remote); reportRecoveries(); return; }
-      if (decision === "local") { applyLocal(relative, local); reportRecoveries(); return; }
+      if (decision === "equal") { await remember(relative, remote); reportRecoveries(); return; }
+      if (decision === "local") { await applyLocal(relative, local); reportRecoveries(); return; }
       const plan = diskPlan(relative, decision, known, baseline, local, remote);
       if (plan.desired !== null) {
         await mkdir(path.dirname(file), { recursive: true });
@@ -278,7 +392,7 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
       if (committed.recovery && !recoveries.includes(committed.recovery)) recoveries.push(committed.recovery);
       if (committed.result === "committed") {
         if (plan.merged) writeCookbookText(doc, relative, plan.merged, MIRROR_ORIGIN);
-        remember(relative, plan.desired);
+        await remember(relative, plan.desired);
         log(`${plan.message}${recoverySuffix()}`, decision === "conflict" || plan.message.startsWith("restored"));
         return;
       }
@@ -342,7 +456,7 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
       }
     }
     disk = await diskFiles(folder);
-    for (const relative of new Set([...disk.keys(), ...remote])) await reconcilePath(relative);
+    for (const relative of new Set([...disk.keys(), ...remote, ...baselines.keys()])) await reconcilePath(relative);
   };
   scheduler = createPathScheduler(async (paths) => {
     if (paths.includes("")) await reconcileAll();
@@ -357,6 +471,7 @@ export async function mirrorCookbook(options: MirrorOptions): Promise<void> {
 
   try {
     if (!await waitForInitialSync(provider, signal)) return;
+    if (needsAssociation) await saveAssociation(folder, association);
     if (options.once) { await reconcileAll(); await cleanupReplacementScratch(folder); return; }
     stopObserving = observeCookbook(doc, (paths, origin) => {
       if (origin !== MIRROR_ORIGIN) for (const relative of paths) schedule(relative);

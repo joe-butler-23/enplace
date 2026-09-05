@@ -52,9 +52,58 @@ test("a javascript Markdown link renders inert", async ({ page }) => {
     mimeType: "text/markdown",
     buffer: Buffer.from("---\ntitle: Unsafe link\n---\n\n## Ingredients\n- 1 test\n\n## Method\n1. [Do not run](javascript:alert('unsafe'))\n"),
   });
-  await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
+  await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files. 1 recipe recognised.");
   await page.getByTitle("Close settings").click();
   await page.getByText("Unsafe link", { exact: true }).click();
   await expect(page.getByText("Do not run", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Do not run" })).toHaveCount(0);
+});
+
+
+test("Add recipe accepts pasted RecipeMD from a seeded cookbook and syncs it", async ({ page, browser }) => {
+  const id = await openFreshCookbook(page);
+  await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Add recipe" })).toBeVisible();
+  await page.getByLabel("Recipe Markdown", { exact: true }).fill(`# Relay Lentils
+
+A quick supper.
+
+---
+
+- *200 g* red lentils
+- *500 ml* stock
+
+---
+
+1. Simmer until tender.
+`);
+  await page.getByRole("button", { name: "Add recipe", exact: true }).last().click();
+  await expect(page.locator(".cooking-db__import-success")).toHaveText("Added Relay Lentils with 2 ingredients.");
+  await expect(page.getByText("Relay Lentils", { exact: true })).toBeVisible();
+  await expect(page.getByText("12 recipes", { exact: true })).toBeVisible();
+
+  const partnerContext = await browser.newContext();
+  const partner = await partnerContext.newPage();
+  try {
+    await partner.goto(`/#k=${id}`);
+    await expect(partner.getByText("Relay Lentils", { exact: true })).toBeVisible();
+    await expect(partner.getByText("12 recipes", { exact: true })).toBeVisible();
+  } finally {
+    await partnerContext.close();
+  }
+});
+
+
+test("Settings distinguishes imported Markdown that is not a recipe", async ({ page }) => {
+  await openFreshCookbook(page);
+  await openSettings(page);
+  const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
+  await input.setInputFiles({
+    name: "market-notes.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Market notes\n\nRemember the lentils.\n"),
+  });
+  await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files. 0 recipes recognised.");
+  await page.getByTitle("Close settings").click();
+  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
 });

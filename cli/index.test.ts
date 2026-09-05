@@ -52,8 +52,8 @@ describe("mep CLI", () => {
   });
 
   it.each([
-    { argv: [], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
-    { argv: ["unknown"], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]" },
+    { argv: [], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> [--cookbook <link-or-id>] [--relay <wss-url>] [--once]" },
+    { argv: ["unknown"], error: "usage: mep <check|add|convert|list|shop|mirror> [options]\n       mep mirror --folder <dir> [--cookbook <link-or-id>] [--relay <wss-url>] [--once]" },
     { argv: ["--"], error: "unknown option: --" },
     { argv: ["list", "--other"], error: "unknown option: --other" },
     { argv: ["list", "--folder"], error: "--folder needs a value" },
@@ -75,6 +75,8 @@ describe("mep CLI", () => {
   it("keeps mirror validation order and relative folder resolution", async () => {
     const root = await folder();
     await expect(execute(["mirror", "--folder", root])).rejects.toThrow("mirror needs --cookbook <link-or-id>");
+    await expect(execute(["mirror", "--folder", root, "--cookbook", "abcdefghijklmnopqrstuvwxyz"]))
+      .rejects.toThrow("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL");
     await expect(execute(["mirror", "--folder", root, "--cookbook", "id", "--json"]))
       .rejects.toThrow("--json is not valid with mirror");
     await expect(execute(["list", "--folder", "missing"], { cwd: root }))
@@ -120,7 +122,7 @@ describe("mep CLI", () => {
     await writeFile(path.join(root, "Plan.md"), "## 2026-09-07\n- [[soup]]\n\n## 2026-09-09\n- [[pie]]\n");
     const current = "# Shopping\n\n## Soup\n- [x] 2 onions\n";
     await writeFile(path.join(root, "Shopping.md"), current);
-    const expected = "# Shopping\n\n## Soup\n- [x] 2 onions\n- [ ] Salt\n\n## Pie\n- [ ] Flour\n";
+    const expected = "# Shopping\n\n## Soup\n- [x] 2 onions\n- [ ] Salt\n\n## Pie\n- [ ] salt\n- [ ] Flour\n";
 
     await expect(execute(["shop", "--week", "2026-09-10", "--folder", root])).resolves.toBe(expected);
     await expect(readFile(path.join(root, "Shopping.md"), "utf8")).resolves.toBe(expected);

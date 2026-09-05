@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
+import { addShoppingItem, exportedCookbookText, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
 
 test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 
@@ -90,6 +90,53 @@ test("two shoppers edit offline, reload, reconnect in either order, and retain t
     for (const current of [page, second]) {
       await expect(current.getByRole("checkbox", { name: "market apples" })).toBeChecked();
       await expect(current.getByRole("checkbox", { name: "market bread" })).toBeChecked();
+    }
+  } finally {
+    await context.setOffline(false);
+    await secondContext.setOffline(false);
+    await secondContext.close();
+  }
+});
+
+
+test("two offline ticks of one item reconnect to canonical Shopping.md on both devices", async ({ page, context, browser }) => {
+  await openFreshCookbook(page);
+  await openShopping(page);
+  await addShoppingItem(page, "shared onion");
+
+  const secondContext = await browser.newContext();
+  const second = await secondContext.newPage();
+  try {
+    await second.goto(page.url());
+    await expect(second.getByRole("checkbox", { name: "shared onion" })).toBeVisible();
+    await ensureServiceWorkerControl(page);
+    await ensureServiceWorkerControl(second);
+    await context.setOffline(true);
+    await secondContext.setOffline(true);
+    // Offline mode does not sever an already-open socket on every engine; a reload reconnects under it.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await second.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("checkbox", { name: "shared onion" })).toBeVisible();
+    await expect(second.getByRole("checkbox", { name: "shared onion" })).toBeVisible();
+
+    await page.getByText("shared onion", { exact: true }).click();
+    await second.getByText("shared onion", { exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "shared onion" })).toBeChecked();
+    await expect(second.getByRole("checkbox", { name: "shared onion" })).toBeChecked();
+
+    await secondContext.setOffline(false);
+    await expectConnected(second);
+    await context.setOffline(false);
+    await expectConnected(page);
+    await addShoppingItem(second, "second caught up");
+    await expect(page.getByRole("checkbox", { name: "second caught up" })).toBeVisible();
+    await addShoppingItem(page, "first caught up");
+    await expect(second.getByRole("checkbox", { name: "first caught up" })).toBeVisible();
+
+    for (const current of [page, second]) {
+      const shopping = await exportedCookbookText(current, "Shopping.md");
+      expect(shopping).toContain("- [x] shared onion");
+      expect(shopping).not.toMatch(/\[(?:xx|  )\]/);
     }
   } finally {
     await context.setOffline(false);

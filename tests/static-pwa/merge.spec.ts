@@ -27,6 +27,9 @@ async function createCookbookWithRecipe(page: Page): Promise<void> {
 }
 
 async function joinCookbook(browser: Browser, url: string, owner: Page): Promise<{ context: BrowserContext; page: Page }> {
+  await owner.getByRole("button", { name: "Settings", exact: true }).dispatchEvent("click");
+  await expect(owner.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
+  await owner.getByTitle("Close settings").click();
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(url);
@@ -155,4 +158,37 @@ test("deletes a recipe and returns to the database", async ({ page }) => {
   await page.getByRole("button", { name: "Delete recipe" }).click();
   await expect(page.getByRole("heading", { name: "Recipe Database" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open recipe Merge Soup" })).toHaveCount(0);
+});
+
+
+test("a recipe deleted on one device while edited on another keeps the edited recipe", async ({ page, browser, browserName }) => {
+  test.skip(browserName === "webkit", "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
+  await createCookbookWithRecipe(page);
+  const peer = await joinCookbook(browser, page.url(), page);
+  try {
+    await page.context().setOffline(true);
+    await peer.context.setOffline(true);
+    // Offline mode does not sever an already-open socket on every engine; a reload reconnects under it.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await peer.page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Open recipe Merge Soup" }).dispatchEvent("click");
+    const editor = await openEditor(peer.page);
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete recipe" }).click();
+    await expect(page.getByRole("button", { name: "Open recipe Merge Soup" })).toHaveCount(0);
+    await replaceParagraph(peer.page, editor, "First base paragraph.", "First paragraph edited while offline.");
+    await expect(peer.page.locator('[data-save-state="saved"]')).toBeVisible();
+
+    await peer.context.setOffline(false);
+    await page.context().setOffline(false);
+    await expect(page.getByRole("button", { name: "Open recipe Merge Soup" })).toBeVisible();
+    await page.getByRole("button", { name: "Open recipe Merge Soup" }).dispatchEvent("click");
+    await expect(page.getByText("First paragraph edited while offline.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Second base paragraph.", { exact: true })).toBeVisible();
+  } finally {
+    await page.context().setOffline(false);
+    await peer.context.setOffline(false);
+    await peer.context.close();
+  }
 });

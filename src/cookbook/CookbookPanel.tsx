@@ -1,4 +1,5 @@
 import * as React from "react";
+import { parseRecipe } from "@/core";
 import { type CookbookStatus } from "@/host-client/cookbook-storage";
 import { currentCookbookConnection } from "./current";
 import {
@@ -24,7 +25,8 @@ function notify(message: string): void {
   window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } }));
 }
 
-function statusMessage(status: CookbookStatus): string {
+function statusMessage(status: CookbookStatus, preparing: boolean): string {
+  if (preparing) return "Preparing the shared copy…";
   if (status === "local-only") return "This cookbook lives only on this device.";
   if (status === "connecting") return "Connecting to the relay…";
   if (status === "connected") return "Connected. Changes sync through the relay.";
@@ -48,14 +50,19 @@ async function copyLink(link: string): Promise<void> {
 function CookbookLinkSection({ id, routePath }: { id: string; routePath: string }): React.JSX.Element {
   const connection = currentCookbookConnection();
   const [status, setStatus] = React.useState<CookbookStatus>(() => connection?.status() ?? "offline");
+  const [remoteSynced, setRemoteSynced] = React.useState(() => connection?.remoteSynced() ?? false);
   const [qrUrl, setQrUrl] = React.useState("");
   const link = cookbookLink(window.location.origin, id, routePath);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   React.useEffect(() => {
     if (!connection) return;
+    connection.publish();
     setStatus(connection.status());
-    return connection.onStatus(setStatus);
+    setRemoteSynced(connection.remoteSynced());
+    const stopStatus = connection.onStatus(setStatus);
+    const stopSync = connection.onRemoteSync(() => setRemoteSynced(true));
+    return () => { stopStatus(); stopSync(); };
   }, [connection]);
 
   React.useEffect(() => {
@@ -94,7 +101,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
         </button>
       </div>
       {qrUrl ? <img className="mep-settings__qr" src={qrUrl} alt="QR code for this cookbook link" /> : null}
-      <p className="mep-settings__note">{statusMessage(status)}</p>
+      <p className="mep-settings__note">{statusMessage(status, Boolean(connection?.relayUrl && !remoteSynced && status !== "offline"))}</p>
     </section>
   );
 }
@@ -173,9 +180,14 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
         }
       }
 
+      const before = new Set((await connection.adapter.walkFiles()).map(({ path }) => path));
       const imported = await connection.adapter.writeNewBytesBatch(entries);
+      const recognised = (await connection.adapter.walkFiles()).filter(({ path, bytes }) => (
+        !before.has(path) && path.toLowerCase().endsWith(".md")
+        && parseRecipe(path, new TextDecoder().decode(bytes)) !== null
+      )).length;
       const skipped = entries.length - imported;
-      notify(`Imported ${imported} file${imported === 1 ? "" : "s"}; skipped ${skipped} existing file${skipped === 1 ? "" : "s"}.`);
+      notify(`Imported ${imported} file${imported === 1 ? "" : "s"}; skipped ${skipped} existing file${skipped === 1 ? "" : "s"}. ${recognised} recipe${recognised === 1 ? "" : "s"} recognised.`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not import these files.");
     } finally {

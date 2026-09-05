@@ -198,7 +198,7 @@ test("first-sync marker transaction failure fails closed without browser errors"
   expect(await page.evaluate(() => (window as typeof window & { __unhandledRejections?: string[] }).__unhandledRejections)).toEqual([]);
 });
 
-test("fresh sample cookbook reaches the relay only after its first edit", async ({ page, browser }) => {
+test("fresh sample cookbook publishes when its link section is shown", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await page.reload();
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
@@ -207,12 +207,14 @@ test("fresh sample cookbook reaches the relay only after its first edit", async 
   try {
     await partner.goto(`/#k=${id}`);
     await expect(partner.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
-    await expect(partner.getByText("11 recipes", { exact: true })).toHaveCount(0);
 
-    await addShoppingItem(page, "publish cookbook");
+    await page.context().setOffline(true);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    // Connecting reads as preparation; a socket that has already failed reads as offline. Either is honest here.
+    await expect(page.getByText(/^(Preparing the shared copy…|Offline\. Changes will sync when the relay reconnects\.)$/)).toBeVisible();
+    await page.context().setOffline(false);
+    await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
     await expect(partner.getByText("11 recipes", { exact: true })).toBeVisible();
-    await partner.getByRole("button", { name: "Shopping List", exact: true }).click();
-    await expect(partner.getByRole("checkbox", { name: "publish cookbook" })).toBeVisible();
   } finally {
     await partnerContext.close();
   }

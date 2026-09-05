@@ -161,6 +161,12 @@ function checklistText(line: string): { text: string; checked: boolean } | null 
   return match ? { text: match[2], checked: /x/i.test(match[1]) } : null;
 }
 
+/** Repairs every tolerated checklist marker while preserving all other Markdown bytes. */
+export function canonicalShoppingMarkdown(markdown: string): string {
+  return markdown.replace(/^([ \t]*-[ \t]+\[)([ xX]*)(\])(?=[ \t]+)/gm, (_match, before: string, marks: string, after: string) =>
+    `${before}${/x/i.test(marks) ? "x" : " "}${after}`);
+}
+
 export function parseShopping(markdown: string): ShoppingLine[] {
   let heading: string | null = null;
   const result: ShoppingLine[] = [];
@@ -191,27 +197,46 @@ export function buildShoppingMarkdown(
   plannedRecipes: readonly Recipe[],
   allRecipes: readonly Recipe[],
 ): string {
+  const canonical = canonicalShoppingMarkdown(current);
   const checked = new Map<string, boolean>();
   const aisles = new Map<string, string>();
-  for (const item of parseShopping(current)) {
-    const key = item.text.trim().toLowerCase();
+  const headingOccurrences = new Map<string, number>();
+  let block = "";
+  for (const line of canonical.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1]?.trim().toLowerCase();
+    if (heading) {
+      const occurrence = (headingOccurrences.get(heading) ?? 0) + 1;
+      headingOccurrences.set(heading, occurrence);
+      block = `${heading}\0${occurrence}`;
+    }
+    const item = checklistText(line);
+    if (!item || !block) continue;
+    const aisle = /\s*<!-- aisle: ([^<>\r\n]+) -->$/.exec(item.text);
+    const text = (aisle ? item.text.slice(0, aisle.index) : item.text).trim().toLowerCase();
+    const key = `${block}\0${text}`;
     checked.set(key, item.checked || checked.get(key) === true);
-    if (item.aisle) aisles.set(key, item.aisle);
+    if (aisle) aisles.set(key, aisle[1]);
   }
   const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLowerCase()));
-  const preserved = removeRecipeBlocks(current, titles);
+  const preserved = removeRecipeBlocks(canonical, titles);
   const prefix = preserved ? `${preserved}${preserved.endsWith("\n") ? "" : "\n"}` : "";
-  const seenIngredients = new Set<string>();
   const blocks: string[] = [];
   const recipes = new Map<string, Recipe>();
   for (const recipe of plannedRecipes) recipes.set(recipe.path, recipes.get(recipe.path) ?? recipe);
+  const outputOccurrences = new Map<string, number>();
   for (const recipe of recipes.values()) {
+    const heading = recipe.title.trim().toLowerCase();
+    const occurrence = (outputOccurrences.get(heading) ?? 0) + 1;
+    outputOccurrences.set(heading, occurrence);
+    const blockKey = `${heading}\0${occurrence}`;
+    const seenIngredients = new Set<string>();
     const lines: string[] = [];
     for (const ingredient of recipe.ingredients) {
       const text = ingredient.trim();
-      const key = text.toLowerCase();
-      if (!text || seenIngredients.has(key)) continue;
-      seenIngredients.add(key);
+      const ingredientKey = text.toLowerCase();
+      if (!text || seenIngredients.has(ingredientKey)) continue;
+      seenIngredients.add(ingredientKey);
+      const key = `${blockKey}\0${ingredientKey}`;
       lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}${aisles.has(key) ? ` <!-- aisle: ${aisles.get(key)} -->` : ""}`);
     }
     if (lines.length) blocks.push(`## ${recipe.title}\n${lines.join("\n")}`);
@@ -231,9 +256,10 @@ function resolveShoppingItem(markdown: string, itemLine: number, itemText: strin
 }
 
 export function toggleShoppingItem(markdown: string, itemLine: number, itemText: string, checked: boolean): string {
-  const item = resolveShoppingItem(markdown, itemLine, itemText);
-  const trailingNewline = markdown.endsWith("\n");
-  const lines = markdown.split(/\r?\n/);
+  const canonical = canonicalShoppingMarkdown(markdown);
+  const item = resolveShoppingItem(canonical, itemLine, itemText);
+  const trailingNewline = canonical.endsWith("\n");
+  const lines = canonical.split(/\r?\n/);
   if (trailingNewline) lines.pop();
   lines[item.line] = lines[item.line].replace(/^(\s*-\s+\[)[ xX]*(\])/, `$1${checked ? "x" : " "}$2`);
   return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
@@ -242,7 +268,7 @@ export function toggleShoppingItem(markdown: string, itemLine: number, itemText:
 export function appendShoppingItem(markdown: string, text: string): string {
   const content = text.trim();
   if (!content || /[\r\n]/.test(content)) throw new Error("Shopping item must be one non-empty line.");
-  const lines = markdown.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+  const lines = canonicalShoppingMarkdown(markdown).replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
   const otherHeading = lines.findIndex((line) => /^##\s+Other\s*$/i.test(line));
   if (otherHeading >= 0) {
     let insertion = lines.findIndex((line, index) => index > otherHeading && /^##\s+/.test(line));
@@ -256,9 +282,10 @@ export function appendShoppingItem(markdown: string, text: string): string {
 }
 
 export function removeShoppingItem(markdown: string, itemLine: number, itemText: string): string {
-  const item = resolveShoppingItem(markdown, itemLine, itemText);
-  const trailingNewline = markdown.endsWith("\n");
-  const lines = markdown.split(/\r?\n/);
+  const canonical = canonicalShoppingMarkdown(markdown);
+  const item = resolveShoppingItem(canonical, itemLine, itemText);
+  const trailingNewline = canonical.endsWith("\n");
+  const lines = canonical.split(/\r?\n/);
   if (trailingNewline) lines.pop();
   lines.splice(item.line, 1);
   return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
@@ -267,14 +294,15 @@ export function removeShoppingItem(markdown: string, itemLine: number, itemText:
 export function setShoppingAisle(markdown: string, itemLine: number, itemText: string, aisle: string): string {
   const label = aisle.trim();
   if (/[<>\r\n]/.test(label) || label.includes('--')) throw new Error('Invalid aisle name');
-  const item = resolveShoppingItem(markdown, itemLine, itemText);
-  const lines = markdown.split(/\r?\n/);
+  const canonical = canonicalShoppingMarkdown(markdown);
+  const item = resolveShoppingItem(canonical, itemLine, itemText);
+  const lines = canonical.split(/\r?\n/);
   lines[item.line] = lines[item.line].replace(/\s*<!-- aisle: [^<>\r\n]+ -->$/, '') + (label ? ` <!-- aisle: ${label} -->` : '');
   return lines.join('\n');
 }
 
 export function resetShopping(markdown: string): string {
-  return markdown.split(/\r?\n/).filter((line) => !checklistText(line)).join('\n');
+  return canonicalShoppingMarkdown(markdown).split(/\r?\n/).filter((line) => !checklistText(line)).join('\n');
 }
 
 export function shoppingPlainText(markdown: string): string {

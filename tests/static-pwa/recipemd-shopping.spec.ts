@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { unzipSync, strFromU8 } from 'fflate';
-import { openFreshCookbook, openShopping } from './helpers';
+import { exportedCookbookText, openFreshCookbook, openShopping } from './helpers';
 
 test('RecipeMD imports, renders groups and provenance, edits and exports without format loss', async ({ page }) => {
   await openFreshCookbook(page);
@@ -79,4 +79,48 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
     await page.reload();
     await expect(page.getByText('Your list is empty — add an item below.')).toBeVisible();
   } finally { await secondContext.close(); }
+});
+
+
+test('shopping build keeps the same ingredient in each planned recipe block', async ({ page }) => {
+  await openFreshCookbook(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove sample recipes' }).click();
+  await expect(page.locator('.mep-notices')).toContainText('Removed sample recipes.');
+
+  const today = new Date();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const date = [monday.getFullYear(), monday.getMonth() + 1, monday.getDate()]
+    .map((value, index) => index === 0 ? String(value) : String(value).padStart(2, '0')).join('-');
+  await page.locator('.mep-settings__file-button', { hasText: 'Import files' }).locator('input').setInputFiles([
+    {
+      name: 'onion-pie.md', mimeType: 'text/markdown',
+      buffer: Buffer.from('# Onion Pie\n\n---\n\n- *1* onion\n\n---\n\n1. Bake.\n'),
+    },
+    {
+      name: 'onion-soup.md', mimeType: 'text/markdown',
+      buffer: Buffer.from('# Onion Soup\n\n---\n\n- *1* onion\n- salt\n- SALT\n\n---\n\n1. Simmer.\n'),
+    },
+    {
+      name: 'Plan.md', mimeType: 'text/markdown',
+      buffer: Buffer.from(`## Marked\n\n## ${date}\n- [[onion-pie]]\n- [[onion-soup]]\n`),
+    },
+  ]);
+  await expect(page.locator('.mep-notices')).toContainText('Imported 3 files');
+  await page.getByTitle('Close settings').click();
+  await page.getByRole('button', { name: 'Planner', exact: true }).click();
+  await page.getByRole('button', { name: 'Build shopping list' }).click();
+
+  const onions = page.getByRole('checkbox', { name: '1 onion', exact: true });
+  await expect(onions).toHaveCount(2);
+  await expect(page.getByRole('checkbox', { name: 'salt', exact: true })).toHaveCount(1);
+  await page.getByText('1 onion', { exact: true }).nth(1).click();
+  await expect(onions.nth(0)).not.toBeChecked();
+  await expect(onions.nth(1)).toBeChecked();
+  await expect(page.locator('.shopping-group__label')).toHaveText(['Onion Pie', 'Onion Soup']);
+
+  const shopping = await exportedCookbookText(page, 'Shopping.md');
+  expect(shopping.match(/^- \[[ x]\] 1 onion$/gm)).toHaveLength(2);
 });

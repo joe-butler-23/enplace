@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { expect, type Page } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
 
 export async function openFreshCookbook(page: Page): Promise<string> {
   await page.goto("/");
@@ -31,4 +33,16 @@ export async function persistedUpdateCount(page: Page, id: string): Promise<numb
       count.onerror = () => { db.close(); reject(count.error); };
     };
   }), `enplace-kitchen-${id}`);
+}
+
+export async function exportedCookbookText(page: Page, path: string): Promise<string> {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download cookbook (.zip)" }).click();
+  const download = await downloading;
+  const archive = unzipSync(new Uint8Array(await readFile((await download.path())!)));
+  const bytes = archive[path];
+  expect(bytes, `${path} should be present in the cookbook export`).toBeDefined();
+  await page.getByTitle("Close settings").click();
+  return strFromU8(bytes);
 }

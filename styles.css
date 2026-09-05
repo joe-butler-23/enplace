@@ -149,6 +149,8 @@
 /* A phone is too narrow for a 200px track to fit twice, and one column would blow a 448px
    thumbnail up on a 338px card. Two columns keep it above 2x and show twice the shelf. */
 @media (max-width: 760px) {
+.cooking-db__header { flex-wrap: wrap; }
+.cooking-db__searchbox { order: 1; flex-basis: 100%; }
 .cooking-db__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .cooking-db__card { box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--hover); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; contain: layout paint style; width: 100%; height: auto; }
@@ -183,7 +185,8 @@ button.organiser-column-note,
 .cooking-db__paste-import label { display: grid; gap: 0.25rem; }
 .cooking-db__paste-import input,
 .cooking-db__paste-import textarea { font: inherit; padding: 0.6rem; }
-.cooking-db__paste-import textarea { min-height: 6rem; resize: vertical; }
+.cooking-db__paste-import textarea { min-height: 16rem; resize: vertical; }
+.cooking-db__import-success { margin: 0 0 8px; color: var(--success); font-size: 0.88rem; }
 
 .shopping-list-view__grouping { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1rem; }
 .shopping-list-view__grouping select { font: inherit; padding: 0.4rem; }

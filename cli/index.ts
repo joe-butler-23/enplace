@@ -28,7 +28,7 @@ const recipeCommands = new Set(["check", "add", "convert"]);
 function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
   if (!command || !["check", "add", "convert", "list", "shop", "mirror"].includes(command)) {
     throw new Error("usage: mep <check|add|convert|list|shop|mirror> [options]\n"
-      + "       mep mirror --folder <dir> --cookbook <link-or-id> [--relay <wss-url>] [--once]");
+      + "       mep mirror --folder <dir> [--cookbook <link-or-id>] [--relay <wss-url>] [--once]");
   }
   if (recipeCommands.has(command) && positional.length !== 1) throw new Error(`${command} needs one <file|->`);
   if (["list", "shop", "mirror"].includes(command) && positional.length) throw new Error(`${command} takes no file argument`);
@@ -38,7 +38,6 @@ function validateArguments(command: string, positional: string[], options: Reado
   }
   if (command === "mirror") {
     if (!options.has("--folder")) throw new Error("mirror needs --folder <dir>");
-    if (!options.has("--cookbook")) throw new Error("mirror needs --cookbook <link-or-id>");
     if (options.has("--json")) throw new Error("--json is not valid with mirror");
   }
 }
@@ -209,13 +208,15 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
   if (!(await stat(args.folder).catch(() => null))?.isDirectory()) throw new Error(`folder not found: ${args.folder}`);
 
   if (args.command === "mirror") {
-    const relay = args.relay ?? process.env.ENPLACE_RELAY_URL;
-    if (!relay) throw new Error("mirror needs --relay <wss-url> or ENPLACE_RELAY_URL");
+    // Decide the argument error before loading the mirror's relay dependencies.
+    if (!args.cookbook && !(await exists(path.join(args.folder, ".mep-mirror", "association.json")))) {
+      throw new Error("mirror needs --cookbook <link-or-id> for an unassociated folder");
+    }
     const { mirrorCookbook } = await import("./mirror.js");
     await mirrorCookbook({
       folder: args.folder,
-      cookbook: args.cookbook!,
-      relay,
+      cookbook: args.cookbook,
+      relay: args.relay ?? process.env.ENPLACE_RELAY_URL,
       once: args.once,
       log: options.log,
       signal: options.signal,

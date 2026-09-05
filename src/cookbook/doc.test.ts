@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
+import { canonicalShoppingMarkdown, toggleShoppingItem } from "../core";
 import {
   applyTextDiff,
   deleteCookbookPath,
@@ -91,6 +92,49 @@ describe("cookbook document", () => {
     sync(right, left);
     expect(readCookbookText(left, "Shopping.md")).toBe("- [x] milk\n- [x] eggs\n");
     expect(readCookbookText(right, "Shopping.md")).toBe(readCookbookText(left, "Shopping.md"));
+  });
+
+  it("keeps a complete concurrent edit when the other device deletes the file", () => {
+    const left = new Y.Doc();
+    const right = new Y.Doc();
+    writeCookbookText(left, "Soup.md", "Cook for 10 minutes.\n");
+    sync(left, right);
+
+    deleteCookbookPath(left, "Soup.md");
+    writeCookbookText(right, "Soup.md", "Cook for 20 minutes.\n");
+    sync(left, right);
+    sync(right, left);
+
+    expect(listCookbookPaths(left)).toEqual(["Soup.md"]);
+    expect(readCookbookText(left, "Soup.md")).toBe("Cook for 20 minutes.\n");
+    expect(readCookbookText(right, "Soup.md")).toBe("Cook for 20 minutes.\n");
+  });
+
+  it("recreates a deleted text path with exactly the new content", () => {
+    const doc = new Y.Doc();
+    writeCookbookText(doc, "Soup.md", "orphaned old recipe\nwith a second line\n");
+    deleteCookbookPath(doc, "Soup.md");
+    writeCookbookText(doc, "Soup.md", "entirely new recipe\n");
+    expect(readCookbookText(doc, "Soup.md")).toBe("entirely new recipe\n");
+  });
+
+  it("converges when both devices repair the same doubled shopping box", () => {
+    const left = new Y.Doc();
+    const right = new Y.Doc();
+    writeCookbookText(left, "Shopping.md", "- [ ] onion\n");
+    sync(left, right);
+    writeCookbookText(left, "Shopping.md", toggleShoppingItem(readCookbookText(left, "Shopping.md")!, 0, "onion", true));
+    writeCookbookText(right, "Shopping.md", toggleShoppingItem(readCookbookText(right, "Shopping.md")!, 0, "onion", true));
+    sync(left, right);
+    sync(right, left);
+    expect(readCookbookText(left, "Shopping.md")).toBe("- [xx] onion\n");
+
+    writeCookbookText(left, "Shopping.md", canonicalShoppingMarkdown(readCookbookText(left, "Shopping.md")!));
+    writeCookbookText(right, "Shopping.md", canonicalShoppingMarkdown(readCookbookText(right, "Shopping.md")!));
+    sync(left, right);
+    sync(right, left);
+    expect(readCookbookText(left, "Shopping.md")).toBe("- [x] onion\n");
+    expect(readCookbookText(right, "Shopping.md")).toBe("- [x] onion\n");
   });
 
   it("keeps both sides when two devices create the same file at once", () => {

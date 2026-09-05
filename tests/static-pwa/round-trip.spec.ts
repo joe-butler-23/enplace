@@ -36,11 +36,11 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
-async function importFiles(page: Page, files: string | string[] | FilePayload | FilePayload[], count: number): Promise<void> {
+async function importFiles(page: Page, files: string | string[] | FilePayload | FilePayload[], count: number, recognised: number): Promise<void> {
   await openSettings(page);
   const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');
   await input.setInputFiles(files);
-  await expect(page.locator(".mep-notices")).toContainText(`Imported ${count} file${count === 1 ? "" : "s"}; skipped 0 existing files.`);
+  await expect(page.locator(".mep-notices")).toContainText(`Imported ${count} file${count === 1 ? "" : "s"}; skipped 0 existing files. ${recognised} recipe${recognised === 1 ? "" : "s"} recognised.`);
   await page.getByTitle("Close settings").click();
 }
 
@@ -107,7 +107,7 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
       name: "Shopping.md", mimeType: "text/markdown",
       buffer: Buffer.from("# Shopping\n\n## Other\n- [ ] fresh basil\n- [x] olive oil\n"),
     },
-  ], 4);
+  ], 4, 2);
   const initial = await collectVisibleCookbookState(page);
   expect(initial).toEqual({
     recipes: [
@@ -137,8 +137,9 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
   try {
     await right.goto(`/#k=${id}`);
     expect(await collectVisibleCookbookState(right)).toEqual(beforeOffline);
-    await page.goto(`/?share-target#k=${id}`);
-    await expect(page.getByLabel("Recipe title")).toBeVisible();
+    await page.goto(`/#k=${id}`);
+    await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
+    await expect(page.getByLabel("Recipe Markdown", { exact: true })).toBeVisible();
     const documentToken = await page.evaluate(() => (document.documentElement.dataset.testToken = crypto.randomUUID()));
     await page.context().setOffline(true);
     await rightContext.setOffline(true);
@@ -151,17 +152,33 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     await importFiles(page, {
       name: "existing.zip", mimeType: "application/zip",
       buffer: Buffer.from(zipSync({ "images/blocked.webp": new Uint8Array([9]) })),
-    }, 1);
-    await page.getByLabel("Recipe title").fill("Blocked");
-    await page.getByLabel("Recipe ingredients").fill("onion");
-    await page.getByLabel("Recipe method").fill("Simmer");
+    }, 1, 0);
+    await page.getByLabel("Recipe Markdown", { exact: true }).fill(`# Blocked
+
+---
+
+- onion
+
+---
+
+1. Simmer.
+`);
     await page.getByLabel("Recipe cover image").setInputFiles({
       name: "blocked.png", mimeType: "image/png", buffer: COVER_PNG,
     });
-    await page.getByRole("button", { name: "Import recipe" }).click();
+    await page.getByRole("button", { name: "Add recipe", exact: true }).last().click();
     await expect(page.getByRole("alert")).toContainText("images/blocked.webp");
-    await page.getByLabel("Recipe title").fill("Recipes");
-    await page.getByRole("button", { name: "Import recipe" }).click();
+    await page.getByLabel("Recipe Markdown", { exact: true }).fill(`# Recipes
+
+---
+
+- onion
+
+---
+
+1. Simmer.
+`);
+    await page.getByRole("button", { name: "Add recipe", exact: true }).last().click();
     const importedOpen = page.getByRole("button", { name: "Open recipe Recipes" });
     const importedCard = importedOpen.locator("..");
     await expect(importedOpen).toBeVisible();
@@ -175,7 +192,7 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     await importFiles(right, {
       name: "child.zip", mimeType: "application/zip",
       buffer: Buffer.from(zipSync({ "recipes.md/nested/cover.webp": new Uint8Array([0, 255, 7]) })),
-    }, 1);
+    }, 1, 0);
     await rightContext.setOffline(false);
     await page.context().setOffline(false);
     await expect(page.locator('.cooking-db__card[data-path="recipes (file conflict 0ed49ba7).md"]')).toBeVisible();
@@ -214,7 +231,7 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
       await openEmptyCookbook(target);
       await importFiles(target, {
         name: "cookbook.zip", mimeType: "application/zip", buffer: await readFile(exportedPath!),
-      }, 9);
+      }, 9, 3);
       expect(await collectVisibleCookbookState(target, 3)).toEqual(source);
     } finally { await targetContext.close(); }
   } finally { await rightContext.close(); }

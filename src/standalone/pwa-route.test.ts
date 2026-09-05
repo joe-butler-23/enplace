@@ -99,11 +99,12 @@ describe("PWA route", () => {
   it("preserves database contents layout and releases the mobile shopping sidebar width", async () => {
     const css = await readFile(new URL("../standalone.css", import.meta.url), "utf8");
     expect(css).toContain(".mep-database-panel { display: contents; }");
-    const mobileStyles = css.slice(css.indexOf("@media (max-width: 720px)"));
-    expect(mobileStyles).toContain(`.mep-shell--shopping .mep-sidebar {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: none !important;`);
+    const mobileStyles = css.slice(css.indexOf("@media (max-width: 760px)"));
+    // Every phone route shares one shell row definition; the sidebar releases its desktop width without !important.
+    expect(mobileStyles).toContain(".mep-shell { grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }");
+    expect(mobileStyles).toMatch(/\.mep-sidebar \{[^}]*width: 100%; min-width: 0; max-width: none;/);
+    expect(mobileStyles).not.toContain("!important");
+    expect(css).not.toContain("--preview-width");
   });
 
 

@@ -160,11 +160,11 @@ test("two separate browser contexts converge through the relay in both direction
   }
 });
 
-test("an untouched cookbook reads local-only in Settings and is exportable from there", async ({ page }) => {
+test("opening Settings publishes an untouched cookbook and keeps it exportable", async ({ page }) => {
   await openFreshCookbook(page);
   await openSettings(page);
   const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings.getByText("This cookbook lives only on this device.", { exact: false })).toBeVisible();
+  await expect(settings.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
   await expect(settings.getByText("Anyone with this private link can view and change this cookbook.", { exact: true })).toBeVisible();
   await expect(settings.getByRole("button", { name: "Download cookbook (.zip)" })).toBeVisible();
 });
@@ -178,7 +178,7 @@ test("Settings imports a synthetic recipe file", async ({ page }) => {
     mimeType: "text/markdown",
     buffer: Buffer.from("---\ntitle: Browser Soup\n---\n\n# Browser Soup\n\n## Ingredients\n- 2 onions\n\n## Method\n1. Simmer.\n"),
   });
-  await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files.");
+  await expect(page.locator(".mep-notices")).toContainText("Imported 1 file; skipped 0 existing files. 1 recipe recognised.");
   await page.getByTitle("Close settings").click();
   await expect(page.getByText("12 recipes", { exact: true })).toBeVisible();
   await expect(page.getByText("Browser Soup", { exact: true })).toBeVisible();

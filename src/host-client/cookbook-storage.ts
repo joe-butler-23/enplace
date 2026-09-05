@@ -30,6 +30,7 @@ export type CookbookConnection = {
   onRemoteSync: (listener: () => void) => () => void;
   status: () => CookbookStatus;
   onStatus: (listener: (status: CookbookStatus) => void) => () => void;
+  publish: () => void;
   close: () => Promise<void>;
 };
 const LOCAL_ORIGIN = Symbol("enplace-cookbook-local-write");
@@ -214,13 +215,18 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     });
     provider.connect();
   };
-  if (deferredRelay || options.onFirstLocalWrite) {
+  let publicationPending = deferredRelay || Boolean(options.onFirstLocalWrite);
+  const publish = (): void => {
+    if (!publicationPending) return;
+    publicationPending = false;
+    if (localWriteListener) doc.off("afterTransaction", localWriteListener);
+    localWriteListener = null;
+    options.onFirstLocalWrite?.();
+    if (deferredRelay) connectRelay();
+  };
+  if (publicationPending) {
     localWriteListener = (transaction: Y.Transaction): void => {
-      if (transaction.origin !== LOCAL_ORIGIN || transaction.changed.size === 0) return;
-      doc.off("afterTransaction", localWriteListener!);
-      localWriteListener = null;
-      options.onFirstLocalWrite?.();
-      if (deferredRelay) connectRelay();
+      if (transaction.origin === LOCAL_ORIGIN && transaction.changed.size > 0) publish();
     };
     doc.on("afterTransaction", localWriteListener);
   }
@@ -233,6 +239,7 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     onRemoteSync(listener) { syncListeners.add(listener); return () => syncListeners.delete(listener); },
     status: () => status,
     onStatus(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    publish,
     async close() {
       if (closed) return;
       closed = true;
