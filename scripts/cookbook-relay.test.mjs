@@ -192,10 +192,10 @@ describe("cookbook relay hardening", () => {
       "--max-rooms", "5",
       "--max-connections", "5",
     ]);
-    const room = "a".repeat(26);
+    const room = "e1-" + "0".repeat(64);
     const first = await openClient(relay.url, room);
 
-    for (const requestPath of ["/%E0%A4%A", "/%", "/short", `/${"A".repeat(26)}`]) {
+    for (const requestPath of ["/%E0%A4%A", "/%", "/short", `/e1-${"A".repeat(64)}`]) {
       expect(await malformedUpgrade(relay.url, requestPath)).toMatch(/^HTTP\/1\.1 400 Bad Request/);
       expect(relay.child.exitCode).toBeNull();
     }
@@ -211,8 +211,8 @@ describe("cookbook relay hardening", () => {
     const persist = await mkdtemp(path.join(os.tmpdir(), "mep-relay-persist-"));
     temporaryDirectories.add(persist);
     const relay = await startDirectRelay({ persist, maxRooms: 1 });
-    const firstRoom = "b".repeat(26);
-    const otherRoom = "c".repeat(26);
+    const firstRoom = "e1-" + "1".repeat(64);
+    const otherRoom = "e1-" + "2".repeat(64);
     const writer = await openClient(relay.url, firstRoom);
     writeText(writer.doc, "Shopping.md", "persisted shopping\n");
     const witness = await openClient(relay.url, firstRoom);
@@ -235,53 +235,53 @@ describe("cookbook relay hardening", () => {
 
   it("closes only the socket whose message exceeds the configured limit", async () => {
     const relay = await startDirectRelay({ maxMessageBytes: 128, maxDocumentBytes: 32, maxAwarenessBytes: 24 });
-    const oversized = await openRaw(`${relay.url}/${"d".repeat(26)}`);
+    const oversized = await openRaw(`${relay.url}/${"e1-" + "3".repeat(64)}`);
     const closed = once(oversized, "close");
     oversized.send(Buffer.alloc(129));
     const [code] = await within(closed, "oversized socket to close");
     expect(code).toBe(1009);
 
-    await expect(openClient(relay.url, "e".repeat(26))).resolves.toBeDefined();
+    await expect(openClient(relay.url, "e1-" + "4".repeat(64))).resolves.toBeDefined();
   });
 
   it("rejects a document update over the room limit without affecting another room", async () => {
     const relay = await startDirectRelay({ maxMessageBytes: 4_096, maxDocumentBytes: 256, maxAwarenessBytes: 1_024 });
-    const oversized = await openClient(relay.url, "f".repeat(26));
+    const oversized = await openClient(relay.url, "e1-" + "5".repeat(64));
     const closed = once(oversized.provider.ws, "close");
     oversized.doc.getMap("files").set("cover.webp", new Uint8Array(512));
     const [code] = await within(closed, "oversized document socket to close");
     expect(code).toBe(1009);
 
-    await expect(openClient(relay.url, "g".repeat(26))).resolves.toBeDefined();
+    await expect(openClient(relay.url, "e1-" + "6".repeat(64))).resolves.toBeDefined();
   });
 
   it("limits one awareness identity per connection and keeps the relay available", async () => {
     const relay = await startDirectRelay();
-    const socket = await openRaw(`${relay.url}/${"j".repeat(26)}`);
+    const socket = await openRaw(`${relay.url}/${"e1-" + "9".repeat(64)}`);
     const closed = once(socket, "close");
     socket.send(awarenessFrame(101, { user: "first" }));
     socket.send(awarenessFrame(202, { user: "second" }));
     const [code] = await within(closed, "awareness policy socket to close");
     expect(code).toBe(1008);
 
-    await expect(openClient(relay.url, "k".repeat(26))).resolves.toBeDefined();
+    await expect(openClient(relay.url, "e1-" + "a".repeat(64))).resolves.toBeDefined();
   });
 
   it("caps awareness update bytes without affecting another room", async () => {
     const relay = await startDirectRelay({ maxAwarenessBytes: 64 });
-    const socket = await openRaw(`${relay.url}/${"l".repeat(26)}`);
+    const socket = await openRaw(`${relay.url}/${"e1-" + "b".repeat(64)}`);
     const closed = once(socket, "close");
     socket.send(awarenessFrame(303, { value: "x".repeat(128) }));
     const [code] = await within(closed, "oversized awareness socket to close");
     expect(code).toBe(1009);
 
-    await expect(openClient(relay.url, "m".repeat(26))).resolves.toBeDefined();
+    await expect(openClient(relay.url, "e1-" + "c".repeat(64))).resolves.toBeDefined();
   });
 
   it("enforces the concurrent connection limit without disturbing accepted sockets", async () => {
     const relay = await startDirectRelay({ maxConnections: 1 });
-    const accepted = await openClient(relay.url, "h".repeat(26));
-    const rejected = new WebSocket(`${relay.url}/${"i".repeat(26)}`);
+    const accepted = await openClient(relay.url, "e1-" + "7".repeat(64));
+    const rejected = new WebSocket(`${relay.url}/${"e1-" + "8".repeat(64)}`);
     rejected.on("error", () => {});
     const [request, response] = await within(once(rejected, "unexpected-response"), "connection rejection");
     request.destroy();

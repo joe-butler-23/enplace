@@ -17,7 +17,6 @@ import {
 import { seedSampleCovers, seedSamplePack } from "./cookbook/sample-pack";
 import { backfillCookbookCovers } from "./cookbook/covers";
 import { preserveCookbookHash } from "./standalone/pwa-route";
-import { isEncryptedCookbookId } from "./cookbook/crypto";
 import { installManifest } from "./standalone/manifest";
 
 // Historical kitchens key stays unchanged so unpublished state survives the rename.
@@ -77,11 +76,6 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
   const rememberedId = currentCookbookId();
   const createdHere = linkedId === null && rememberedId === null;
   const id = linkedId ?? rememberedId ?? newCookbookId();
-  if (!isEncryptedCookbookId(id)) {
-    const { showLegacyUpgrade } = await import("./cookbook/legacy-upgrade");
-    await showLegacyUpgrade(id, configuredRelayUrl(), signal);
-    return null;
-  }
   if (createdHere) setCookbookUnpublished(id, true);
   const unpublished = unpublishedCookbookIds().has(id);
   setCurrentCookbookId(id);

@@ -344,15 +344,12 @@ export function newCookbookId(): string {
   return "e1_" + Array.from(bytes, (byte) => ID_ALPHABET[byte % 32]).join("");
 }
 
-export function isCookbookId(value: string): boolean {
-  return isEncryptedCookbookId(value) || /^[a-z2-7]{26}$/.test(value);
-}
+export const isCookbookId = isEncryptedCookbookId;
 
 /**
  * The cookbook id travels in the URL fragment, which browsers never send with the page request,
  * so it stays out of the static host's logs. Encrypted links never become relay room names.
  */
-// Historical kitchen links keep the `k` hash parameter so existing URLs still open.
 export function cookbookIdFromUrl(url: string | URL): string | null {
   const hash = new URL(url, "http://localhost").hash.replace(/^#/, "");
   const value = new URLSearchParams(hash).get("k") ?? "";

@@ -36,20 +36,6 @@ browser remain trusted: code running as the app can read its key and local data.
 CSP and encryption do not protect against a malicious replacement of the app
 itself. Exports are deliberately ordinary unencrypted files.
 
-## Previous cookbooks
-
-Old 26-character links were also relay room names and cannot safely become
-secret encryption keys. Opening one offers a one-time upgrade: read its previous
-shared copy without sending document updates, merge the device's saved copy,
-commit a new cookbook locally, then open a fresh encrypted link. The user sends
-that link to their partner. The previous IndexedDB copy and room are retained
-for recovery; historical plaintext is not retroactively made private. An
-unavailable relay blocks upgrading so recent partner changes are not silently
-omitted; the saved local copy remains downloadable.
-
-Only new encrypted rooms have the ciphertext-only guarantee. Retiring historical
-rooms requires a separate data-retention decision after users have migrated.
-
 ## Rendering and network boundary
 
 `RecipeMarkdown.tsx` escapes user-authored HTML, renders Markdown with `marked`,

@@ -14,7 +14,7 @@ import * as Y from "yjs";
 
 const CHUNK_BYTES = 100_000;
 const CHUNK_COUNT_KEY = "chunks";
-const ROOM_ID = /^(?:[a-z2-7]{26}|e1-[a-f0-9]{64})$/;
+const ROOM_ID = /^e1-[a-f0-9]{64}$/;
 const ROOM_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 

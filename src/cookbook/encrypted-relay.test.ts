@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
@@ -9,7 +9,6 @@ import { openCookbook, type CookbookConnection } from "../host-client/cookbook-s
 import { newCookbookId, readCookbookText } from "./doc";
 import { SEALED_RECORDS } from "./encrypted-provider";
 import { cookbookCipher } from "./crypto";
-import { readLegacyCookbook } from "./legacy-upgrade";
 
 function received(connection: CookbookConnection, expected: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -64,35 +63,3 @@ it("persists only ciphertext and restores a cookbook after all clients and the r
     await rm(directory, { recursive: true, force: true });
   }
 }, 15_000);
-
-it("downloads a previous cookbook with only a receive request and leaves its stored bytes untouched", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "enplace-previous-relay-"));
-  const id = "abcdefghijklmnopqrstuvwxyz";
-  const source = new Y.Doc();
-  source.getText("previous").insert(0, "historical recipe");
-  const original = Y.encodeStateAsUpdate(source);
-  source.destroy();
-  await writeFile(join(directory, `${id}.yjs`), original);
-  const sent: unknown[] = [];
-  class ReadOnlySocket extends WebSocket {
-    override send(data: Parameters<WebSocket["send"]>[0]): void {
-      sent.push(data);
-      super.send(data);
-    }
-  }
-  const relay = await startRelay({ persist: directory });
-  try {
-    const update = await readLegacyCookbook(relay.url, id, new AbortController().signal,
-      ReadOnlySocket as unknown as typeof globalThis.WebSocket);
-    const downloaded = new Y.Doc();
-    Y.applyUpdate(downloaded, update);
-    expect(downloaded.getText("previous").toString()).toBe("historical recipe");
-    downloaded.destroy();
-    expect(sent).toEqual([new Uint8Array([0, 0, 1, 0])]);
-    await relay.close();
-    expect(new Uint8Array(await readFile(join(directory, `${id}.yjs`)))).toEqual(original);
-  } finally {
-    await relay.close();
-    await rm(directory, { recursive: true, force: true });
-  }
-});

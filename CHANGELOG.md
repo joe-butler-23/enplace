@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The one-time upgrade path for links from before encryption: those links, rooms, and saved plaintext copies are no longer read (user decision 2026-09-05)
+
 ### Fixed
 
 - Shared shopping ticks no longer stall behind whole-cookbook uploads: the encrypted wire document is now the persisted copy, so opening syncs only the records a device lacks, small edits fold together instead of triggering a full snapshot every 64 records, and a snapshot is written only when the log holds more than twice the live cookbook

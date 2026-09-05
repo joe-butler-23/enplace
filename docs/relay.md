@@ -28,9 +28,8 @@ its saved copy can repopulate it.
 
 After the root `npm ci`, deploy with `npm run deploy --workspace=enplace-relay`,
 then build/deploy the app with `scripts/deploy-site.sh`. Both require the configured
-Wrangler account. Existing 26-character rooms remain available for the one-time
-upgrade; their historical plaintext has not become encrypted by deploying this
-version. Never describe those retained rooms as confidential from their operator.
+Wrangler account. Only encrypted rooms are accepted; rooms from before
+encryption expire under the retention alarm and are not readable by this version.
 
 ## Running a relay
 

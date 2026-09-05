@@ -49,7 +49,7 @@ beforeAll(async () => {
 afterAll(async () => { await runtime?.dispose(); });
 
 it('rejects incomplete stored snapshots before a websocket can receive false-empty sync', async () => {
-  const id = 'aaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const id = 'e1-' + 'a'.repeat(64);
   await runtime.dispatchFetch(`http://relay/seed?id=${id}`, {
     method: 'POST', body: JSON.stringify({ chunks: 2, 'chunk:0': [0] }),
   });
@@ -82,7 +82,7 @@ it('rejects incomplete stored snapshots before a websocket can receive false-emp
 });
 
 it('accepts a complete deliberately empty snapshot', async () => {
-  const id = 'bbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const id = 'e1-' + 'b'.repeat(64);
   const doc = new Y.Doc();
   const update = Y.encodeStateAsUpdate(doc);
   doc.destroy();

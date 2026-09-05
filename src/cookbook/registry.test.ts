@@ -15,7 +15,7 @@ class MemoryStorage implements Storage {
   setItem(key: string, value: string): void { this.values.set(key, value); }
 }
 
-const id = "abcdefghijklmnopqrstuvwxyz";
+const id = "e1_" + "a".repeat(52);
 
 describe("cookbook registry", () => {
   beforeEach(() => vi.stubGlobal("localStorage", new MemoryStorage()));
