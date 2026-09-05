@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `f518cf13566a`, 2026-09-05.
+> Published snapshot of a private repository, refreshed at each release. Source commit `d5646f596a66`, 2026-09-05.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -27,7 +27,7 @@ Opening Enplace makes a cookbook and gives it a private link. The cookbook lives
 
 ## Your files
 
-Everything is plain Markdown. Download the whole cookbook as a zip from Settings at any time, or run `mep mirror` to keep a folder on disk in step with the cookbook in both directions, so Obsidian, Syncthing, and your own scripts work on ordinary files.
+Everything exports as plain Markdown and images. Download the whole cookbook as a zip from Settings, or import files and zip archives. Transfers are explicit: shared changes never write into a local folder.
 
 ## Adding recipes
 
@@ -35,11 +35,11 @@ Paste a recipe as Markdown, import files or a zip from Settings, or let an assis
 
 ## Sharing and sync
 
-Devices sync through a small relay that speaks the Yjs websocket protocol. The hosted app points at one by default; you can run your own with `node scripts/cookbook-relay.mjs` and set `VITE_ENPLACE_RELAY_URL` when building the app. See [docs/relay.md](docs/relay.md).
+Devices encrypt cookbook updates before sending them through the Yjs websocket relay. The private link contains the secret; the relay receives a separately derived room id and ciphertext. The hosted app points at one by default; you can run your own with `node scripts/cookbook-relay.mjs` and set `VITE_ENPLACE_RELAY_URL` when building the app. See [docs/relay.md](docs/relay.md).
 
 ## Optional CLI
 
-For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI can check or add recipes, list a folder's recipes, rebuild `Shopping.md` for a planned week, and mirror a folder to a cookbook. Start a mirror with `mep mirror --folder <dir> --cookbook <link-or-id> --relay <wss-url>` (or `ENPLACE_RELAY_URL`); later runs need only `mep mirror --folder <dir>` because `.mep-mirror/association.json` retains the cookbook and relay association and exact merge baselines. Supplying a different cookbook or relay is an error. Build the CLI from this repository with `npm run build:cli`; the web app does not require it.
+For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI checks, adds or converts recipes, lists a folder’s recipes, and rebuilds `Shopping.md` for a planned week. Import its files into the PWA deliberately. Build it with `npm run build:cli`; the web app does not require it.
 
 ## Development
 

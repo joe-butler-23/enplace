@@ -1,4 +1,5 @@
 import * as React from "react";
+import DOMPurify from "dompurify";
 import { parse, parseInline, Renderer, type Tokens } from "marked";
 
 export type RecipeImageResources = { resolveImage: (src: string, path: string) => string | null };
@@ -47,8 +48,17 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function decodeTarget(target: string): string {
+  if (!target.includes("&")) return target;
+  const decoder = document.createElement("textarea");
+  // Decode character references in a detached raw-text element. Escaping '<'
+  // ensures user input cannot introduce any element or leave that context.
+  decoder.innerHTML = target.replace(/</g, "&lt;");
+  return decoder.value;
+}
+
 function isAllowedTarget(target: string): boolean {
-  const normalized = target.trim().replace(/[\u0000-\u0020\u007f]+/g, "");
+  const normalized = decodeTarget(target).trim().replace(/[\u0000-\u0020\u007f]+/g, "");
   if (!normalized || normalized.startsWith("//") || normalized.startsWith("\\")) return false;
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(normalized)?.[1]?.toLowerCase();
   return scheme === undefined || scheme === "http" || scheme === "https" || scheme === "mailto" || scheme === "tel";
@@ -67,31 +77,23 @@ function isAllowedAttribute(tag: string, name: string, value: string): boolean {
   if (name === "checked" || name === "disabled") return tag === "input" && value === "";
   if (name === "start") return /^-?\d+$/.test(value);
   if (name === "align") return value === "left" || value === "center" || value === "right";
-  if (name === "src") return !/^\s*(?:javascript|vbscript):/i.test(value);
+  if (name === "src") return /^(?:blob:|data:image\/(?:png|jpeg|gif|webp|avif);|\/(?![\\/]))/i.test(value);
   return true;
 }
 
-/**
- * Marked emits only the tags below, but this final pass makes that boundary explicit: any
- * unexpected tag or attribute is discarded before React gives the string to the browser.
- * User-authored HTML has already been escaped by the renderer's `html` hook.
- */
-function sanitizeRenderedHtml(html: string): string {
-  return html.replace(/<(\/?)([a-z][a-z0-9-]*)([^<>]*)>/gi, (_tag, slash: string, rawName: string, rawAttributes: string) => {
-    const name = rawName.toLowerCase();
-    if (!Object.prototype.hasOwnProperty.call(allowedAttributes, name)) return "";
-    if (slash) return `</${name}>`;
+// DOMPurify parses with the browser's HTML parser before checking decoded attributes.
+// Raw recipe HTML remains escaped; only Markdown-generated HTML reaches this boundary.
+DOMPurify.addHook("uponSanitizeAttribute", (node, attribute) => {
+  attribute.keepAttr = isAllowedAttribute(node.nodeName.toLowerCase(), attribute.attrName, attribute.attrValue);
+});
 
-    const attributes: string[] = [];
-    const attributePattern = /([a-z][a-z0-9-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/gi;
-    for (const match of rawAttributes.matchAll(attributePattern)) {
-      const attributeName = match[1].toLowerCase();
-      const value = match[2] ?? match[3] ?? match[4] ?? "";
-      if (isAllowedAttribute(name, attributeName, value)) {
-        attributes.push(`${attributeName}="${value}"`);
-      }
-    }
-    return `<${name}${attributes.length ? ` ${attributes.join(" ")}` : ""}>`;
+function sanitizeRenderedHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: Object.keys(allowedAttributes),
+    ALLOWED_ATTR: [...new Set(Object.values(allowedAttributes).flatMap((attributes) => [...attributes]))],
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+    ADD_URI_SAFE_ATTR: ["src"], // The hook permits only local image resources, including blob URLs.
   });
 }
 
@@ -113,7 +115,7 @@ function rendererFor(path: string, resolveImage: RecipeImageResources["resolveIm
       return `<span style="${UNSAFE_LINK_STYLE}">${escapeHtml(text)}</span>`;
     }
     const linkTitle = title ? ` title="${escapeHtml(title)}"` : "";
-    return `<a href="${escapeHtml(href)}"${linkTitle}>${this.parser.parseInline(tokens)}</a>`;
+    return `<a href="${escapeHtml(decodeTarget(href))}"${linkTitle}>${this.parser.parseInline(tokens)}</a>`;
   };
   return renderer;
 }

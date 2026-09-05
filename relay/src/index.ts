@@ -6,7 +6,7 @@ import * as Y from "yjs";
  * The Enplace cookbook relay on Cloudflare.
  *
  * One Durable Object per cookbook, named by the cookbook id. `YServer` speaks the y-websocket
- * protocol the app and `mep mirror` already use, so a client connects to
+ * protocol the encrypted browser projection uses, so a client connects to
  * `wss://<worker>/parties/kitchen/<cookbook-id>`. The document is kept in the object's
  * storage as chunks of one Yjs update, so a cookbook survives every client disconnecting
  * and is there when the next device opens the link.
@@ -14,7 +14,7 @@ import * as Y from "yjs";
 
 const CHUNK_BYTES = 100_000;
 const CHUNK_COUNT_KEY = "chunks";
-const ROOM_ID = /^[a-z2-7]{26}$/;
+const ROOM_ID = /^(?:[a-z2-7]{26}|e1-[a-f0-9]{64})$/;
 const ROOM_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 

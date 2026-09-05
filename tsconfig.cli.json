@@ -14,10 +14,6 @@
     ]
   },
   "include": [
-    "cli/index.ts",
-    "cli/mirror.ts",
-    "src/core.ts",
-    "src/cookbook/doc.ts",
-    "src/cookbook/merge.ts"
+    "cli/index.ts"
   ]
 }

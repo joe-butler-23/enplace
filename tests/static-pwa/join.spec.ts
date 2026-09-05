@@ -1,4 +1,6 @@
+import { createEmptyCookbookConnection } from "./helpers";
 import { randomBytes } from "node:crypto";
+import { type CookbookConnection } from "../../src/host-client/cookbook-storage";
 import { expect, test, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
 
 const OFFLINE_RELOAD_TITLES = new Set([
@@ -15,11 +17,23 @@ const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 const NOT_DOWNLOADED = /This device hasn't downloaded this cookbook yet/;
 
 function newCookbookId(): string {
-  return Array.from(randomBytes(26), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
+  return "e1_" + Array.from(randomBytes(52), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
+}
+
+const fixtureConnections: CookbookConnection[] = [];
+
+test.afterEach(async () => {
+  await Promise.all(fixtureConnections.splice(0).map((connection) => connection.close()));
+});
+
+async function publishedEmptyCookbook(): Promise<string> {
+  const connection = await createEmptyCookbookConnection();
+  fixtureConnections.push(connection);
+  return connection.id;
 }
 
 function cookbookId(page: Page): string {
-  const id = new URL(page.url()).hash.match(/^#k=([a-z2-7]{26})$/)?.[1];
+  const id = new URL(page.url()).hash.match(/^#k=(e1_[a-z2-7]{52})$/)?.[1];
   if (!id) throw new Error(`Page has no cookbook id: ${page.url()}`);
   return id;
 }
@@ -178,7 +192,7 @@ test("a linked device persists successful first sync for offline reopen", async 
 
 test("first-sync marker transaction failure fails closed without browser errors", async ({ page }) => {
   await page.goto("/");
-  const id = newCookbookId();
+  const id = await publishedEmptyCookbook();
   await precreateIncompatibleCookbookDatabase(page, id);
   await page.addInitScript(() => {
     const state = window as typeof window & { __unhandledRejections?: string[] };
@@ -199,6 +213,10 @@ test("first-sync marker transaction failure fails closed without browser errors"
 });
 
 test("fresh sample cookbook publishes when its link section is shown", async ({ page, browser }) => {
+  // WebKit's offline emulation can still connect a WebSocket. Hold the actual
+  // handshake so the unavailable relay state is owned by this fixture.
+  let release: (() => void) | undefined;
+  await page.context().routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });
   const id = await openFreshCookbook(page);
   await page.reload();
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
@@ -206,13 +224,12 @@ test("fresh sample cookbook publishes when its link section is shown", async ({ 
   const partner = await partnerContext.newPage();
   try {
     await partner.goto(`/#k=${id}`);
-    await expect(partner.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
+    await expect(partner.locator(".mep-shell")).toHaveCount(0);
 
-    await page.context().setOffline(true);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    // Connecting reads as preparation; a socket that has already failed reads as offline. Either is honest here.
-    await expect(page.getByText(/^(Preparing the shared copy…|Offline\. Changes will sync when the relay reconnects\.)$/)).toBeVisible();
-    await page.context().setOffline(false);
+    await expect(page.getByText("Preparing the shared copy…", { exact: true })).toBeVisible();
+    await expect.poll(() => Boolean(release)).toBe(true);
+    release!();
     await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
     await expect(partner.getByText("11 recipes", { exact: true })).toBeVisible();
   } finally {
@@ -328,7 +345,7 @@ test("database-open failure is a storage error without an unhandled rejection", 
 });
 
 test("an asynchronous first-copy abort after the warning reports storage failure", async ({ page }) => {
-  const id = newCookbookId();
+  const id = await publishedEmptyCookbook();
   let release!: () => void;
   await page.routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });
   await page.addInitScript(() => {
@@ -359,7 +376,7 @@ test("an asynchronous first-copy abort after the warning reports storage failure
 
 
 test("a first sync of an empty cookbook reopens offline", async ({ page, context }) => {
-  const id = newCookbookId();
+  const id = await publishedEmptyCookbook();
   await page.goto(`/#k=${id}`);
   await expect(page.getByRole('heading', { name: 'No recipes yet' })).toBeVisible();
   expect((await cookbookPersistenceCounts(page, id)).markers).toBe(1);

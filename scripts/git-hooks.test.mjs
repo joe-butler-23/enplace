@@ -134,7 +134,7 @@ function assertReleaseContract(state) {
   assert.equal(rootPackage.scripts["typecheck:app"], "tsc --noEmit");
   assert.equal(rootPackage.scripts.typecheck, "npm run typecheck:app && npm run typecheck --workspace=enplace-relay");
   assert.equal(rootPackage.scripts["build:static"], "npm run build:sample-pack && vite build --mode static");
-  assert.equal(rootPackage.scripts["build:cli"], "tsc -p tsconfig.cli.json");
+  assert.equal(rootPackage.scripts["build:cli"], "rm -rf dist-cli && tsc -p tsconfig.cli.json");
   assert.equal(rootPackage.scripts["build:release"], "npm run build:static && npm run build:cli && npm run build --workspace=enplace-relay");
   for (const hook of rootLifecycleHooks) assert.equal(rootPackage.scripts[hook], undefined);
   assert.equal(relayPackage.scripts.types, "wrangler types");

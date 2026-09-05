@@ -16,7 +16,7 @@ const relayReadyFile = {
 
 async function createCookbookWithRecipe(page: Page): Promise<void> {
   await page.goto("/");
-  await expect(page).toHaveURL(/#k=[a-z2-7]{26}$/);
+  await expect(page).toHaveURL(/#k=e1_[a-z2-7]{52}$/);
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Settings" }).click();
   const input = page.locator(".mep-settings__file-button", { hasText: "Import files" }).locator('input[type="file"]');

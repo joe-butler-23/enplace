@@ -1,6 +1,6 @@
 # Static application security headers
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' __ENPLACE_RELAY_ORIGIN__; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 

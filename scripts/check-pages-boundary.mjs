@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const routes = ["/", "/index.html", "/shopping", "/planner", "/settings"];
 const security = {
-  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss://enplace-relay.joesdownloads.workers.dev; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
 };
@@ -28,8 +28,8 @@ export async function resolveInstalledWrangler(root = process.cwd()) {
   return { bin: target, version };
 }
 
-export function assertBoundaryHeaders(response, expectedLink) {
-  for (const [name, value] of Object.entries(security)) assert.equal(response.headers.get(name), value);
+export function assertBoundaryHeaders(response, expectedLink, expectedCsp = security["content-security-policy"]) {
+  for (const [name, value] of Object.entries(security)) assert.equal(response.headers.get(name), name === "content-security-policy" ? expectedCsp : value);
   if (expectedLink !== undefined) assert.equal(response.headers.get("link"), expectedLink);
 }
 
@@ -109,7 +109,12 @@ async function runPagesBoundary() {
     resolveInstalledWrangler(), readFile(path.join(dist, "_headers"), "utf8"), readFile("public/_headers", "utf8"),
     readFile(path.join(dist, "index.html"), "utf8"), readdir(dist, { recursive: true }),
   ]);
-  assert(headers.startsWith(`${sourceHeaders.trimEnd()}\n\n`));
+  const relay = process.env.VITE_ENPLACE_RELAY_URL ?? (await readFile(".env.static", "utf8")).match(/^VITE_ENPLACE_RELAY_URL=(.*)$/m)?.[1];
+  const relayOrigin = relay ? new URL(relay).origin : "";
+  const expectedHeaders = sourceHeaders.trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", relayOrigin);
+  assert(headers.startsWith(`${expectedHeaders}\n\n`));
+  const expectedCsp = expectedHeaders.match(/Content-Security-Policy: (.*)/)?.[1];
+  assert(expectedCsp && !expectedCsp.includes("__ENPLACE") && !/connect-src[^;]*(?:\*| wss:;)/.test(expectedCsp));
 
   const existing = new Set(files.map((file) => `/${file}`));
   const generated = headers.split("# Generated from this build's navigation-shell assets.\n");
@@ -131,7 +136,7 @@ async function runPagesBoundary() {
   await withWranglerProcess({ bin, directory: dist, version }, async (base) => {
     async function check(url, { status = 200, type, body, cache, link }) {
       const response = await fetch(`${base}${url}`, { redirect: "manual" });
-      assertBoundaryHeaders(response, link);
+      assertBoundaryHeaders(response, link, expectedCsp);
       for (const name of ["cross-origin-opener-policy", "cross-origin-embedder-policy", "cross-origin-resource-policy"])
         assert.equal(response.headers.get(name), null);
       assert.equal(response.status, status);

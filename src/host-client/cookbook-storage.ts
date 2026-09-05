@@ -1,5 +1,5 @@
 import { IndexeddbPersistence } from "y-indexeddb";
-import { WebsocketProvider } from "y-websocket";
+import { EncryptedCookbookProvider } from "../cookbook/encrypted-provider";
 import * as Y from "yjs";
 import type { VaultStorageAdapter } from "./browser-storage";
 import {
@@ -129,7 +129,7 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
   const listeners = new Set<(status: CookbookStatus) => void>();
   const deferredRelay = Boolean(options.relayUrl && options.deferRelayUntilLocalWrite);
   let status: CookbookStatus = options.relayUrl && !deferredRelay ? "connecting" : "local-only";
-  let provider: WebsocketProvider | null = null;
+  let provider: EncryptedCookbookProvider | null = null;
   let localWriteListener: ((transaction: Y.Transaction) => void) | null = null;
   let localCopy: LocalCopyState = hasLocalCopy ? "ready" : "pending";
   let firstCopyWrite: Promise<void> | null = null;
@@ -194,24 +194,28 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
   const connectRelay = (): void => {
     if (!options.relayUrl || provider || closed) return;
     setStatus("connecting");
-    // Relay room names remain the same ids used by the historical kitchen client.
-    provider = new WebsocketProvider(options.relayUrl, options.id, doc, {
-      connect: false, WebSocketPolyfill: options.WebSocketPolyfill,
-    });
-    provider.on("sync", (synced: boolean) => {
-      if (!synced || closed) return;
-      if (!remoteSynced) {
-        remoteSynced = true;
-        syncListeners.forEach((listener) => listener());
-      }
-      if (localCopy === "ready" || firstCopyWrite) return;
-      firstCopyWrite = markLocalCopy();
-      void firstCopyWrite.then(() => setLocalCopy("ready"), (error) => {
-        setLocalCopy(error instanceof Error ? error : new Error("Could not persist the cookbook."));
-      });
-    });
-    provider.on("status", ({ status: next }) => {
-      if (!closed) setStatus(next === "disconnected" ? "offline" : next);
+    provider = new EncryptedCookbookProvider(options.relayUrl, options.id, doc, {
+      WebSocketPolyfill: options.WebSocketPolyfill,
+      hasLocalCopy: localCopy === "ready",
+      onSync() {
+        if (closed) return;
+        if (!remoteSynced) {
+          remoteSynced = true;
+          syncListeners.forEach((listener) => listener());
+        }
+        if (localCopy === "ready" || firstCopyWrite) return;
+        firstCopyWrite = markLocalCopy();
+        void firstCopyWrite.then(() => setLocalCopy("ready"), (error) => {
+          setLocalCopy(error instanceof Error ? error : new Error("Could not persist the cookbook."));
+        });
+      },
+      onStatus(next) { if (!closed) setStatus(next); },
+      onError(error) {
+        if (closed) return;
+        setLocalCopy(error);
+        setStatus("offline");
+        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("mep-notice", { detail: error.message }));
+      },
     });
     provider.connect();
   };

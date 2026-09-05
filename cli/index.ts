@@ -18,28 +18,19 @@ export type ExecuteOptions = {
   cwd?: string;
   stdin?: string;
   now?: Date;
-  log?: (line: string) => void;
-  signal?: AbortSignal;
 };
 
-const valueOptions = new Set(["--folder", "--week", "--cookbook", "--relay"]);
+const valueOptions = new Set(["--folder", "--week"]);
 const recipeCommands = new Set(["check", "add", "convert"]);
 
 function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
-  if (!command || !["check", "add", "convert", "list", "shop", "mirror"].includes(command)) {
-    throw new Error("usage: mep <check|add|convert|list|shop|mirror> [options]\n"
-      + "       mep mirror --folder <dir> [--cookbook <link-or-id>] [--relay <wss-url>] [--once]");
+  if (!command || !["check", "add", "convert", "list", "shop"].includes(command)) {
+    throw new Error("usage: mep <check|add|convert|list|shop> [options]");
   }
   if (recipeCommands.has(command) && positional.length !== 1) throw new Error(`${command} needs one <file|->`);
-  if (["list", "shop", "mirror"].includes(command) && positional.length) throw new Error(`${command} takes no file argument`);
+  if (["list", "shop"].includes(command) && positional.length) throw new Error(`${command} takes no file argument`);
   if (options.has("--week") && command !== "shop") throw new Error("--week is only valid with shop");
-  if ((options.has("--cookbook") || options.has("--relay") || options.has("--once")) && command !== "mirror") {
-    throw new Error("--cookbook, --relay, and --once are only valid with mirror");
-  }
-  if (command === "mirror") {
-    if (!options.has("--folder")) throw new Error("mirror needs --folder <dir>");
-    if (options.has("--json")) throw new Error("--json is not valid with mirror");
-  }
+
 }
 
 function argumentsFor(argv: string[], cwd: string) {
@@ -47,7 +38,7 @@ function argumentsFor(argv: string[], cwd: string) {
   const options = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === "--json" || value === "--once") {
+    if (value === "--json") {
       options.set(value, "");
       continue;
     }
@@ -69,9 +60,6 @@ function argumentsFor(argv: string[], cwd: string) {
     folder: folder === undefined ? cwd : path.resolve(cwd, folder),
     json: options.has("--json"),
     week: options.get("--week"),
-    cookbook: options.get("--cookbook"),
-    relay: options.get("--relay"),
-    once: options.has("--once"),
   };
 }
 
@@ -207,24 +195,6 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
   const args = argumentsFor(argv, options.cwd ?? process.cwd());
   if (!(await stat(args.folder).catch(() => null))?.isDirectory()) throw new Error(`folder not found: ${args.folder}`);
 
-  if (args.command === "mirror") {
-    // Decide the argument error before loading the mirror's relay dependencies.
-    if (!args.cookbook && !(await exists(path.join(args.folder, ".mep-mirror", "association.json")))) {
-      throw new Error("mirror needs --cookbook <link-or-id> for an unassociated folder");
-    }
-    const { mirrorCookbook } = await import("./mirror.js");
-    await mirrorCookbook({
-      folder: args.folder,
-      cookbook: args.cookbook,
-      relay: args.relay ?? process.env.ENPLACE_RELAY_URL,
-      once: args.once,
-      log: options.log,
-      signal: options.signal,
-      now: options.now ? () => options.now! : undefined,
-    });
-    return "";
-  }
-
   if (recipeCommands.has(args.command)) return runRecipeCommand(args, options.stdin);
   const recipes = scanRecipes(await recipeFiles(args.folder));
   if (args.command === "list") {
@@ -244,7 +214,7 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
 
 async function main(): Promise<void> {
   try {
-    process.stdout.write(await execute(process.argv.slice(2), { log: (line) => process.stdout.write(line) }));
+    process.stdout.write(await execute(process.argv.slice(2)));
   }
   catch (error) {
     const message = error instanceof Error ? error.message : String(error);

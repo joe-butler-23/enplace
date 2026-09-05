@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { isEncryptedCookbookId } from "./crypto";
 
 /**
  * The cookbook document schema.
@@ -16,7 +17,7 @@ import * as Y from "yjs";
  * racing to own the key, so neither device's content is discarded. Concurrent file/directory
  * collisions stay untouched in Yjs and receive filesystem-safe names through one derived projection.
  *
- * This module is shared by the browser adapter, the CLI mirror, and tests. It knows nothing
+ * This module is shared by browser code and tests. It knows nothing
  * about persistence or transport.
  */
 
@@ -334,22 +335,22 @@ export function observeCookbook(
 }
 
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
-const ID_LENGTH = 26;
+const ID_LENGTH = 52;
 
-/** 130 bits of randomness rendered as lowercase base32, so the link is unguessable and easy to read aloud. */
+/** 260 random bits in the fragment; the encrypted provider derives a separate public room id. */
 export function newCookbookId(): string {
   const bytes = new Uint8Array(ID_LENGTH);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => ID_ALPHABET[byte % 32]).join("");
+  return "e1_" + Array.from(bytes, (byte) => ID_ALPHABET[byte % 32]).join("");
 }
 
 export function isCookbookId(value: string): boolean {
-  return new RegExp(`^[${ID_ALPHABET}]{${ID_LENGTH}}$`).test(value);
+  return isEncryptedCookbookId(value) || /^[a-z2-7]{26}$/.test(value);
 }
 
 /**
  * The cookbook id travels in the URL fragment, which browsers never send with the page request,
- * so it stays out of the static host's logs. The relay does see it as the room name.
+ * so it stays out of the static host's logs. Encrypted links never become relay room names.
  */
 // Historical kitchen links keep the `k` hash parameter so existing URLs still open.
 export function cookbookIdFromUrl(url: string | URL): string | null {

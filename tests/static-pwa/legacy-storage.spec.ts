@@ -31,10 +31,13 @@ async function installPreRenameFixture(page: Page): Promise<void> {
   await page.unroute("**/__legacy_fixture__");
 }
 
-test("a pre-rename IndexedDB cookbook still opens", async ({ page }) => {
+test("a pre-rename IndexedDB cookbook upgrades without deleting its original copy", async ({ page }) => {
   await installPreRenameFixture(page);
   await page.goto(`/#k=${PRE_RENAME_COOKBOOK_ID}`);
 
+  await expect(page.getByRole("heading", { name: "Secure this cookbook" })).toBeVisible();
+  await page.getByRole("button", { name: "Upgrade cookbook", exact: true }).click();
+  await expect(page).toHaveURL(/#k=e1_[a-z2-7]{52}$/);
   await expect(page.getByRole("button", { name: "Open recipe Pre-rename proof soup" })).toBeVisible();
   const databases = await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name));
   expect(databases).toContain(`enplace-kitchen-${PRE_RENAME_COOKBOOK_ID}`);

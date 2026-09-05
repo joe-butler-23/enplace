@@ -1,48 +1,54 @@
 # Cookbook Relay
 
-A cookbook syncs between devices through a y-websocket relay: a small server that speaks the Yjs websocket protocol, keeps a copy of each document by room name, and fans updates out to connected clients. The room name is the cookbook id. Enplace runs no code on the relay.
+The relay speaks y-websocket and stores an opaque Yjs map of encrypted records.
+The browser owns the plaintext cookbook, encryption, authenticated decryption,
+and compaction; the relay never receives a new cookbook's link secret. See
+[security-baseline.md](security-baseline.md) for the encryption and trust boundary.
 
 ## Configuration
 
-- Build-time default: `.env.static` carries the production relay URL, so `npm run build:static` always bakes it in; a `VITE_ENPLACE_RELAY_URL` in the environment overrides it, which the browser suite uses for its local relay.
-- CLI first run: `mep mirror --folder <dir> --cookbook <link-or-id> --relay wss://…`, or use `ENPLACE_RELAY_URL`. The mirror stores that relay association under `.mep-mirror/`; later runs need only `--folder`, and a supplied mismatch is rejected.
+`.env.static` supplies the production `VITE_ENPLACE_RELAY_URL`; an environment
+value overrides it at build time. The build restricts CSP connections to that
+relay origin. Production requires `wss:`; loopback `ws:` is available for local
+development and synthetic tests. With no relay, cookbooks remain on the device.
 
-When a mirror folder is a symlink, the CLI resolves it once, logs the physical directory, and uses that physical directory as the configured root for descendant path and symlink checks. Mirror filesystem safety assumes the caller owns that physical root and its ancestors: no hostile process may exchange an ancestor symlink or mount while an operation is awaiting Node filesystem calls. Pre-existing symlinks are still refused, and ordinary concurrent file writers are handled by atomic quarantine, no-clobber publication, and recovery. This is a local concurrency contract, not a security boundary against a hostile same-user process or mount administrator.
+An untouched seeded cookbook stays local. Its first edit or opening the sharing
+section publishes the encrypted copy. A linked device connects immediately and
+waits for an authenticated record before treating an empty cookbook as ready.
+A device with an existing committed copy can open offline.
 
-With no relay configured, a cookbook lives only on the device that made it. The app says so in the Settings panel.
+## Hosted relay
 
-A cookbook created on this device stays local until its first non-seed edit, so an untouched sample cookbook never creates relay state. Cookbooks opened from a link or remembered registry connect immediately, while a locally cached cookbook can open without waiting for that connection.
+`relay/` is a Cloudflare Worker with one Durable Object per room (`y-partyserver`).
+It is deployed as `enplace-relay`; encrypted clients connect to
+`/parties/kitchen/e1-<derived-room-id>`. The historical `Kitchen` class and route
+remain wire identifiers. Storage holds chunked Yjs updates of the encrypted
+projection. A room expires after 180 days without a connection; a device with
+its saved copy can repopulate it.
 
-## The hosted relay
+After the root `npm ci`, deploy with `npm run deploy --workspace=enplace-relay`,
+then build/deploy the app with `scripts/deploy-site.sh`. Both require the configured
+Wrangler account. Existing 26-character rooms remain available for the one-time
+upgrade; their historical plaintext has not become encrypted by deploying this
+version. Never describe those retained rooms as confidential from their operator.
 
-Production runs `relay/`: a Cloudflare Worker with one Durable Object per cookbook (`y-partyserver`), deployed as `enplace-relay` on the account's `workers.dev` subdomain. Clients connect to `wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen/<cookbook-id>`, so the app is built with `VITE_ENPLACE_RELAY_URL=wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen`. Each cookbook is persisted in its object's storage as chunks of one Yjs update, so it survives every client leaving. The hosted Worker limits each WebSocket frame to 4 MiB and each stored Yjs document to 16 MiB; an oversized frame or document closes only its sending socket. A Durable Object deletes its stored room after 180 days with no connection. After the one root `npm ci`, deploy the relay with `npm run deploy --workspace=enplace-relay`, and the site with `scripts/deploy-site.sh`, which builds against `.env.static` and uploads `dist-static` (both need a logged-in `wrangler`); the free plan covers it.
-
-## Running one yourself
-
-The repository includes the reference y-websocket relay:
+## Running a relay
 
 ```bash
-npm run relay -- --port 1234 --host 127.0.0.1
+npm run relay -- --port 1234 --host 127.0.0.1 --persist ./cookbooks
 ```
 
-Add `--persist ./cookbooks` to write each room as a Yjs update file. Without it, a room is dropped when its last client disconnects. Put the relay behind TLS so the app can connect with `wss:`.
+Without `--persist`, a room is dropped after its last client disconnects. Put the
+relay behind TLS for a hosted app. Persistence contains ciphertext for encrypted
+cookbooks; it is not a plain-file export and does not mirror local recipe folders.
 
-Hosted options that speak the same protocol include Cloudflare Workers with Durable Objects (`y-partyserver`), which has a free tier large enough for hundreds of households. Relays are interchangeable because the document format is Yjs; moving between them is a matter of pointing the URL elsewhere and letting devices resync.
+The reference relay accepts encrypted derived room ids and historical ids used
+for migration. Its defaults are 32 MiB per message, 16 MiB per serialised room,
+64 KiB per awareness update, 1,000 rooms and 2,000 connections. The corresponding
+`--max-*` flags accept positive integers. A message must allow at least 64 bytes
+more than the maximum document. Invalid or oversized messages close their sender.
+The app publishes no awareness profile or cursor data.
 
-## Limits
-
-The reference relay accepts only canonical 26-character cookbook ids and applies these defaults:
-
-- 32 MiB per WebSocket message (`--max-message-bytes`)
-- 16 MiB serialized Yjs document per room (`--max-document-bytes`)
-- 64 KiB per awareness update (`--max-awareness-bytes`)
-- 1,000 concurrent rooms (`--max-rooms`)
-- 2,000 concurrent connections (`--max-connections`)
-
-Each flag takes a positive byte or count value. The message limit must be at least 64 bytes greater than the document limit so a whole room can sync in one protocol message. Each connection may publish one awareness client. An oversized message or document closes only that WebSocket. A room is removed from memory after its final connection closes in both transient and persistent modes; persistent rooms finish their pending write first and reload from disk when next opened.
-
-## Operator obligations
-
-- Publish a privacy notice: the relay holds cookbook content until end-to-end encryption lands.
-- Cap document size per room and expire rooms after long inactivity.
-- Local development uses `ws://127.0.0.1:<port>`; the production Content-Security-Policy allows `wss:` only.
+Operators still own availability, storage retention and resource limits. Encrypted
+content does not hide connection metadata or prevent a malicious relay from
+withholding data. Hosting the static JavaScript remains a separate trusted role.

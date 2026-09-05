@@ -1,61 +1,81 @@
 # Security Baseline
 
-Enplace is a static PWA. It has no backend logic, accounts, or native sidecar.
-Cloudflare Pages serves only the built application. The one network peer is a
-y-websocket relay that stores and fans out cookbook documents; it runs no
-Enplace code and the app treats it as untrusted transport.
+Enplace is a static PWA. Cloudflare Pages serves application assets. Browsers hold
+and edit the plaintext cookbook in IndexedDB, encrypt its Yjs updates, and send
+only an encrypted projection through the relay. File import/export is explicit;
+there is no folder mirror or filesystem write API.
 
-## Cookbook Boundary
+## Encryption and sharing
 
-- A cookbook is addressed by 130 random bits carried in the URL fragment, which
-  browsers never send with the page request, so the static host never sees it.
-  The relay does: the id is the room name in the WebSocket path, so relay
-  access logs hold it, and a relay operator can open any cookbook it hosts until
-  end-to-end encryption lands. Anyone holding the link holds the cookbook;
-  sharing the link is the sharing model. The share dialog states, “Anyone with
-  this private link can view and change this cookbook.”
-- The cookbook document is the sole authority for user content and state. Every
-  device keeps its own full copy in IndexedDB; the relay keeps a copy for
-  fan-out. Clearing browser storage removes this device's copy only.
-- The relay URL is configured at build time with `VITE_ENPLACE_RELAY_URL`, so a
-  household can build the app against a relay it runs itself. The
-  Content-Security-Policy allows `wss:` connections only.
-- Export is always available as a zip of plain files, and `mep mirror` keeps a
-  folder replica, so no data is reachable only through the app.
-- End-to-end encryption of the document with the key in the fragment is a
-  planned follow-up; until then the relay operator can read cookbook content.
+A new link carries a 260-bit random secret in `#k=e1_…`. HKDF-SHA-256 derives an
+AES-256-GCM content key and an independent public room identifier using separate
+`content` and `room` contexts. The secret and content key are never sent to the
+relay. Each record uses a fresh random 96-bit nonce and a 128-bit authentication
+tag; associated data binds the protocol version, room, and record identity.
+Tampered, substituted, truncated, and wrong-key records fail authentication
+before their Yjs updates enter the cookbook.
 
-## Static Deployment Boundary
+The relay synchronises a Yjs map of opaque records, not the plaintext cookbook.
+Browsers compact this projection by replacing only records already decrypted
+into the new snapshot. Concurrent unseen records remain; concurrent encrypted
+snapshots merge through the original Yjs document. This preserves offline edits
+without teaching the relay the cookbook schema or giving it a decryption key.
 
-The release uses the exact Node 24 pinned in `.nvmrc`. One root `npm ci`
-installs the app, CLI, and production relay workspace from one lockfile.
-`npm run build:release` checks the static app output, CLI compile, and relay
-Wrangler dry-run; Cloudflare Pages publishes `dist-static`. The deployment
-contains HTML, JavaScript, CSS, images, the web manifest, and the service worker only. There is no server process or API.
+Anyone with the full private link can read and change the cookbook. Losing the
+link and every local copy loses access; sharing a new link after an upgrade is
+an explicit household action. Encryption does not prevent an authorised partner
+from deleting shared content, and a relay can still withhold, replay or delete
+ciphertext. It sees room identifiers, connection metadata, timing and sizes.
+The app does not promise authenticated global freshness against a malicious
+relay.
 
-`public/_redirects` maps browser navigation routes to `index.html`. The service
-worker precaches the application shell and serves the cached canonical root `/`
-for navigation requests. It does not cache or upload
-cookbook contents.
+The static application origin, its JavaScript dependencies, and the user's
+browser remain trusted: code running as the app can read its key and local data.
+CSP and encryption do not protect against a malicious replacement of the app
+itself. Exports are deliberately ordinary unencrypted files.
 
-## Security Headers
+## Previous cookbooks
 
-`public/_headers` applies these headers to every static response:
+Old 26-character links were also relay room names and cannot safely become
+secret encryption keys. Opening one offers a one-time upgrade: read its previous
+shared copy without sending document updates, merge the device's saved copy,
+commit a new cookbook locally, then open a fresh encrypted link. The user sends
+that link to their partner. The previous IndexedDB copy and room are retained
+for recovery; historical plaintext is not retroactively made private. An
+unavailable relay blocks upgrading so recent partner changes are not silently
+omitted; the saved local copy remains downloadable.
 
-- `Content-Security-Policy`: `default-src 'self'; script-src 'self'; style-src
-  'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:;
-  frame-ancestors 'none'; object-src 'none'; base-uri 'self'`
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy: no-referrer`
+Only new encrypted rooms have the ciphertext-only guarantee. Retiring historical
+rooms requires a separate data-retention decision after users have migrated.
 
-Scripts and connections are same-origin only, and dynamic code generation is not allowed.
-Inline styles remain allowed because the built `index.html` contains its small
-initial-page style and the UI uses inline style attributes. Images may also come
-from local blobs and data URLs. The app cannot be framed, load plugins, or
-change its base URL.
+## Rendering and network boundary
 
-## Verification
+`RecipeMarkdown.tsx` escapes user-authored HTML, renders Markdown with `marked`,
+then sanitises the result with DOMPurify and explicit tag/attribute allowlists.
+Links allow HTTP, HTTPS, mailto, tel and relative paths; protocol-relative and
+executable/data schemes are inert. Image attributes accept only resolved local
+resources. The final sanitised string goes directly to the DOM.
 
-Build with `npm run build:static`, then confirm `_headers` and `_redirects` are
-present in `dist-static`. Browser verification must serve those headers, load
-the app, reload it offline, and open a deep link such as `/shopping`.
+The build fills the CSP relay source from the configured WebSocket URL. It allows
+same-origin application requests and that exact relay origin, not arbitrary
+`wss:` destinations. Scripts are same-origin with no inline script or eval;
+objects, framing, forms and base-URL changes are blocked. Images allow same-origin,
+blob and data resources. Inline styles remain necessary for the app's existing
+layout and styles. Responses also set `nosniff` and `Referrer-Policy: no-referrer`.
+
+The service worker caches the app shell, not cookbook content. The link fragment
+is not part of static page requests. Browser storage can be cleared or lost;
+relay persistence and plain-file exports provide separate recovery paths.
+
+## Proof
+
+The release gate checks the served Pages headers and the three browser engines.
+Crypto tests reject wrong keys and altered/substituted records. Relay integration
+inspects persisted wire bytes and restores a cookbook after every client and the
+relay stop. Browser security tests inspect actual sent WebSocket frames, exercise
+shared shopping, fire the built CSP, and inspect malicious Markdown in a real DOM.
+These are executed implementation checks, not an independent cryptographic audit.
+
+Primitive references: [Web Crypto AES-GCM](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams),
+[HKDF derivation](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey),
+[DOMPurify security model](https://github.com/cure53/DOMPurify).

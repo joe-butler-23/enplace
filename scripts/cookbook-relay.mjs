@@ -14,7 +14,7 @@ import * as Y from "yjs";
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const KEEPALIVE_INTERVAL_MS = 30_000;
-const ROOM_ID_PATTERN = /^[a-z2-7]{26}$/;
+const ROOM_ID_PATTERN = /^(?:[a-z2-7]{26}|e1-[a-f0-9]{64})$/;
 
 export const RELAY_DEFAULTS = Object.freeze({
   maxMessageBytes: 32 * 1024 * 1024,

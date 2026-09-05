@@ -18,7 +18,7 @@ mep check - --folder <folder>
 mep add - --folder <folder>
 ```
 
-Stop if `mep check` fails. Stop if `mep add` reports an existing file; never overwrite it. Report the path printed by `mep add`.
+Stop if `mep check` fails. Stop if `mep add` reports an existing file; never overwrite it. Report the path printed by `mep add`. This creates a local file; import it into the PWA to add it to a shared cookbook. No folder sync runs.
 
 Use this shape:
 

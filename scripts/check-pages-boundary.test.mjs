@@ -68,7 +68,7 @@ it("rejects generator relation and live Link mutations", () => {
     "  Link: </sample-pack.pack>; rel=preload; as=fetch; crossorigin",
   )).toThrow("must not be preloaded");
   const headers = new Headers({
-    "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+    "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss://enplace-relay.joesdownloads.workers.dev; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
     "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", link: "</wrong.js>; rel=modulepreload",
   });
   expect(() => assertBoundaryHeaders(new Response(null, { headers }), "</expected.js>; rel=modulepreload")).toThrow();

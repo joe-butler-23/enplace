@@ -1,17 +1,23 @@
-import { randomBytes } from "node:crypto";
 import { cpSync, rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
+import { createEmptyCookbookConnection, addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
 
 const OFFLINE_RELOAD_TITLES = new Set(["the cookbook app shell reloads offline after its first visit"]);
 test.beforeEach(async ({ browserName }, testInfo) => {
   if (browserName === "webkit" && OFFLINE_RELOAD_TITLES.has(testInfo.title)) testInfo.skip(true, "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 });
 
-const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
-function newCookbookId(): string {
-  return Array.from(randomBytes(26), (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
+const fixtureConnections: Awaited<ReturnType<typeof createEmptyCookbookConnection>>[] = [];
+
+test.afterEach(async () => {
+  await Promise.all(fixtureConnections.splice(0).map((connection) => connection.close()));
+});
+
+async function publishedEmptyCookbook(): Promise<string> {
+  const connection = await createEmptyCookbookConnection();
+  fixtureConnections.push(connection);
+  return connection.id;
 }
 
 function serveBuild(build: "a" | "b"): void {
@@ -186,7 +192,7 @@ test("Settings imports a synthetic recipe file", async ({ page }) => {
 
 test("opening another cookbook shows its empty state", async ({ page }) => {
   await openFreshCookbook(page);
-  const secondId = newCookbookId();
+  const secondId = await publishedEmptyCookbook();
   await openSettings(page);
   page.once("dialog", (dialog) => dialog.accept(secondId));
   await page.getByRole("button", { name: "Paste a link" }).click();
@@ -198,7 +204,7 @@ test("opening another cookbook shows its empty state", async ({ page }) => {
 
 test("browser back and forward always mount the cookbook the URL names", async ({ page }) => {
   const firstId = await openFreshCookbook(page);
-  const secondId = newCookbookId();
+  const secondId = await publishedEmptyCookbook();
   await openSettings(page);
   page.once("dialog", (dialog) => dialog.accept(secondId));
   await page.getByRole("button", { name: "Paste a link" }).click();
@@ -232,7 +238,7 @@ test("the cookbook app shell reloads offline after its first visit", async ({ pa
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await openShopping(page);
-  await expect(page).toHaveURL(/\/shopping#k=[a-z2-7]{26}$/);
+  await expect(page).toHaveURL(/\/shopping#k=e1_[a-z2-7]{52}$/);
 
   await context.setOffline(true);
   const response = await page.reload({ waitUntil: "domcontentloaded" });

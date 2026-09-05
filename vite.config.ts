@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -19,10 +19,21 @@ function preloadFontHrefs(html: string): string[] {
 }
 
 function appShellServiceWorker(): Plugin {
+  let relayOrigin = "";
   return {
     name: "enplace-app-shell-service-worker",
     apply: "build",
     enforce: "post",
+    configResolved(config) {
+      const relay = process.env.VITE_ENPLACE_RELAY_URL ?? loadEnv(config.mode, config.envDir).VITE_ENPLACE_RELAY_URL;
+      if (!relay) return;
+      const url = new URL(relay);
+      if (url.username || url.password || url.search || url.hash ||
+        !(url.protocol === "wss:" || (url.protocol === "ws:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)))) {
+        throw new Error("Relay must be a secure WebSocket URL (or loopback for local development).");
+      }
+      relayOrigin = url.origin;
+    },
     generateBundle(_options, bundle) {
       const outputs = Object.values(bundle);
       const mount = outputs.find((output) =>
@@ -68,7 +79,7 @@ function appShellServiceWorker(): Plugin {
       if (linkHeader.length > HEADER_LINE_LIMIT) {
         this.error(`Generated Link header is ${linkHeader.length} characters; Cloudflare Pages permits ${HEADER_LINE_LIMIT}.`);
       }
-      const trackedHeaders = readFileSync(path.resolve(__dirname, "public/_headers"), "utf8").trimEnd();
+      const trackedHeaders = readFileSync(path.resolve(__dirname, "public/_headers"), "utf8").trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", relayOrigin);
       const navigationHeaders = EARLY_HINT_ROUTES
         .map((route) => `${route}\n  Cache-Control: no-store\n${linkHeader}`)
         .join("\n\n");
