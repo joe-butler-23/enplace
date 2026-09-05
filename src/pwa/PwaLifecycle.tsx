@@ -17,8 +17,12 @@ export function PwaLifecycle({ children }: React.PropsWithChildren): React.JSX.E
   }, []);
   const activateUpdate = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.currentTarget.disabled = true;
+    // The worker shown may no longer be waiting: another tab or device reloaded first and
+    // clients.claim already took this page, or a newer build superseded it. A message to
+    // it goes nowhere, so reload directly and let the controlling worker serve the shell.
+    if (update?.state !== "installed") { window.location.reload(); return; }
     navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), { once: true });
-    update?.postMessage({ type: "MEP_ACTIVATE_UPDATE" });
+    update.postMessage({ type: "MEP_ACTIVATE_UPDATE" });
   };
   return (
     <>
