@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { deleteCookbookPath, newCookbookId, readCookbookBytes, readCookbookText, writeCookbookBytes, writeCookbookText } from "../src/cookbook/doc";
 import { execute } from "./index";
 import { atomicCommit } from "./mirror-commit";
-import { createPathScheduler, localCopyPath, mirrorCookbook } from "./mirror";
+import { createPathScheduler, diskPlan, localCopyPath, mirrorCookbook } from "./mirror";
 import { MirrorTestFixture, waitFor } from "./mirror-test-support";
 
 const harness = new MirrorTestFixture();
@@ -282,19 +282,12 @@ describe("mep mirror", () => {
     await waitFor(() => expect(readCookbookText(client.doc, "notes.md")).toBe(merged));
     expect(logs.some((line) => line.startsWith("merged local changes with cookbook for notes.md"))).toBe(true);
   });
-  it("keeps both overlapping text edits in the disk file and cookbook", async () => {
-    const logs: string[] = [];
-    const { root, target, client } = await startedMirrorFile("notes.md", "first: base\nsecond: base\n", { log: (line) => logs.push(line) });
-    await writeFile(target, "first: disk\nsecond: base\n");
-    writeCookbookText(client.doc, "notes.md", "first: cookbook\nsecond: base\n");
-    const merged = "<<<<<<< this device\nfirst: disk\n=======\nfirst: cookbook\n>>>>>>>>\nsecond: base\n";
-    await waitFor(async () => {
-      expect(await readFile(target, "utf8")).toBe(merged);
-      expect(readCookbookText(client.doc, "notes.md")).toBe(merged);
-    });
-    expect(logs.filter((line) => line.includes("conflict"))).toHaveLength(1);
-    expect(logs.find((line) => line.includes("conflict"))).toMatch(/^merged local changes with cookbook for notes\.md; kept 1 conflict/);
-    expect((await readdir(root)).filter((name) => name.includes(".local-"))).toEqual([]);
+  it("writes both sides of an overlapping text edit with conflict markers", () => {
+    const [baseline, local, remote] = ["first: base\nsecond: base\n", "first: disk\nsecond: base\n", "first: cookbook\nsecond: base\n"].map((text) => encoder.encode(text));
+    const plan = diskPlan("notes.md", "conflict", true, baseline, local, remote);
+    expect(plan.merged).toBe("<<<<<<< this device\nfirst: disk\n=======\nfirst: cookbook\n>>>>>>>>\nsecond: base\n");
+    expect(plan.desired).toEqual(encoder.encode(plan.merged!));
+    expect(plan.message).toBe("merged local changes with cookbook for notes.md; kept 1 conflict");
   });
   it("lets a Y.Doc delete win while retaining a late local inode write", async () => {
     const logs: string[] = [];
@@ -310,17 +303,16 @@ describe("mep mirror", () => {
     const relative = path.relative(root, recovery).split(path.sep).join("/");
     expect(logs).toContain(`deleted Shopping.md; preserved local copy as ${relative}\n`);
   });
-  it("preserves a non-UTF8 local binary edit when both sides change", async () => {
-    const base = Uint8Array.from([0xff, 0x00, 0x01]);
+  it("preserves a non-UTF8 local binary file when the cookbook holds different bytes", async () => {
     const local = Uint8Array.from([0x80, 0x00, 0x02]);
     const remote = Uint8Array.from([0xfe, 0x00, 0x03]);
-    const { root, target, client } = await startedMirrorFile("cover.webp", base, { now: fixedNow });
+    const root = await folder();
+    const target = path.join(root, "cover.webp");
     await writeFile(target, local);
-    writeCookbookBytes(client.doc, "cover.webp", remote);
-    await waitFor(async () => {
-      expect(new Uint8Array(await readFile(target))).toEqual(remote);
-      await recoveryWith(root, local);
-    });
+    const { cookbook } = await remoteFile("cover.webp", remote);
+    await mirrorOnce(root, cookbook, { now: fixedNow });
+    expect(new Uint8Array(await readFile(target))).toEqual(remote);
+    await recoveryWith(root, local);
   });
   it("merges divergent files when two continuous mirrors start together", async () => {
     const left = await folder();

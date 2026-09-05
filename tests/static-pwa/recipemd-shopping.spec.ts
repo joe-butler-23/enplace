@@ -50,22 +50,23 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
   try {
     await second.goto(page.url());
     await expect(second.getByRole('checkbox', { name: 'tomatoes', exact: true })).toBeVisible();
-    await page.getByLabel('Group shopping list').selectOption('section');
+    const grouping = (target: typeof page, name: string) => target.getByRole('group', { name: 'Group shopping list' }).getByRole('button', { name, exact: true });
+    await grouping(page, 'Aisle').click();
     await page.getByLabel('Aisle for tomatoes').selectOption('Fruit & vegetables');
     await page.getByLabel('Aisle for flour').selectOption('Baking');
     await expect(page.locator('.shopping-group__label')).toHaveText(['Baking', 'Fruit & vegetables', 'Other']);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: '/tmp/enplace-shopping-aisles.png' });
-    await second.getByLabel('Group shopping list').selectOption('section');
+    await grouping(second, 'Aisle').click();
     await expect(second.getByLabel('Aisle for tomatoes')).toHaveValue('Fruit & vegetables');
     await page.reload();
-    await expect(page.getByLabel('Group shopping list')).toHaveValue('section');
+    await expect(grouping(page, 'Aisle')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByLabel('Aisle for tomatoes')).toHaveValue('Fruit & vegetables');
-    await page.getByLabel('Group shopping list').selectOption('none');
+    await grouping(page, 'None').click();
     await expect(page.locator('.shopping-group__label')).toHaveCount(0);
     await expect(page.getByRole('checkbox')).toHaveCount(3);
-    await page.getByLabel('Group shopping list').selectOption('recipe');
+    await grouping(page, 'Recipe').click();
     await expect(page.locator('.shopping-group__label')).toHaveText(['Soup', 'Bread']);
     await page.getByLabel('More actions').click();
     page.once('dialog', dialog => dialog.dismiss());

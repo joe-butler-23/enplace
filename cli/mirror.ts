@@ -156,7 +156,7 @@ export function localCopyPath(file: string, now: Date): string {
   return path.join(parsed.dir, `${parsed.name}.local-${stamp}${parsed.ext}`);
 }
 type DiskPlan = { desired: Bytes; message: string; merged?: string };
-function diskPlan(
+export function diskPlan(
   relative: string, decision: Decision, known: boolean, baseline: Bytes,
   local: Bytes, remote: Bytes,
 ): DiskPlan {
