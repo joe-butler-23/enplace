@@ -53,45 +53,13 @@ describe("PWA route", () => {
     expect(pathnameForView("planner")).toBe("/planner");
   });
 
-  it("ships a full-app install manifest with a /shopping shortcut", async () => {
-    const publicDir = fileURLToPath(new URL("../../public/", import.meta.url));
-    const manifest = JSON.parse(
-      await readFile(path.join(publicDir, "manifest.webmanifest"), "utf8")
-    ) as {
-      name: string;
-      start_url: string;
-      scope: string;
-      display: string;
-      icons: Array<{ src: string; sizes: string }>;
-      shortcuts: Array<{ url: string }>;
-    };
-
-    expect(manifest).toMatchObject({
-      name: "Enplace",
-      start_url: "/",
-      scope: "/",
-      display: "standalone"
-    });
-    expect(manifest.shortcuts.map(({ url }) => url)).toContain("/shopping");
-    expect(manifest.icons.map(({ sizes }) => sizes)).toEqual(["192x192", "512x512"]);
-    for (const icon of manifest.icons) {
-      const png = await readFile(path.join(publicDir, icon.src.replace(/^\//, "")));
-      const expectedSize = Number.parseInt(icon.sizes, 10);
-      expect(png.subarray(0, 8)).toEqual(Buffer.from("89504e470d0a1a0a", "hex"));
-      expect(png.readUInt32BE(16)).toBe(expectedSize);
-      expect(png.readUInt32BE(20)).toBe(expectedSize);
-      expect(png.byteLength).toBeGreaterThan(4096);
-      expect(new Set(png).size).toBeGreaterThan(200);
-    }
-  });
-
   it("serves the canonical installed shell for offline navigation", async () => {
     const worker = await readFile(new URL("../pwa/service-worker.js", import.meta.url), "utf8");
     const build = await readFile(new URL("../../vite.config.ts", import.meta.url), "utf8");
 
     expect(worker).toContain('cache.match("/", { ignoreVary: true })');
     expect(worker).not.toContain('cache.match("/index.html"');
-    expect(build).toContain('const files = new Set(["/", "/manifest.webmanifest"');
+    expect(build).toContain('const files = new Set(["/", "/enplace-mark.png"');
     expect(build).toContain('output.fileName !== "index.html"');
     expect(build).not.toContain('const files = new Set(["/index.html"');
   });

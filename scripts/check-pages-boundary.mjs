@@ -158,7 +158,6 @@ async function runPagesBoundary() {
       ["/icons/icon-192.png", /^image\/png/, "public, max-age=31536000, immutable"],
       ["/fonts/fraunces-latin-opsz-normal.woff2", /^font\/woff2/, "public, max-age=31536000, immutable"],
     ]) await check(url, { type, cache });
-    await check("/manifest.webmanifest", { type: /(?:manifest\+json|application\/json)/ });
     await check("/sw.js", { type: /javascript/, cache: "no-cache" });
   });
   console.log(`Pages boundary passed through installed Wrangler ${version}`);

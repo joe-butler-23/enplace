@@ -80,6 +80,8 @@ test("two shoppers edit offline, reload, reconnect in either order, and retain t
       await expect.poll(() => current.getByRole("checkbox", { name: "market bread" }).isChecked()).toBe(true);
     }
 
+    // Closing Settings rewrites the URL; read it only once Playwright has observed that.
+    await expect(page).toHaveURL(/\/shopping#k=/);
     const cookbookUrl = page.url();
     await page.close();
     await second.close();

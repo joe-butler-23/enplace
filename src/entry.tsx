@@ -18,6 +18,7 @@ import { seedSampleCovers, seedSamplePack } from "./cookbook/sample-pack";
 import { backfillCookbookCovers } from "./cookbook/covers";
 import { preserveCookbookHash } from "./standalone/pwa-route";
 import { isEncryptedCookbookId } from "./cookbook/crypto";
+import { installManifest } from "./standalone/manifest";
 
 // Historical kitchens key stays unchanged so unpublished state survives the rename.
 const UNPUBLISHED_COOKBOOKS_KEY = "enplace-unpublished-kitchens";
@@ -84,6 +85,7 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
   if (createdHere) setCookbookUnpublished(id, true);
   const unpublished = unpublishedCookbookIds().has(id);
   setCurrentCookbookId(id);
+  installManifest(window.location.origin, id);
   window.history.replaceState(null, "", withCookbookHash(window.location.href, id));
   preserveCookbookHash(window.history, window.location, id);
   window.addEventListener("hashchange", () => {
@@ -107,6 +109,8 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
       retry: true,
     }));
     if (!connection || signal.aborted) { void connection?.close(); return null; }
+    // The plaintext copy persisted before the wire document became the persisted copy.
+    indexedDB.deleteDatabase(`enplace-kitchen-${id}`);
     setCurrentCookbookConnection(connection);
     const close = (): void => {
       stopRemote();

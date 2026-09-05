@@ -45,7 +45,7 @@ afterAll(async () => { await relay.close(); });
 
 async function open(options: Partial<Parameters<typeof openCookbook>[0]> = {}): Promise<CookbookConnection> {
   const connection = await openCookbook({
-    id: `test-${crypto.randomUUID()}`,
+    id: newCookbookId(),
     relayUrl: null,
     persist: false,
     ...options,

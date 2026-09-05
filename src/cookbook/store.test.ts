@@ -1,3 +1,4 @@
+import { newCookbookId } from "./doc";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { updateText } from "../host-client/browser-storage";
 import { openCookbook, type CookbookConnection } from "../host-client/cookbook-storage";
@@ -17,7 +18,7 @@ afterEach(async () => {
 
 const recipe = (title: string, ingredient = "onion"): string => `# ${title}\n\n## Ingredients\n- ${ingredient}\n`;
 async function open(files: Record<string, string | Uint8Array>): Promise<CookbookConnection> {
-  connection = await openCookbook({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
+  connection = await openCookbook({ id: newCookbookId(), relayUrl: null, persist: false });
   connection.doc.transact(() => {
     for (const [path, content] of Object.entries(files)) {
       if (typeof content === "string") writeCookbookText(connection!.doc, path, content);
@@ -173,7 +174,7 @@ describe("cookbook app store", () => {
   });
 
   it("repairs malformed observed shopping boxes through the adapter without a write loop", async () => {
-    connection = await openCookbook({ id: "repairabcdefghijklmnopqrs", relayUrl: null, persist: false });
+    connection = await openCookbook({ id: newCookbookId(), relayUrl: null, persist: false });
     writeCookbookText(connection.doc, "Shopping.md", "## Soup\n- [xx] onion\n- [  ] stock\n");
     const update = vi.spyOn(connection.adapter, "updateText");
     setCurrentCookbookConnection(connection);
@@ -201,7 +202,7 @@ describe("cookbook app store", () => {
     expect(() => updateText("Shopping.md", () => "- [ ] forbidden\n")).toThrow("No cookbook connection is active");
 
     changed.mockClear();
-    connection = await openCookbook({ id: "secondabcdefghijklmnopqrst", relayUrl: null, persist: false });
+    connection = await openCookbook({ id: newCookbookId(), relayUrl: null, persist: false });
     writeCookbookText(connection.doc, "Shopping.md", "- [ ] second\n");
     setCurrentCookbookConnection(connection);
     expect(changed).toHaveBeenCalledOnce();

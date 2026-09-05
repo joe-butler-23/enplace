@@ -1,6 +1,8 @@
 import { IndexeddbPersistence } from "y-indexeddb";
-import { EncryptedCookbookProvider } from "../cookbook/encrypted-provider";
+import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
+import { cookbookCipher } from "../cookbook/crypto";
+import { EncryptedCookbookBridge } from "../cookbook/encrypted-provider";
 import type { VaultStorageAdapter } from "./browser-storage";
 import {
   deleteCookbookPath, cookbookFiles, cookbookPathConflict, listCookbookPaths,
@@ -34,12 +36,11 @@ export type CookbookConnection = {
   close: () => Promise<void>;
 };
 const LOCAL_ORIGIN = Symbol("enplace-cookbook-local-write");
-const LOCAL_COPY_KEY = "has-local-copy";
-// Historical kitchen database prefix stays unchanged so existing IndexedDB data still opens.
-const databaseName = (id: string): string => `enplace-kitchen-${id}`;
+/** The persisted copy is the encrypted projection, named by the public room so no secret is stored. */
+export const cookbookDatabaseName = (room: string): string => `enplace-cookbook-${room}`;
 
 // Own database-open errors: y-indexeddb.whenSynced only resolves, even if opening fails.
-// Use the same two stores as the atomic first-copy write and y-indexeddb.
+// Use the same two stores as y-indexeddb.
 async function prepareDatabase(name: string, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
   await new Promise<void>((resolve, reject) => {
@@ -68,80 +69,91 @@ async function prepareDatabase(name: string, signal?: AbortSignal): Promise<void
   });
 }
 
+/** Commits the whole wire state in one transaction and drops the entries it supersedes. Readiness waits for this. */
+function commit(persistence: IndexeddbPersistence): Promise<void> {
+  const db = persistence.db;
+  if (!db) return Promise.reject(new Error("Cookbook persistence is not ready."));
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("updates", "readwrite");
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Could not persist the cookbook."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Could not persist the cookbook."));
+    const store = transaction.objectStore("updates");
+    const added = store.add(Y.encodeStateAsUpdate(persistence.doc));
+    added.onsuccess = () => store.delete(IDBKeyRange.upperBound(added.result, true));
+  });
+}
+
 export async function openCookbook(options: OpenCookbookOptions): Promise<CookbookConnection> {
   const persist = options.persist !== false;
   if (persist && typeof indexedDB === "undefined") throw new Error("Cookbook storage is unavailable in this browser.");
-  if (persist) await prepareDatabase(databaseName(options.id), options.signal);
+  const cipher = await cookbookCipher(options.id);
+  const name = cookbookDatabaseName(cipher.room);
+  if (persist) await prepareDatabase(name, options.signal);
   options.signal?.throwIfAborted();
   const doc = new Y.Doc();
-  const persistence = persist ? new IndexeddbPersistence(databaseName(options.id), doc) : null;
-  let hasLocalCopy: boolean;
-  const cancelInitialization = (): void => {
-    void persistence?.destroy().catch(() => {});
-    doc.destroy();
-  };
-  options.signal?.addEventListener("abort", cancelInitialization, { once: true });
-  try {
-    hasLocalCopy = persistence ? await Promise.all([
-      persistence.whenSynced, persistence.get(LOCAL_COPY_KEY),
-    ]).then(([, marker]) => marker === 1) : false;
-    options.signal?.throwIfAborted();
-  } catch (error) {
-    void persistence?.destroy().catch(() => {});
-    doc.destroy();
-    throw error;
-  } finally {
-    options.signal?.removeEventListener("abort", cancelInitialization);
-  }
-  const markLocalCopy = (): Promise<void> => {
-    if (!persistence) return Promise.resolve();
-    const db = persistence.db;
-    if (!db) return Promise.reject(new Error("Cookbook persistence is not ready."));
-    const updatesStoreName = "updates";
-    const customStoreName = "custom";
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([updatesStoreName, customStoreName], "readwrite");
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error("Could not persist the cookbook."));
-      transaction.onabort = () => reject(transaction.error ?? new Error("Could not persist the cookbook."));
-      try {
-        transaction.objectStore(updatesStoreName).add(Y.encodeStateAsUpdate(doc));
-        transaction.objectStore(customStoreName).put(1, LOCAL_COPY_KEY);
-      } catch (error) {
-        transaction.abort();
-        reject(error);
-      }
-    });
-  };
-  if (options.seed && !hasLocalCopy) {
-    try {
-      await options.seed(doc);
-      options.signal?.throwIfAborted();
-      await markLocalCopy();
-      options.signal?.throwIfAborted();
-      hasLocalCopy = true;
-    } catch (error) {
-      await persistence?.destroy();
-      doc.destroy();
-      throw error;
-    }
-  }
-  const listeners = new Set<(status: CookbookStatus) => void>();
-  const deferredRelay = Boolean(options.relayUrl && options.deferRelayUntilLocalWrite);
-  let status: CookbookStatus = options.relayUrl && !deferredRelay ? "connecting" : "local-only";
-  let provider: EncryptedCookbookProvider | null = null;
-  let localWriteListener: ((transaction: Y.Transaction) => void) | null = null;
-  let localCopy: LocalCopyState = hasLocalCopy ? "ready" : "pending";
-  let firstCopyWrite: Promise<void> | null = null;
+  const wire = new Y.Doc();
+  const persistence = persist ? new IndexeddbPersistence(name, wire) : null;
+  let closed = false;
+  let localCopy: LocalCopyState = "pending";
   const copyListeners = new Set<() => void>();
-  const syncListeners = new Set<() => void>();
-  let remoteSynced = false;
   const setLocalCopy = (next: LocalCopyState): void => {
     if (closed || localCopy === next) return;
     localCopy = next;
     copyListeners.forEach((listener) => listener());
   };
-  let closed = false;
+  const listeners = new Set<(status: CookbookStatus) => void>();
+  const deferredRelay = Boolean(options.relayUrl && options.deferRelayUntilLocalWrite);
+  let status: CookbookStatus = options.relayUrl && !deferredRelay ? "connecting" : "local-only";
+  const setStatus = (next: CookbookStatus): void => {
+    if (closed || status === next) return;
+    status = next;
+    listeners.forEach((listener) => listener(next));
+  };
+  const bridge = new EncryptedCookbookBridge(doc, wire, cipher, (error) => {
+    if (closed) return;
+    setLocalCopy(error);
+    setStatus("offline");
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("mep-notice", { detail: error.message }));
+  });
+  let provider: WebsocketProvider | null = null;
+  const destroy = (): void => {
+    bridge.destroy();
+    provider?.destroy();
+    void persistence?.destroy().catch(() => {});
+    wire.destroy();
+    doc.destroy();
+  };
+  options.signal?.addEventListener("abort", destroy, { once: true });
+  try {
+    if (persistence) await persistence.whenSynced;
+    await bridge.settled();
+    options.signal?.throwIfAborted();
+    // One snapshot record makes even an empty cookbook distinguishable from one never downloaded.
+    if (options.seed && bridge.records.size === 0) {
+      await options.seed(doc);
+      await bridge.compact();
+      if (persistence) await commit(persistence);
+      options.signal?.throwIfAborted();
+    }
+  } catch (error) {
+    destroy();
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", destroy);
+  }
+  if (bridge.records.size) localCopy = "ready";
+  // A first copy arriving from the relay is ready once it is committed, not once it is decoded.
+  let firstCopy: Promise<void> | null = null;
+  bridge.records.observe(() => {
+    if (localCopy !== "pending" || firstCopy || !bridge.records.size) return;
+    firstCopy = bridge.settled().then(() => persistence ? commit(persistence) : undefined);
+    void firstCopy.then(() => setLocalCopy("ready"), (error) => {
+      setLocalCopy(error instanceof Error ? error : new Error("Could not persist the cookbook."));
+    });
+  });
+  const syncListeners = new Set<() => void>();
+  let remoteSynced = false;
   const write = (path: string, bytes: Uint8Array): void => writeCookbookBytes(doc, path, bytes, LOCAL_ORIGIN);
   const adapter: VaultStorageAdapter = {
     async readBytes(path) {
@@ -186,39 +198,45 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       return next;
     },
   };
-  const setStatus = (next: CookbookStatus): void => {
-    if (status === next) return;
-    status = next;
-    listeners.forEach((listener) => listener(next));
-  };
   const connectRelay = (): void => {
     if (!options.relayUrl || provider || closed) return;
     setStatus("connecting");
-    provider = new EncryptedCookbookProvider(options.relayUrl, options.id, doc, {
-      WebSocketPolyfill: options.WebSocketPolyfill,
-      hasLocalCopy: localCopy === "ready",
-      onSync() {
-        if (closed) return;
-        if (!remoteSynced) {
-          remoteSynced = true;
-          syncListeners.forEach((listener) => listener());
-        }
-        if (localCopy === "ready" || firstCopyWrite) return;
-        firstCopyWrite = markLocalCopy();
-        void firstCopyWrite.then(() => setLocalCopy("ready"), (error) => {
-          setLocalCopy(error instanceof Error ? error : new Error("Could not persist the cookbook."));
-        });
-      },
-      onStatus(next) { if (!closed) setStatus(next); },
-      onError(error) {
-        if (closed) return;
-        setLocalCopy(error);
-        setStatus("offline");
-        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("mep-notice", { detail: error.message }));
-      },
+    // The wire document syncs by state vector, so a reconnect exchanges only the records
+    // each side lacks; offline edits are already sealed records waiting in it.
+    provider = new WebsocketProvider(options.relayUrl, cipher.room, wire, {
+      connect: false, disableBc: true, WebSocketPolyfill: options.WebSocketPolyfill,
     });
+    provider.awareness.setLocalState(null);
+    provider.on("status", ({ status: next }: { status: string }) => {
+      setStatus(next === "connected" ? "connected" : next === "connecting" ? "connecting" : "offline");
+    });
+    // An empty relay room is not a synced cookbook; a linked device waits for a record.
+    const checkSynced = (): void => {
+      if (!provider?.synced || remoteSynced || !bridge.records.size) return;
+      void bridge.settled().then(() => {
+        if (closed || remoteSynced) return;
+        remoteSynced = true;
+        syncListeners.forEach((listener) => listener());
+        if (bridge.wasteful()) void bridge.compact();
+      }, () => {});
+    };
+    provider.on("sync", checkSynced);
+    bridge.records.observe(checkSynced);
     provider.connect();
   };
+  // A phone back from the lock screen or a dead network often holds a half-open socket that
+  // never closes; y-websocket would notice only after thirty silent seconds. Replacing the
+  // connection on return costs one differential handshake and makes the next tick immediate.
+  const wake = (): void => {
+    if (closed || !provider || (typeof document !== "undefined" && document.visibilityState !== "visible")) return;
+    provider.disconnect();
+    provider.connect();
+  };
+  if (typeof window !== "undefined") {
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+  }
+  let localWriteListener: ((transaction: Y.Transaction) => void) | null = null;
   let publicationPending = deferredRelay || Boolean(options.onFirstLocalWrite);
   const publish = (): void => {
     if (!publicationPending) return;
@@ -249,14 +267,19 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       closed = true;
       if (localWriteListener) doc.off("afterTransaction", localWriteListener);
       localWriteListener = null;
+      if (typeof window !== "undefined") {
+        document.removeEventListener("visibilitychange", wake);
+        window.removeEventListener("online", wake);
+      }
+      bridge.destroy();
       provider?.destroy();
       listeners.clear();
       copyListeners.clear();
       syncListeners.clear();
       // IDBDatabase.close lets active transactions finish; cancellation need not await
-      // their acknowledgement. The write handler ignores completion after close.
+      // their acknowledgement.
       try { await persistence?.destroy(); }
-      finally { doc.destroy(); }
+      finally { wire.destroy(); doc.destroy(); }
     },
   };
 }

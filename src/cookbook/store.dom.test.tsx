@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { newCookbookId } from "./doc";
 import * as React from "react";
 import { act } from "preact/test-utils";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,7 +19,7 @@ afterEach(async () => {
 
 describe("cookbook slice subscriptions", () => {
   it("does not rerender recipe or exact-path readers for an unrelated shopping edit", async () => {
-    connection = await openCookbook({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
+    connection = await openCookbook({ id: newCookbookId(), relayUrl: null, persist: false });
     connection.doc.transact(() => {
       writeCookbookText(connection!.doc, "a.md", "# A\n\n## Ingredients\n- onion\n");
       writeCookbookText(connection!.doc, "Shopping.md", "- [ ] milk\n");

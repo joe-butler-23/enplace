@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs document keyed by folder-relative path: Markdown and other text files are merging text, everything else is bytes. Every device holds the whole cookbook in IndexedDB and works offline; an encrypted Yjs projection carries changes through a y-websocket relay; the cookbook id travels in the URL fragment (`#k=<id>`).
+Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs document keyed by folder-relative path: Markdown and other text files are merging text, everything else is bytes. Every device persists the encrypted Yjs projection of the cookbook in IndexedDB and rebuilds the plaintext in memory, so it works offline; the same projection carries changes through a y-websocket relay; the cookbook id travels in the URL fragment (`#k=<id>`).
 
 ## Runtime surface
 
 - `src/core.ts` is the pure TypeScript cooking model. It parses recipes, `Plan.md`, and `Shopping.md`, resolves recipe links and cover paths, and renders paste imports. It does not know where files live.
 - `src/cookbook/doc.ts` is the cookbook schema: path normalisation, text-versus-bytes, minimal-diff writes so concurrent edits merge, cookbook ids and link helpers. Shared by browser code and tests.
 - `src/host-client/browser-storage.ts` defines the storage adapter contract and the storage helpers used by the application.
-- `src/host-client/cookbook-storage.ts` implements the contract over the cookbook document with `y-indexeddb` persistence and a `y-websocket` provider. Its observable local-copy readiness follows the atomic snapshot-and-marker commit, independently of transport status and first remote sync.
-- `src/cookbook/crypto.ts` derives independent content and room keys from a fresh 260-bit fragment secret. `encrypted-provider.ts` encrypts inner Yjs updates into a wire-only Y.Map; compaction deletes only authenticated records included in its encrypted snapshot. The relay can merge this map without seeing cookbook text or paths.
+- `src/host-client/cookbook-storage.ts` implements the contract over the cookbook document. The encrypted wire document is the persisted copy (`y-indexeddb`, named by the public room) and the transport (`y-websocket`), so a reconnect exchanges only the records each side lacks and offline edits are already sealed records waiting in it. Local-copy readiness means at least one record is committed, independently of transport status and first remote sync.
+- `src/cookbook/crypto.ts` derives independent content and room keys from a fresh 260-bit fragment secret. `encrypted-provider.ts` seals inner Yjs updates into the wire Y.Map, one record per burst of edits, and folds small records together so the record count stays bounded without re-sending content; a full snapshot rewrites the log only when it holds more than twice the live cookbook. Folding and snapshots delete only records already decrypted here. The relay merges this map without seeing cookbook text or paths.
 - `src/cookbook/legacy-upgrade.ts` owns the one-time receive-only old-room download and explicit upgrade to a fresh encrypted link. It preserves the original local copy.
 - `src/cookbook/opening.ts` owns the opening subscription, cancellation and warning deadline, including local initialization. A warning leaves recovery active; only durable readiness opens the editor.
 - `src/cookbook/store.ts` is the one live read model: parsed recipes, plan, shopping list, paths, and cover URLs, published from every cookbook transaction through `observeCookbook` and read by React with `useSyncExternalStore`. `src/cookbook/actions.ts` holds every domain write as a pure function applied to the live text.

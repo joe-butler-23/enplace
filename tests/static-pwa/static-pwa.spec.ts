@@ -1,6 +1,6 @@
 import { cpSync, rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { createEmptyCookbookConnection, addShoppingItem, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
+import { createEmptyCookbookConnection, addShoppingItem, openFreshCookbook, openShopping, persistedDatabaseName, persistedUpdateCount } from "./helpers";
 
 const OFFLINE_RELOAD_TITLES = new Set(["the cookbook app shell reloads offline after its first visit"]);
 test.beforeEach(async ({ browserName }, testInfo) => {
@@ -52,10 +52,22 @@ test("the covers pack loads once after seeding and never on a return visit", asy
   expect(packs).toEqual([]);
 });
 
-test("fresh visit creates and persists a seeded cookbook", async ({ page }) => {
+test("fresh visit creates and persists a seeded cookbook under its public room name", async ({ page }) => {
   const id = await openFreshCookbook(page);
   const databases = await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name));
-  expect(databases).toContain(`enplace-kitchen-${id}`);
+  expect(databases).toContain(await persistedDatabaseName(id));
+  expect(databases.join()).not.toContain(id);
+});
+
+test("the installed app launches the open cookbook, not a fresh one", async ({ page }) => {
+  const id = await openFreshCookbook(page);
+  const href = await page.locator('link[rel="manifest"]').getAttribute("href");
+  expect(href).toMatch(/^data:application\/manifest\+json,/);
+  const manifest = JSON.parse(decodeURIComponent(href!.split(",")[1]));
+  const origin = new URL(page.url()).origin;
+  expect(manifest.start_url).toBe(`${origin}/#k=${id}`);
+  expect(manifest.shortcuts[0].url).toBe(`${origin}/shopping#k=${id}`);
+  expect(manifest.id).toBe(`${origin}/`);
 });
 
 test("a waiting build activates once and keeps the persisted cookbook", async ({ page }) => {

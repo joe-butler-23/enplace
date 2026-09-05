@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { newCookbookId } from "../cookbook/doc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readText } from "../host-client/browser-storage";
 import { openCookbook, type CookbookConnection } from "../host-client/cookbook-storage";
@@ -51,7 +52,7 @@ describe("browser-local preferences", () => {
   });
 
   it("moves legacy day notes into Plan.md once and removes them from preferences", async () => {
-    connection = await openCookbook({ id: "abcdefghijklmnopqrstuvwxyz", relayUrl: null, persist: false });
+    connection = await openCookbook({ id: newCookbookId(), relayUrl: null, persist: false });
     setCurrentCookbookConnection(connection);
     window.localStorage.setItem("enplace.preferences", JSON.stringify({
       ...DEFAULT_STANDALONE_SETTINGS,

@@ -92,7 +92,7 @@ function appShellServiceWorker(): Plugin {
       // Precache only what launch and offline reading need. Both sample packs and the large
       // icon are cached on first use instead. Cache the canonical root so hosts that redirect
       // /index.html never leave a redirected response that Chromium rejects for navigation.
-      const files = new Set(["/", "/manifest.webmanifest", "/enplace-mark.png", "/icons/icon-192.png"]);
+      const files = new Set(["/", "/enplace-mark.png", "/icons/icon-192.png"]);
       const deferred = /(?:^|\/)sample-(?:pack|covers)-[^/]+\.pack$|(?:^|\/)browser-[^/]+\.js$/;
       for (const output of outputs) {
         if (output.fileName !== "index.html" && !deferred.test(output.fileName)) files.add(`/${output.fileName}`);

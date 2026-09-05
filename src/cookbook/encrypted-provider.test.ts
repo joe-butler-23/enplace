@@ -41,11 +41,11 @@ describe("encrypted Yjs projection", () => {
     writeCookbookText(left.doc, "PrivateRecipe.md", "bought onions\nprivate milk\n");
     writeCookbookText(right.doc, "PrivateRecipe.md", "private onions\nbought milk\n");
     // Each side compacts while unaware of the other's edit and snapshot.
-    await Promise.all([left.bridge.sync(), right.bridge.sync()]);
+    await Promise.all([left.bridge.compact(), right.bridge.compact()]);
     await exchange(left, right);
     expect(readCookbookText(left.doc, "PrivateRecipe.md")).toBe("bought onions\nbought milk\n");
     expect(readCookbookText(right.doc, "PrivateRecipe.md")).toBe("bought onions\nbought milk\n");
-    await left.bridge.sync();
+    await left.bridge.compact();
     await exchange(left, right);
     expect(left.bridge.records.size).toBe(1);
 
@@ -73,7 +73,7 @@ describe("encrypted Yjs projection", () => {
     writeCookbookText(left.doc, "base.md", "base");
     await exchange(left, right);
     hold = true;
-    const compacting = left.bridge.sync();
+    const compacting = left.bridge.compact();
     await entered;
     writeCookbookText(right.doc, "late.md", "concurrent late edit");
     await right.bridge.settled();

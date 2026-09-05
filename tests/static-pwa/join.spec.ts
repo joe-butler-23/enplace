@@ -1,4 +1,4 @@
-import { createEmptyCookbookConnection } from "./helpers";
+import { createEmptyCookbookConnection, persistedUpdateCount } from "./helpers";
 import { randomBytes } from "node:crypto";
 import { type CookbookConnection } from "../../src/host-client/cookbook-storage";
 import { expect, test, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
@@ -57,35 +57,6 @@ async function cacheControlledShell(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
-}
-
-async function precreateIncompatibleCookbookDatabase(page: Page, id: string): Promise<void> {
-  await page.evaluate(async (name) => new Promise<void>((resolve, reject) => {
-    const request = indexedDB.open(name, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("updates", { autoIncrement: true });
-      request.result.createObjectStore("custom", { keyPath: "key" });
-    };
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("Cookbook database creation was blocked."));
-    request.onsuccess = () => { request.result.close(); resolve(); };
-  }), `enplace-kitchen-${id}`);
-}
-
-async function cookbookPersistenceCounts(page: Page, id: string): Promise<{ updates: number; markers: number }> {
-  return page.evaluate(async (name) => new Promise<{ updates: number; markers: number }>((resolve, reject) => {
-    const request = indexedDB.open(name);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const transaction = db.transaction(["updates", "custom"], "readonly");
-      const updates = transaction.objectStore("updates").count();
-      const markers = transaction.objectStore("custom").count();
-      transaction.oncomplete = () => { db.close(); resolve({ updates: updates.result, markers: markers.result }); };
-      transaction.onerror = () => { db.close(); reject(transaction.error); };
-      transaction.onabort = () => { db.close(); reject(transaction.error); };
-    };
-  }), `enplace-kitchen-${id}`);
 }
 
 async function recordFalseEmpty(page: Page): Promise<void> {
@@ -152,13 +123,13 @@ test("cached shell offline rejects an unknown cookbook without mounting an edito
 test("a persisted cookbook emptied before close reopens offline without a first-sync gate", async ({ page, context }) => {
   const id = await openFreshCookbook(page);
   await cacheControlledShell(page);
-  const beforeRemoval = (await cookbookPersistenceCounts(page, id)).updates;
+  const beforeRemoval = await persistedUpdateCount(page, id);
   await goOffline(context);
   await page.getByRole("button", { name: "Settings" }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Remove sample recipes" }).click();
   await expect(page.getByRole("heading", { name: "No recipes yet" })).toBeVisible();
-  await expect.poll(async () => (await cookbookPersistenceCounts(page, id)).updates).toBeGreaterThan(beforeRemoval);
+  await expect.poll(() => persistedUpdateCount(page, id)).toBeGreaterThan(beforeRemoval);
 
   const url = page.url();
   await page.close();
@@ -188,28 +159,6 @@ test("a linked device persists successful first sync for offline reopen", async 
   } finally {
     await linkedContext.close();
   }
-});
-
-test("first-sync marker transaction failure fails closed without browser errors", async ({ page }) => {
-  await page.goto("/");
-  const id = await publishedEmptyCookbook();
-  await precreateIncompatibleCookbookDatabase(page, id);
-  await page.addInitScript(() => {
-    const state = window as typeof window & { __unhandledRejections?: string[] };
-    state.__unhandledRejections = [];
-    window.addEventListener("unhandledrejection", (event) => {
-      state.__unhandledRejections!.push(String(event.reason));
-    });
-  });
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-
-  await page.goto(`/#k=${id}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Enplace could not open your cookbook" })).toBeVisible();
-  await expect(page.locator(".mep-shell, textarea, [contenteditable=true]")).toHaveCount(0);
-  await expect(cookbookPersistenceCounts(page, id)).resolves.toEqual({ updates: 1, markers: 0 });
-  expect(pageErrors).toEqual([]);
-  expect(await page.evaluate(() => (window as typeof window & { __unhandledRejections?: string[] }).__unhandledRejections)).toEqual([]);
 });
 
 test("fresh sample cookbook publishes when its link section is shown", async ({ page, browser }) => {
@@ -331,7 +280,7 @@ test("database-open failure is a storage error without an unhandled rejection", 
   await page.addInitScript(() => {
     const open = indexedDB.open.bind(indexedDB);
     indexedDB.open = ((name: string, version?: number) => {
-      if (!name.startsWith('enplace-kitchen-')) return open(name, version);
+      if (!name.startsWith('enplace-cookbook-')) return open(name, version);
       const request = { error: new DOMException('Storage denied', 'UnknownError'), onerror: null as null | (() => void) };
       queueMicrotask(() => request.onerror?.());
       return request as unknown as IDBOpenDBRequest;
@@ -344,42 +293,12 @@ test("database-open failure is a storage error without an unhandled rejection", 
   expect(errors).toEqual([]);
 });
 
-test("an asynchronous first-copy abort after the warning reports storage failure", async ({ page }) => {
-  const id = await publishedEmptyCookbook();
-  let release!: () => void;
-  await page.routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });
-  await page.addInitScript(() => {
-    const transaction = IDBDatabase.prototype.transaction;
-    IDBDatabase.prototype.transaction = function (...args: Parameters<typeof transaction>) {
-      const tx = transaction.apply(this, args);
-      if (this.name.startsWith('enplace-kitchen-') && tx.objectStoreNames.contains('updates') && tx.objectStoreNames.contains('custom')) {
-        const store = tx.objectStore('custom');
-        const put = store.put.bind(store);
-        store.put = (...putArgs: Parameters<typeof put>) => {
-          const request = put(...putArgs);
-          request.addEventListener('success', () => tx.abort());
-          return request;
-        };
-        const objectStore = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => name === 'custom' ? store : objectStore(name);
-      }
-      return tx;
-    };
-  });
-  await page.goto(`/#k=${id}`);
-  await expect(page.getByText(NOT_DOWNLOADED)).toBeVisible();
-  release();
-  await expect(page.getByRole('heading', { name: 'Enplace could not open your cookbook' })).toBeVisible();
-  await expect(page.locator('.mep-shell')).toHaveCount(0);
-  expect((await cookbookPersistenceCounts(page, id)).markers).toBe(0);
-});
-
 
 test("a first sync of an empty cookbook reopens offline", async ({ page, context }) => {
   const id = await publishedEmptyCookbook();
   await page.goto(`/#k=${id}`);
   await expect(page.getByRole('heading', { name: 'No recipes yet' })).toBeVisible();
-  expect((await cookbookPersistenceCounts(page, id)).markers).toBe(1);
+  expect(await persistedUpdateCount(page, id)).toBeGreaterThan(0);
   await cacheControlledShell(page);
   await context.setOffline(true);
   await page.reload();

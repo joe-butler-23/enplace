@@ -1,3 +1,4 @@
+import { newCookbookId } from "./doc";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openCookbook, type CookbookConnection } from "../host-client/cookbook-storage";
 import { readText } from "../host-client/browser-storage";
@@ -10,7 +11,7 @@ const connections: CookbookConnection[] = [];
 
 async function selectCookbook(path: string, text: string): Promise<void> {
   const connection = await openCookbook({
-    id: `abcdefghijklmnopqrstuvwxyz${connections.length}`,
+    id: newCookbookId(),
     relayUrl: null,
     persist: false,
   });

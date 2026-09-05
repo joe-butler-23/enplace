@@ -1,5 +1,6 @@
 import { newCookbookId } from "../../src/cookbook/doc";
-import { openCookbook, type CookbookConnection } from "../../src/host-client/cookbook-storage";
+import { cookbookCipher } from "../../src/cookbook/crypto";
+import { cookbookDatabaseName, openCookbook, type CookbookConnection } from "../../src/host-client/cookbook-storage";
 import { readFile } from "node:fs/promises";
 import { expect, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
@@ -23,6 +24,11 @@ export async function addShoppingItem(page: Page, item: string): Promise<void> {
   await expect(page.getByRole("checkbox", { name: item })).toBeVisible();
 }
 
+/** The persisted copy is the encrypted wire document, stored under the public room name. */
+export async function persistedDatabaseName(id: string): Promise<string> {
+  return cookbookDatabaseName((await cookbookCipher(id)).room);
+}
+
 /** Number of Yjs updates y-indexeddb has committed for the cookbook: the durability boundary a reload must not cross early. */
 export async function persistedUpdateCount(page: Page, id: string): Promise<number> {
   return page.evaluate(async (name) => new Promise<number>((resolve, reject) => {
@@ -34,7 +40,7 @@ export async function persistedUpdateCount(page: Page, id: string): Promise<numb
       count.onsuccess = () => { db.close(); resolve(count.result); };
       count.onerror = () => { db.close(); reject(count.error); };
     };
-  }), `enplace-kitchen-${id}`);
+  }), await persistedDatabaseName(id));
 }
 
 export async function exportedCookbookText(page: Page, path: string): Promise<string> {

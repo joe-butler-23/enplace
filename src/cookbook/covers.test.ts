@@ -1,3 +1,4 @@
+import { newCookbookId } from "./doc";
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { openCookbook } from "../host-client/cookbook-storage";
@@ -35,7 +36,7 @@ describe("cover files", () => {
   it("backfills one shared legacy cover without counting it as a first local write", async () => {
     const firstLocalWrite = vi.fn();
     const connection = await openCookbook({
-      id: `test-${crypto.randomUUID()}`,
+      id: newCookbookId(),
       relayUrl: null,
       persist: false,
       onFirstLocalWrite: firstLocalWrite,

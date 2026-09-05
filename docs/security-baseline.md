@@ -1,8 +1,10 @@
 # Security Baseline
 
-Enplace is a static PWA. Cloudflare Pages serves application assets. Browsers hold
-and edit the plaintext cookbook in IndexedDB, encrypt its Yjs updates, and send
-only an encrypted projection through the relay. File import/export is explicit;
+Enplace is a static PWA. Cloudflare Pages serves application assets. Browsers
+persist only the encrypted projection of the cookbook in IndexedDB, under its
+public room name, rebuild the plaintext in memory, and send that same projection
+through the relay. The web app manifest is a data: URL written by the page so the
+installed app's start URL can carry the link fragment without a network request. File import/export is explicit;
 there is no folder mirror or filesystem write API.
 
 ## Encryption and sharing
@@ -60,7 +62,7 @@ The build fills the CSP relay source from the configured WebSocket URL. It allow
 same-origin application requests and that exact relay origin, not arbitrary
 `wss:` destinations. Scripts are same-origin with no inline script or eval;
 objects, framing, forms and base-URL changes are blocked. Images allow same-origin,
-blob and data resources. Inline styles remain necessary for the app's existing
+blob and data resources; the manifest is a data: URL only. Inline styles remain necessary for the app's existing
 layout and styles. Responses also set `nosniff` and `Referrer-Policy: no-referrer`.
 
 The service worker caches the app shell, not cookbook content. The link fragment

@@ -1,3 +1,4 @@
+import { newCookbookId } from "../cookbook/doc";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openCookbook, type CookbookConnection } from "./cookbook-storage";
 import { readCookbookText, writeCookbookText } from "../cookbook/doc";
@@ -11,7 +12,7 @@ const connections: CookbookConnection[] = [];
 
 async function selectCookbook(initial: Record<string, string> = {}): Promise<CookbookConnection> {
   const connection = await openCookbook({
-    id: `abcdefghijklmnopqrstuvwxyz${connections.length}`,
+    id: newCookbookId(),
     relayUrl: null,
     persist: false,
   });

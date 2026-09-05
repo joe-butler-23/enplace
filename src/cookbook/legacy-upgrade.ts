@@ -1,8 +1,9 @@
 import * as Y from "yjs";
 import * as decoding from "lib0/decoding";
 import { zipSync } from "fflate";
+import { IndexeddbPersistence } from "y-indexeddb";
 import { openCookbook } from "../host-client/cookbook-storage";
-import { newCookbookId, withCookbookHash } from "./doc";
+import { newCookbookId, walkCookbookFiles, withCookbookHash } from "./doc";
 import { setCurrentCookbookId } from "./registry";
 
 const LEGACY_READ_DEADLINE_MS = 15_000;
@@ -43,6 +44,15 @@ export async function readLegacyCookbook(url: string, id: string, signal: AbortS
   });
 }
 
+/** The plaintext copy this device saved under the historical database name, read in place. */
+async function openPreviousCopy(id: string): Promise<{ doc: Y.Doc; ready: boolean; close: () => Promise<void> }> {
+  const doc = new Y.Doc();
+  const persistence = new IndexeddbPersistence(`enplace-kitchen-${id}`, doc);
+  await persistence.whenSynced;
+  const ready = (await persistence.get("has-local-copy")) === 1;
+  return { doc, ready, close: async () => { await persistence.destroy(); doc.destroy(); } };
+}
+
 /** The old data is retained. No secret or redirect is ever written into the old relay room. */
 export async function showLegacyUpgrade(id: string, relayUrl: string | null, signal: AbortSignal): Promise<void> {
   const mappingKey = `enplace-upgraded-${id}`;
@@ -75,23 +85,24 @@ export async function showLegacyUpgrade(id: string, relayUrl: string | null, sig
 
   const run = async (action: "upgrade" | "download"): Promise<void> => {
     upgrade.disabled = download.disabled = true;
-    let source: Awaited<ReturnType<typeof openCookbook>> | null = null;
+    let source: Awaited<ReturnType<typeof openPreviousCopy>> | null = null;
     try {
-      source = await openCookbook({ id, relayUrl: null, signal });
+      source = await openPreviousCopy(id);
+      signal.throwIfAborted();
       if (relayUrl) {
         try { Y.applyUpdate(source.doc, await readLegacyCookbook(relayUrl, id, signal)); }
         catch (error) {
           signal.throwIfAborted();
-          if (source.localCopy() !== "ready") throw error;
+          if (!source.ready) throw error;
           // An offline cached copy stays exportable. Upgrading waits for the shared
           // copy so recent partner edits cannot silently disappear from the new link.
           if (action === "upgrade") throw new Error("Reconnect to include your partner's latest changes before upgrading. You can still download this device's saved copy.");
           message.textContent = "Downloaded this device's saved copy; the shared copy was unavailable.";
         }
-      } else if (source.localCopy() !== "ready") throw new Error("No saved copy was found on this device.");
+      } else if (!source.ready) throw new Error("No saved copy was found on this device.");
       signal.throwIfAborted();
       if (action === "download") {
-        const entries = Object.fromEntries((await source.adapter.walkFiles()).map(({ path, bytes }) => [path, bytes]));
+        const entries = Object.fromEntries(walkCookbookFiles(source.doc).map(({ path, bytes }) => [path, bytes]));
         const bytes = zipSync(entries);
         const href = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type: "application/zip" }));
         const anchor = document.createElement("a");

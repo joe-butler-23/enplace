@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Shared shopping ticks no longer stall behind whole-cookbook uploads: the encrypted wire document is now the persisted copy, so opening syncs only the records a device lacks, small edits fold together instead of triggering a full snapshot every 64 records, and a snapshot is written only when the log holds more than twice the live cookbook
+- An app added to the home screen launches the cookbook it was added from: the manifest is generated with the link in its start URL instead of the site root
+- Returning to the app, or regaining the network, replaces the relay connection at once, so a half-open socket left by the lock screen no longer holds ticks for up to thirty seconds
+
 ### Added
 
 - Shared live cookbook: one merge document per household (Yjs), persisted on every device, synced through a y-websocket relay, addressed by an unguessable link in the URL fragment. Works on every browser and phone with no install or sign-in
