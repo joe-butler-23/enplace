@@ -1,7 +1,7 @@
 import { Lexer, type Token, type Tokens } from "marked";
 
 export type RecipeAmount = { factor: string; unit: string | null };
-export type RecipeIngredient = { name: string; amount: RecipeAmount | null; link: string | null };
+export type RecipeIngredient = { raw: string; display: string; name: string; amount: RecipeAmount | null; link: string | null };
 export type RecipeIngredientGroup = { title: string; ingredients: RecipeIngredient[]; ingredient_groups: RecipeIngredientGroup[] };
 export type RecipeMD = {
   title: string; description: string | null; tags: string[]; yields: RecipeAmount[];
@@ -26,7 +26,9 @@ function metadata(token: Token | undefined): Tokens.Em | Tokens.Strong | null {
 }
 function ingredient(item: Tokens.ListItem): RecipeIngredient {
   // Retain Markdown and continuation indentation for round trips and subrecipes.
-  let name = item.raw.replace(/^\s*(?:[-+*]|\d+[.)])\s+/, '').trimEnd();
+  const raw = item.raw.replace(/^\s*(?:[-+*]|\d+[.)])\s+/, '').trimEnd();
+  let name = raw;
+  let display = raw;
   const blocks = meaningful(item.tokens);
   if (!blocks.length) throw new Error('RecipeMD ingredient needs a name');
   const first = blocks[0];
@@ -34,6 +36,7 @@ function ingredient(item: Tokens.ListItem): RecipeIngredient {
   let amount: RecipeAmount | null = null;
   if (inlines?.[0]?.type === 'em') {
     amount = parseAmount((inlines[0] as Tokens.Em).text);
+    display = (inlines[0] as Tokens.Em).text + raw.slice(inlines[0].raw.length);
     name = name.slice(inlines[0].raw.length).trim();
   }
   name = name.replace(/[^\S\n]+(?=\n\s*\n)/g, '');
@@ -44,7 +47,14 @@ function ingredient(item: Tokens.ListItem): RecipeIngredient {
     name = token.text; link = token.href.replace(/ /g, '%20');
   }
   if (!name.trim()) throw new Error('RecipeMD ingredient needs a name');
-  return { name: name.trim(), amount, link };
+  return { raw, display, name: name.trim(), amount, link };
+}
+/** Parse one shopping ingredient with the same CommonMark owner as recipe ingredients. */
+export function parseRecipeIngredient(text: string): RecipeIngredient {
+  const tokens = meaningful(Lexer.lex(`- ${text}`, { gfm: false }));
+  const list = tokens[0];
+  if (tokens.length !== 1 || list?.type !== 'list' || (list as Tokens.List).items.length !== 1) throw new Error('Expected one ingredient');
+  return ingredient((list as Tokens.List).items[0]);
 }
 /** RecipeMD 2.4 structure over CommonMark tokens. No application metadata is required. */
 export function parseRecipeMD(markdown: string): RecipeMD {

@@ -152,6 +152,7 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .shopping-item__label:active .shopping-item__box,
 .recipe-view__checklist label:active .checkbox-box { transform: scale(0.9); }
 .shopping-item__name { flex: 1 1 auto; min-width: 0; font-size: 0.94rem; letter-spacing: -0.005em; color: var(--ink); }
+.shopping-item__sources { display: block; margin-top: 2px; color: var(--muted); font-size: 0.72rem; overflow-wrap: anywhere; }
 .shopping-item.is-checked .shopping-item__name { color: var(--muted); text-decoration: line-through; }
 /* Row tools (aisle, remove) appear on hover; the aisle chip is a bare select so phones get the native picker. */
 .shopping-item__aisle,

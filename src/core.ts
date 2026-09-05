@@ -1,3 +1,4 @@
+import { parseRecipeIngredient, type RecipeAmount } from "./recipemd.js";
 import { formatIngredient } from "./recipe-migration.js";
 import { parseRecipeDocument } from "./recipe-document.js";
 export { parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
@@ -23,8 +24,75 @@ export type ShoppingLine = {
   text: string;
   checked: boolean;
   heading: string | null;
-  aisle?: string;
 };
+
+export type ShoppingItem = {
+  id: string; content: string; labels: string[]; sources?: string[]; checked: boolean;
+};
+export type ShoppingRow = ShoppingItem & { memberIds: string[] };
+
+/** Authoring owns noun spelling; no plural, unit, or quantity inference. */
+export const shoppingNoun = (name: string): string => name.split(',', 1)[0].trim().toLowerCase();
+
+export function shoppingIngredient(text: string): { noun: string; name: string; display: string; amount: RecipeAmount | null } {
+  const clean = text.replace(/<!--[\s\S]*?-->/g, '').trim();
+  try {
+    const ingredient = parseRecipeIngredient(clean);
+    return { noun: shoppingNoun(ingredient.name), name: ingredient.name, display: ingredient.display, amount: ingredient.amount };
+  } catch {
+    return { noun: shoppingNoun(clean), name: clean, display: clean, amount: null };
+  }
+}
+
+export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[] {
+  const groups = new Map<string, { row: ShoppingRow; amounts: Map<string | null, number>; unquantified: Map<string, string> }>();
+  for (const item of items) {
+    const { noun, name, display, amount } = shoppingIngredient(item.content);
+    let group = groups.get(noun);
+    if (!group) {
+      group = { row: { ...item, content: name.split(',', 1)[0].trim(), sources: [], memberIds: [], checked: true }, amounts: new Map(), unquantified: new Map() };
+      groups.set(noun, group);
+    }
+    group.row.memberIds.push(item.id);
+    group.row.sources = unique([...group.row.sources ?? [], ...item.sources ?? []]);
+    group.row.checked &&= item.checked;
+    if (amount) group.amounts.set(amount.unit, (group.amounts.get(amount.unit) ?? 0) + Number(amount.factor));
+    else if (!group.unquantified.has(display.toLowerCase())) group.unquantified.set(display.toLowerCase(), display);
+  }
+  return [...groups.values()].map(({ row, amounts, unquantified }) => {
+    const quantities = [...amounts].map(([unit, factor]) => `${Number(factor.toPrecision(12))}${unit ? ` ${unit}` : ''}`);
+    const quantified = quantities.length ? `${row.content} ${quantities.join(' + ')}` : '';
+    return { ...row, content: [quantified, ...unquantified.values()].filter(Boolean).join(' + ') };
+  });
+}
+
+export const SHOPPING_AISLES = ['Fruit & vegetables', 'Bakery', 'Meat & fish', 'Dairy & eggs', 'Chilled', 'Frozen', 'Tins & jars', 'Rice, pasta & grains', 'Baking', 'Herbs, spices & oils', 'Drinks', 'Household'];
+
+export function parseAisles(markdown: string): Map<string, string> {
+  const aisles = new Map<string, string>();
+  let aisle = '';
+  for (const line of markdown.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) aisle = SHOPPING_AISLES.includes(heading[1]) ? heading[1] : '';
+    const noun = /^\s*-\s+(.+?)\s*$/.exec(line)?.[1];
+    if (aisle && noun) aisles.set(shoppingNoun(noun), aisle);
+  }
+  return aisles;
+}
+
+export function setAisle(markdown: string, name: string, aisle: string): string {
+  const noun = shoppingNoun(name);
+  if (!noun || /[\r\n]/.test(name)) throw new Error('Invalid shopping noun');
+  if (aisle && !SHOPPING_AISLES.includes(aisle)) throw new Error('Invalid aisle');
+  const aisles = parseAisles(markdown);
+  if (aisle) aisles.set(noun, aisle); else aisles.delete(noun);
+  return SHOPPING_AISLES.flatMap(label => {
+    const nouns = [...aisles].filter(([, assigned]) => assigned === label).map(([key]) => key).sort();
+    return nouns.length ? [`## ${label}\n${nouns.map(key => `- ${key}`).join('\n')}\n`] : [];
+  }).join('\n');
+}
+
+export const isRecipePath = (path: string): boolean => /\.md$/i.test(path) && !['Plan.md', 'Shopping.md', 'Aisles.md'].includes(path);
 
 export function parseRecipe(path: string, markdown: string): Recipe | null {
   const parsed = parseRecipeDocument(path, markdown);
@@ -55,7 +123,7 @@ export function finalizeRecipes(recipes: readonly Recipe[]): Recipe[] {
 
 export function scanRecipes(files: ReadonlyArray<{ path: string; text: string }>): Recipe[] {
   return finalizeRecipes(files
-    .filter(({ path }) => path.toLowerCase().endsWith(".md"))
+    .filter(({ path }) => isRecipePath(path))
     .map(({ path, text }) => parseRecipe(path, text))
     .filter((recipe): recipe is Recipe => recipe !== null));
 }
@@ -174,10 +242,7 @@ export function parseShopping(markdown: string): ShoppingLine[] {
     const nextHeading = /^##\s+(.+?)\s*$/.exec(line);
     if (nextHeading) heading = nextHeading[1];
     const item = checklistText(line);
-    if (item) {
-      const aisle = /\s*<!-- aisle: ([^<>\r\n]+) -->$/.exec(item.text);
-      result.push({ line: index, heading, ...item, ...(aisle ? { text: item.text.slice(0, aisle.index), aisle: aisle[1] } : {}) });
-    }
+    if (item) result.push({ line: index, heading, ...item });
   });
   return result;
 }
@@ -199,7 +264,6 @@ export function buildShoppingMarkdown(
 ): string {
   const canonical = canonicalShoppingMarkdown(current);
   const checked = new Map<string, boolean>();
-  const aisles = new Map<string, string>();
   const headingOccurrences = new Map<string, number>();
   let block = "";
   for (const line of canonical.split(/\r?\n/)) {
@@ -211,11 +275,9 @@ export function buildShoppingMarkdown(
     }
     const item = checklistText(line);
     if (!item || !block) continue;
-    const aisle = /\s*<!-- aisle: ([^<>\r\n]+) -->$/.exec(item.text);
-    const text = (aisle ? item.text.slice(0, aisle.index) : item.text).trim().toLowerCase();
+    const text = item.text.trim().toLowerCase();
     const key = `${block}\0${text}`;
     checked.set(key, item.checked || checked.get(key) === true);
-    if (aisle) aisles.set(key, aisle[1]);
   }
   const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLowerCase()));
   const preserved = removeRecipeBlocks(canonical, titles);
@@ -237,7 +299,7 @@ export function buildShoppingMarkdown(
       if (!text || seenIngredients.has(ingredientKey)) continue;
       seenIngredients.add(ingredientKey);
       const key = `${blockKey}\0${ingredientKey}`;
-      lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}${aisles.has(key) ? ` <!-- aisle: ${aisles.get(key)} -->` : ""}`);
+      lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}`);
     }
     if (lines.length) blocks.push(`## ${recipe.title}\n${lines.join("\n")}`);
   }
@@ -291,22 +353,13 @@ export function removeShoppingItem(markdown: string, itemLine: number, itemText:
   return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
 }
 
-export function setShoppingAisle(markdown: string, itemLine: number, itemText: string, aisle: string): string {
-  const label = aisle.trim();
-  if (/[<>\r\n]/.test(label) || label.includes('--')) throw new Error('Invalid aisle name');
-  const canonical = canonicalShoppingMarkdown(markdown);
-  const item = resolveShoppingItem(canonical, itemLine, itemText);
-  const lines = canonical.split(/\r?\n/);
-  lines[item.line] = lines[item.line].replace(/\s*<!-- aisle: [^<>\r\n]+ -->$/, '') + (label ? ` <!-- aisle: ${label} -->` : '');
-  return lines.join('\n');
-}
-
 export function resetShopping(markdown: string): string {
   return canonicalShoppingMarkdown(markdown).split(/\r?\n/).filter((line) => !checklistText(line)).join('\n');
 }
 
 export function shoppingPlainText(markdown: string): string {
-  return markdown.replace(/\s*<!-- aisle: [^<>\r\n]+ -->/g, "").replace(/^(\s*)-\s+\[[ xX]*\]\s+/gm, "$1");
+  return markdown.replace(/^([ \t]*)-\s+\[[ xX]*\]\s+(.+)$/gm,
+    (_match, indent: string, text: string) => indent + shoppingIngredient(text).display);
 }
 
 export function resolveRelativePath(documentPath: string, reference: string): string | null {

@@ -22,7 +22,7 @@ const props = {
 describe("ShoppingListView Markdown presentation", () => {
   it("groups deterministic shopping lines by recipe", () => {
     expect(groupShoppingItems(list.items, "recipe").map((group) => group.label)).toEqual([
-      "Soup", "Shared ingredients", "Bread"
+      "Soup", "Bread"
     ]);
   });
 

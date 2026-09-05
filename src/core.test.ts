@@ -13,7 +13,6 @@ import {
   resolveRelativePath,
   scanRecipes,
   serializePlan,
-  setShoppingAisle,
   shoppingPlainText,
   toggleShoppingItem,
   withRecipePlanning,
@@ -115,9 +114,9 @@ describe("Shopping.md", () => {
   it("keeps equal ingredient text in each recipe block with independent state", () => {
     const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- 1 onion\n- salt\n- SALT\n")!;
     const pie = parseRecipe("pie.md", "# Pie\n\n## Ingredients\n- 1 onion\n")!;
-    const current = "## Pie\n- [x] 1 onion <!-- aisle: Produce -->\n\n## Soup\n- [ ] 1 onion\n";
+    const current = "## Pie\n- [x] 1 onion\n\n## Soup\n- [ ] 1 onion\n";
     expect(buildShoppingMarkdown(current, [pie, soup], [pie, soup])).toBe(
-      "## Pie\n- [x] 1 onion <!-- aisle: Produce -->\n\n## Soup\n- [ ] 1 onion\n- [ ] salt\n",
+      "## Pie\n- [x] 1 onion\n\n## Soup\n- [ ] 1 onion\n- [ ] salt\n",
     );
   });
 
@@ -128,9 +127,6 @@ describe("Shopping.md", () => {
     expect(toggleShoppingItem(malformed, 1, "onion", false)).toBe("## Soup\n- [ ] onion\n- [ ] stock\n");
     expect(appendShoppingItem(malformed, "salt")).not.toMatch(/\[(?:xx|  )\]/);
     expect(removeShoppingItem(malformed, 1, "onion")).toBe("## Soup\n- [ ] stock\n");
-    expect(setShoppingAisle(malformed, 1, "onion", "Produce")).toBe(
-      "## Soup\n- [x] onion <!-- aisle: Produce -->\n- [ ] stock\n",
-    );
     expect(buildShoppingMarkdown(malformed, [], [])).toBe("## Soup\n- [x] onion\n- [ ] stock\n");
   });
 

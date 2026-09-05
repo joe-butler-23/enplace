@@ -293,13 +293,13 @@ function App(): React.JSX.Element | null {
       .catch(() => undefined)
       .then(() => { void setActiveView("shopping"); });
   }, [setActiveView, shoppingWork]);
-  const handleCheckShopping = React.useCallback((id: string, checked: boolean) => {
-    const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content; if (!text) return;
-    void shoppingWork(() => toggleShopping(text, id, checked)).catch(() => undefined);
+  const handleCheckShopping = React.useCallback((ids: string[], checked: boolean) => {
+    const items = getCookbookSnapshot().shopping.items.filter((item) => ids.includes(item.id));
+    void shoppingWork(() => toggleShopping(items, checked)).catch(() => undefined);
   }, [shoppingWork]);
-  const handleRemoveShopping = React.useCallback((id: string) => {
-    const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content; if (!text) return;
-    void shoppingWork(() => removeShopping(text, id)).catch(() => undefined);
+  const handleRemoveShopping = React.useCallback((ids: string[]) => {
+    const items = getCookbookSnapshot().shopping.items.filter((item) => ids.includes(item.id));
+    void shoppingWork(() => removeShopping(items)).catch(() => undefined);
   }, [shoppingWork]);
   const handleCopyShopping = React.useCallback(() => { void copyShoppingList().then(() => notify("Shopping list copied."), () => notify("Could not copy the shopping list.")); }, []);
 
@@ -387,7 +387,7 @@ function App(): React.JSX.Element | null {
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
       {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
         const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content;
-        if (text) void shoppingWork(() => updateShoppingAisle(text, id, aisle)).catch(() => undefined);
+        if (text) void shoppingWork(() => updateShoppingAisle(text, aisle)).catch(() => undefined);
       }} /> : null}
       {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
       {settingsOpen ? <SettingsDialog routePath={pathnameForView(activeView)} onClose={closeSettings} /> : null}

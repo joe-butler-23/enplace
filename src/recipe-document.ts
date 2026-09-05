@@ -258,7 +258,8 @@ function viewMetadata(
 export function parseRecipeDocument(path: string, markdown: string): ParsedRecipeDocument {
   try {
     const standard = parseRecipeMD(markdown);
-    const ingredients = flattenIngredients(standard).map(ingredientText);
+    const parsedIngredients = flattenIngredients(standard);
+    const ingredients = parsedIngredients.map(ingredient => ingredient.raw);
     const description = standard.description ?? "";
     const lines = description.split(/\r?\n/);
     const source = /(?:^|\n)Source:\s*(?:\[[^\]]*\]\(([^)]+)\)|([^\n]+))/.exec(description);
@@ -266,7 +267,7 @@ export function parseRecipeDocument(path: string, markdown: string): ParsedRecip
     const view = viewMetadata(description, {}, lines);
     return { path, markdown, body: markdown, rawFrontmatter: null, frontmatter: {}, recipeMD: standard,
       recipe: { title: standard.title, ingredients, cover: recipeMetadata(path, description, {}, lines).cover, added, tags: standard.tags },
-      view: { ...view, title: standard.title, ingredients, directions: parseDisplayDirections(['## Method', ...(standard.instructions ?? '').replace(/^##\s+(Method|Directions)\s*\n/i, '').split(/\r?\n/)]), source: source?.[1] ?? source?.[2] ?? null, tags: standard.tags } };
+      view: { ...view, title: standard.title, ingredients: parsedIngredients.map(ingredientText), directions: parseDisplayDirections(['## Method', ...(standard.instructions ?? '').replace(/^##\s+(Method|Directions)\s*\n/i, '').split(/\r?\n/)]), source: source?.[1] ?? source?.[2] ?? null, tags: standard.tags } };
   } catch { /* Existing cookbooks remain readable until their explicit migration. */ }
   const recipeFrame = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   const displayFrame = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(markdown);

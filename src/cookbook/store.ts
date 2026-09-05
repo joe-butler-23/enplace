@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import {
-  canonicalShoppingMarkdown, finalizeRecipes, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe,
+  canonicalShoppingMarkdown, finalizeRecipes, isRecipePath, parseAisles, shoppingIngredient, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe,
 } from "../core";
 import {
   hasCookbookFile, isTextPath, listCookbookPaths, observeCookbook, readCookbookBytes, readCookbookText,
@@ -23,12 +23,15 @@ let bound = currentCookbookConnection();
 let unobserve: (() => void) | null = null;
 const listeners = new Set<() => void>();
 const images = /\.(?:avif|gif|jpe?g|png|webp)$/i;
-const recipePath = (path: string): boolean => /\.md$/i.test(path) && path !== "Plan.md" && path !== "Shopping.md";
 const emit = (): void => listeners.forEach((listener) => listener());
-const shoppingList = (text: string): ShoppingList => ({ items: parseShopping(text).map((item) => ({
-  id: `line:${item.line}`, content: item.text, labels: item.aisle ? [item.aisle] : [],
-  sources: item.heading ? [item.heading] : [], checked: item.checked,
-})) });
+const shoppingList = (text: string, aisleText: string): ShoppingList => {
+  const aisles = parseAisles(aisleText);
+  return { items: parseShopping(text).map((item) => {
+    const aisle = aisles.get(shoppingIngredient(item.text).noun);
+    return { id: `line:${item.line}`, content: item.text, labels: aisle ? [aisle] : [],
+      sources: item.heading ? [item.heading] : [], checked: item.checked };
+  }) };
+};
 const sameReferences = <T,>(left: readonly T[], right: readonly T[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
@@ -68,10 +71,10 @@ function bootstrap(): void {
   }
   snapshot = {
     recipes: scanRecipes([...texts]
-      .filter(([path]) => recipePath(path))
+      .filter(([path]) => isRecipePath(path))
       .map(([path, text]) => ({ path, text }))),
     plan: parsePlan(texts.get("Plan.md") ?? ""),
-    shopping: shoppingList(texts.get("Shopping.md") ?? ""),
+    shopping: shoppingList(texts.get("Shopping.md") ?? "", texts.get("Aisles.md") ?? ""),
     files: paths.map((path) => ({ path })), texts, imageUrls,
     revision: snapshot.revision + 1,
   };
@@ -123,10 +126,10 @@ function projectImages(changed: ReadonlySet<string>): ReadonlyMap<string, string
 }
 
 function projectRecipes(paths: ReadonlySet<string>, texts: ReadonlyMap<string, string>): Recipe[] {
-  if (![...paths].some(recipePath)) return snapshot.recipes;
+  if (![...paths].some(isRecipePath)) return snapshot.recipes;
   const recipes = new Map(snapshot.recipes.map((recipe) => [recipe.path, recipe]));
   for (const path of paths) {
-    if (!recipePath(path)) continue;
+    if (!isRecipePath(path)) continue;
     const text = texts.get(path);
     const recipe = text === undefined ? null : parseRecipe(path, text);
     if (recipe) recipes.set(path, recipe); else recipes.delete(path);
@@ -143,8 +146,8 @@ function rebuild(changed: ReadonlySet<string>): void {
   const recipes = projectRecipes(textProjection.paths, textProjection.texts);
   const plan = textProjection.paths.has("Plan.md")
     ? parsePlan(textProjection.texts.get("Plan.md") ?? "") : snapshot.plan;
-  const shopping = textProjection.paths.has("Shopping.md")
-    ? shoppingList(textProjection.texts.get("Shopping.md") ?? "") : snapshot.shopping;
+  const shopping = textProjection.paths.has("Shopping.md") || textProjection.paths.has("Aisles.md")
+    ? shoppingList(textProjection.texts.get("Shopping.md") ?? "", textProjection.texts.get("Aisles.md") ?? "") : snapshot.shopping;
   const imageUrls = projectImages(changed);
   if (
     recipes === snapshot.recipes && plan === snapshot.plan && shopping === snapshot.shopping

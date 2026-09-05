@@ -1,22 +1,16 @@
 import * as React from "react";
 import { currentCookbookConnection, onCurrentCookbookConnection } from "../../cookbook/current";
 
-export type ShoppingListItem = {
-  id: string;
-  content: string;
-  labels: string[];
-  sources?: string[];
-  checked: boolean;
-};
+import { SHOPPING_AISLES, mergeShoppingItems, shoppingIngredient, type ShoppingItem, type ShoppingRow } from "../../core";
 
-export type ShoppingList = { items: ShoppingListItem[] };
+export type ShoppingList = { items: ShoppingItem[] };
 type ShoppingListViewProps = {
   list: ShoppingList;
   busy: boolean;
   error: string | null;
-  onCheck: (itemId: string, checked: boolean) => void;
+  onCheck: (itemIds: string[], checked: boolean) => void;
   onAdd?: (content: string) => void | Promise<void>;
-  onRemove?: (itemId: string) => void;
+  onRemove?: (itemIds: string[]) => void;
   onCopyLink?: () => void;
   onReset?: () => void;
   onAisle?: (itemId: string, aisle: string) => void;
@@ -25,30 +19,28 @@ type ShoppingListViewProps = {
 export type ShoppingListGrouping = "none" | "section" | "recipe";
 
 const OTHER_GROUP = "Other";
-export const SHOPPING_AISLES = ['Fruit & vegetables', 'Bakery', 'Meat & fish', 'Dairy & eggs', 'Chilled', 'Frozen', 'Tins & jars', 'Rice, pasta & grains', 'Baking', 'Herbs, spices & oils', 'Drinks', 'Household'];
 const GROUPINGS: Array<[ShoppingListGrouping, string]> = [["none", "None"], ["section", "Aisle"], ["recipe", "Recipe"]];
 const GROUPING_KEY = 'enplace.shopping-grouping';
 function savedGrouping(): ShoppingListGrouping {
   try { const saved = localStorage.getItem(GROUPING_KEY); return saved === 'section' || saved === 'none' ? saved : 'recipe'; } catch { return 'recipe'; }
 }
 
-export type ShoppingGroup = { label: string; items: ShoppingList["items"] };
+export type ShoppingGroup = { label: string; items: ShoppingRow[] };
 
 export function groupShoppingItems(
   items: ShoppingList["items"],
   grouping: ShoppingListGrouping
 ): ShoppingGroup[] {
-  if (grouping === "none") {
-    return items.length > 0 ? [{ label: "", items: [...items] }] : [];
-  }
-  const groups = new Map<string, ShoppingList["items"]>();
-  for (const item of items) {
+  const rows = grouping === "recipe"
+    ? items.map(item => ({ ...item, content: shoppingIngredient(item.content).display, memberIds: [item.id] }))
+    : mergeShoppingItems(items);
+  if (grouping === "none") return rows.length ? [{ label: "", items: rows }] : [];
+  const groups = new Map<string, ShoppingRow[]>();
+  for (const item of rows) {
     const sources = [...new Set((item.sources ?? []).map((source) => source.trim()).filter(Boolean))];
     const label = grouping === "section"
       ? item.labels[0]?.trim() || OTHER_GROUP
-      : sources.length > 1
-        ? "Shared ingredients"
-        : sources[0] || OTHER_GROUP;
+      : sources[0] || OTHER_GROUP;
     const group = groups.get(label) ?? [];
     group.push(item);
     groups.set(label, group);
@@ -82,10 +74,10 @@ function ShoppingItemRow({
   onCheck,
   onRemove, onAisle
 }: {
-  item: ShoppingList["items"][number];
+  item: ShoppingRow;
   busy: boolean;
-  onCheck: (itemId: string, checked: boolean) => void;
-  onRemove?: (itemId: string) => void;
+  onCheck: (itemIds: string[], checked: boolean) => void;
+  onRemove?: (itemIds: string[]) => void;
   onAisle?: (itemId: string, aisle: string) => void;
 }): React.JSX.Element {
   return (
@@ -95,8 +87,9 @@ function ShoppingItemRow({
           className="shopping-item__input"
           type="checkbox"
           checked={item.checked}
+          aria-description={item.memberIds.length > 1 ? item.sources?.join(", ") : undefined}
           disabled={busy}
-          onChange={(event) => onCheck(item.id, event.currentTarget.checked)}
+          onChange={(event) => onCheck(item.memberIds, event.currentTarget.checked)}
         />
         <span className="shopping-item__box" aria-hidden="true">
           <svg viewBox="0 0 16 16" focusable="false">
@@ -106,14 +99,15 @@ function ShoppingItemRow({
         <span
           className="shopping-item__name"
         >
-          {item.content}
+          <span>{item.content}</span>
+          {item.memberIds.length > 1 && item.sources?.length ? <small className="shopping-item__sources" aria-hidden="true">{item.sources.join(", ")}</small> : null}
         </span>
       </label>
       {onAisle ? <select className="shopping-item__aisle" aria-label={`Aisle for ${item.content}`} value={item.labels[0] ?? ''} disabled={busy} onChange={(event) => onAisle(item.id, event.currentTarget.value)}>
         <option value="">Other</option>
         {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
       </select> : null}
-      {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.id)}>×</button> : null}
+      {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button> : null}
     </li>
   );
 }

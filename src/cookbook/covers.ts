@@ -1,5 +1,5 @@
 import type * as Y from "yjs";
-import { scanRecipes } from "../core";
+import { isRecipePath, scanRecipes } from "../core";
 import { resolveDatabaseCoverPath } from "../modules/cooking/utils/databaseCover";
 import {
   listCookbookPaths, readCookbookBytes, readCookbookText, writeCookbookBytes,
@@ -102,7 +102,7 @@ export async function backfillCookbookCovers(
 ): Promise<number> {
   const paths = new Set(listCookbookPaths(doc));
   const recipes = scanRecipes([...paths]
-    .filter((path) => /\.md$/i.test(path) && path !== "Plan.md" && path !== "Shopping.md")
+    .filter(isRecipePath)
     .map((path) => ({ path, text: readCookbookText(doc, path) ?? "" })));
   const pending: Array<{ coverPath: string; thumbnailPath: string; files: CoverFiles }> = [];
   const considered = new Set<string>();

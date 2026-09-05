@@ -1,6 +1,6 @@
 import {
   appendShoppingItem, buildShoppingMarkdown, parsePlan, recipePlanning, removeShoppingItem,
-  resetShopping, setShoppingAisle, serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
+  resetShopping, setAisle, shoppingIngredient, serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
   type Recipe, type RecipePlanning,
 } from "../core";
 import { readText, remove, updateText } from "../host-client/browser-storage";
@@ -34,15 +34,17 @@ const shoppingLine = (itemId: string): number => {
   if (!match) throw new Error("Shopping item no longer exists");
   return Number(match[1]);
 };
-export const removeShopping = (itemText: string, itemId: string): Promise<string> => updateText(
-  "Shopping.md", (text) => removeShoppingItem(text, shoppingLine(itemId), itemText),
+export const removeShopping = (items: readonly { id: string; content: string }[]): Promise<string> => updateText(
+  "Shopping.md", (text) => [...items].sort((a, b) => shoppingLine(b.id) - shoppingLine(a.id))
+    .reduce((current, item) => removeShoppingItem(current, shoppingLine(item.id), item.content), text),
 );
 export const resetShoppingList = (): Promise<string> => updateText("Shopping.md", resetShopping);
-export const updateShoppingAisle = (itemText: string, itemId: string, aisle: string): Promise<string> => updateText(
-  "Shopping.md", (text) => setShoppingAisle(text, shoppingLine(itemId), itemText, aisle),
+export const updateShoppingAisle = (itemText: string, aisle: string): Promise<string> => updateText(
+  "Aisles.md", (text) => setAisle(text, shoppingIngredient(itemText).noun, aisle),
 );
-export async function toggleShopping(itemText: string, itemId: string, checked: boolean): Promise<void> {
-  await updateText("Shopping.md", (text) => toggleShoppingItem(text, shoppingLine(itemId), itemText, checked));
+export async function toggleShopping(items: readonly { id: string; content: string }[], checked: boolean): Promise<void> {
+  await updateText("Shopping.md", (text) => items.reduce(
+    (current, item) => toggleShoppingItem(current, shoppingLine(item.id), item.content, checked), text));
 }
 export async function copyShoppingList(): Promise<void> {
   await navigator.clipboard.writeText(shoppingPlainText(await readText("Shopping.md")));

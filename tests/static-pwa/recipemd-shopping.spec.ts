@@ -122,5 +122,5 @@ test('shopping build keeps the same ingredient in each planned recipe block', as
   await expect(page.locator('.shopping-group__label')).toHaveText(['Onion Pie', 'Onion Soup']);
 
   const shopping = await exportedCookbookText(page, 'Shopping.md');
-  expect(shopping.match(/^- \[[ x]\] 1 onion$/gm)).toHaveLength(2);
+  expect(shopping.match(/^- \[[ x]\] \*1\* onion$/gm)).toHaveLength(2);
 });

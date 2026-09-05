@@ -7,7 +7,7 @@ describe('RecipeMD upstream conformance', () => {
     it(file, () => {
       const markdown = readFileSync(new URL(file, root), 'utf8');
       if (file.endsWith('.invalid.md')) expect(() => parseRecipeMD(markdown)).toThrow();
-      else expect(parseRecipeMD(markdown)).toEqual(JSON.parse(readFileSync(new URL(file.replace(/\.md$/, '.json'), root), 'utf8')));
+      else expect(parseRecipeMD(markdown)).toMatchObject(JSON.parse(readFileSync(new URL(file.replace(/\.md$/, '.json'), root), 'utf8')));
     });
   }
 });

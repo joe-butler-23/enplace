@@ -5,7 +5,7 @@ import { readText } from "../host-client/browser-storage";
 import { parsePlan, parseRecipe } from "../core";
 import { writeCookbookText } from "./doc";
 import { currentCookbookConnection, setCurrentCookbookConnection } from "./current";
-import { applyShoppingPlan, deleteRecipe, saveRecipe, updatePlanRecipe } from "./actions";
+import { applyShoppingPlan, deleteRecipe, saveRecipe, toggleShopping, updatePlanRecipe } from "./actions";
 
 const connections: CookbookConnection[] = [];
 
@@ -99,4 +99,40 @@ describe("browser shopping recipe selection", () => {
     expect(updateText).not.toHaveBeenCalled();
     await expect(readText("Shopping.md")).resolves.toBe(before);
   });
+});
+
+it("ticks every merged member with one live text update", async () => {
+  await selectCookbook("Shopping.md", "## Pie\n- [x] *1* aubergine, diced\n\n## Soup\n- [ ] *1* aubergine, sliced\n");
+  const update = vi.spyOn(currentCookbookConnection()!.adapter, "updateText");
+  await toggleShopping([{ id: "line:1", content: "*1* aubergine, diced" }, { id: "line:4", content: "*1* aubergine, sliced" }], true);
+  expect(await readText("Shopping.md")).toBe("## Pie\n- [x] *1* aubergine, diced\n\n## Soup\n- [x] *1* aubergine, sliced\n");
+  expect(update).toHaveBeenCalledTimes(1);
+  update.mockClear();
+  await toggleShopping([{ id: "line:1", content: "*1* aubergine, diced" }, { id: "line:4", content: "*1* aubergine, sliced" }], false);
+  expect(await readText("Shopping.md")).not.toContain("[x]");
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it("keeps aisle memory across builds resets and live store projections", async () => {
+  await selectCookbook("dish.md", "# Dish\n\n---\n\n- *1* aubergine, sliced\n\n---\n\nCook.\n");
+  await applyShoppingPlan(['dish.md']);
+  const { updateShoppingAisle, resetShoppingList } = await import('./actions');
+  const { getCookbookSnapshot } = await import('./store');
+  const update = vi.spyOn(currentCookbookConnection()!.adapter, 'updateText');
+  const before = await readText('Shopping.md');
+  await updateShoppingAisle('*1* aubergine, sliced', 'Fruit & vegetables');
+  expect(await readText('Aisles.md')).toBe('## Fruit & vegetables\n- aubergine\n');
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(update.mock.calls[0][0]).toBe('Aisles.md');
+  expect(await readText('Shopping.md')).toBe(before);
+  expect(getCookbookSnapshot().shopping.items[0].labels).toEqual(['Fruit & vegetables']);
+  await applyShoppingPlan([]);
+  await resetShoppingList();
+  await applyShoppingPlan(['dish.md']);
+  expect(getCookbookSnapshot().shopping.items[0].labels).toEqual(['Fruit & vegetables']);
+  await updateShoppingAisle('*1* aubergine, sliced', 'Chilled');
+  expect(getCookbookSnapshot().shopping.items[0].labels).toEqual(['Chilled']);
+  await updateShoppingAisle('*1* aubergine, sliced', '');
+  expect(getCookbookSnapshot().shopping.items[0].labels).toEqual([]);
+  expect(getCookbookSnapshot().recipes.map(recipe => recipe.path)).toEqual(['dish.md']);
 });

@@ -110,9 +110,9 @@ describe("mep CLI", () => {
     await writeFile(path.join(root, "soup.md"), soupMarkdown);
     await writeFile(path.join(root, "pie.md"), pieMarkdown);
     await writeFile(path.join(root, "Plan.md"), "## 2026-09-07\n- [[soup]]\n\n## 2026-09-09\n- [[pie]]\n");
-    const current = "# Shopping\n\n## Soup\n- [x] 2 onions\n";
+    const current = "# Shopping\n\n## Soup\n- [x] *2* onions\n";
     await writeFile(path.join(root, "Shopping.md"), current);
-    const expected = "# Shopping\n\n## Soup\n- [x] 2 onions\n- [ ] Salt\n\n## Pie\n- [ ] salt\n- [ ] Flour\n";
+    const expected = "# Shopping\n\n## Soup\n- [x] *2* onions\n- [ ] Salt\n\n## Pie\n- [ ] salt\n- [ ] Flour\n";
 
     await expect(execute(["shop", "--week", "2026-09-10", "--folder", root])).resolves.toBe(expected);
     await expect(readFile(path.join(root, "Shopping.md"), "utf8")).resolves.toBe(expected);
