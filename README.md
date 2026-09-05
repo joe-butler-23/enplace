@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `33fcd2dd4584`, 2026-09-05.
+> Published snapshot of a private repository, refreshed at each release. Source commit `d155b2628761`, 2026-09-05.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -11,7 +11,9 @@ Enplace is a local-first meal-planning app for turning the recipes you already o
 **[Open Enplace](https://enplace-trial.pages.dev/)**
 
 <p align="center">
-  <img src="docs/enplace-weekly-loop.gif" alt="Browse recipes, choose meals, plan the week, and build a shopping list in Enplace">
+  <img src="docs/screenshot-database.png" alt="The Recipe Database, showing a grid of recipe covers with a search box and marked checkbox on each card" width="32%">
+  <img src="docs/screenshot-planner.png" alt="The weekly Planner, with two recipes dragged onto day lanes" width="32%">
+  <img src="docs/screenshot-shopping.png" alt="The shopping list, built from the planned recipes and grouped by recipe" width="32%">
 </p>
 
 ## The weekly loop
@@ -44,8 +46,8 @@ For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI checks,
 ## Development
 
 ```bash
-git clone https://github.com/joe-butler-23/mise-en-place.git
-cd mise-en-place
+git clone https://github.com/joe-butler-23/enplace.git
+cd enplace
 npm ci # installs the app, CLI, and relay workspace from one lock
 npm run build:static
 npm run preview
@@ -57,7 +59,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making 
 
 The public repository at [github.com/joe-butler-23/enplace](https://github.com/joe-butler-23/enplace) is a snapshot of this one, refreshed at each release by `scripts/publish-public.sh`.
 
-Enplace is early, actively developed software. Licensed under the [MIT license](LICENSE).
+Enplace is early, actively developed software. Licensed under the [MIT license](LICENSE). Typography is self-hosted Fraunces and Space Grotesk, licensed under the [SIL Open Font License](public/fonts/OFL.txt).
 
 ### Recipe files
 

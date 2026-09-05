@@ -6,7 +6,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const routes = ["/", "/index.html", "/shopping", "/planner", "/settings"];
+const routes = ["/", "/index.html", "/shopping", "/planner", "/recipe", "/settings"];
 const security = {
   "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss://enplace-relay.joesdownloads.workers.dev; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
   "x-content-type-options": "nosniff",

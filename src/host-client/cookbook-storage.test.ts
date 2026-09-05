@@ -183,6 +183,44 @@ describe("cookbook relay", () => {
 });
 
 
+describe("sealing failures", () => {
+  it("rejects the next adapter write once sealing fails and recovers once the cipher works again", async () => {
+    let broken = true;
+    const connection = await open({
+      wrapCipher: (cipher) => ({
+        ...cipher,
+        async seal(id, update) {
+          if (broken) throw new Error("stub seal failure");
+          return cipher.seal(id, update);
+        },
+      }),
+    });
+
+    // The write itself resolves — the doc mutation is synchronous — but the seal it triggers
+    // fails in the background, which cookbook-storage still reports through onError.
+    const sealFailed = new Promise<void>((resolve) => {
+      const stop = connection.onLocalCopy(() => {
+        if (connection.localCopy() instanceof Error) { stop(); resolve(); }
+      });
+    });
+    await connection.adapter.writeBytes("b.md", new TextEncoder().encode("second"));
+    await sealFailed;
+
+    // Only now does the next write reject, with a message and without touching the doc.
+    await expect(connection.adapter.writeBytes("c.md", new TextEncoder().encode("third")))
+      .rejects.toThrow(/cannot be saved/i);
+    expect(readCookbookText(connection.doc, "c.md")).toBeNull();
+    await expect(connection.adapter.updateText("c.md", (current) => current)).rejects.toThrow(/cannot be saved/i);
+    await expect(connection.adapter.remove("b.md")).rejects.toThrow(/cannot be saved/i);
+
+    broken = false;
+    // Fixing the cipher clears the failure: the still-queued edit and the new write both seal.
+    await expect(connection.adapter.writeBytes("d.md", new TextEncoder().encode("fourth"))).resolves.toBeUndefined();
+    expect(readCookbookText(connection.doc, "b.md")).toBe("second");
+    expect(readCookbookText(connection.doc, "d.md")).toBe("fourth");
+  });
+});
+
 describe("local readiness and remote synchronization", () => {
   it("does not claim durable readiness when browser storage is unavailable", async () => {
     vi.stubGlobal("indexedDB", undefined);

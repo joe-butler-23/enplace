@@ -87,18 +87,57 @@ describe("encrypted Yjs projection", () => {
     expect(readCookbookText(fresh.doc, "late.md")).toBe("concurrent late edit");
   });
 
-  it("bounds the active record set during sustained edits and authenticates before applying a batch", async () => {
+  it("bounds the active record set during sustained edits", async () => {
     const secret = newCookbookId();
     const left = await peer(secret);
     for (let n = 0; n < 130; n++) writeCookbookText(left.doc, "private.md", `private ${n}`);
     await left.bridge.settled();
     expect(left.bridge.records.size).toBeLessThan(64);
     const fresh = await peer(secret);
-    const id = newEnvelopeId();
-    left.bridge.records.set(id, new Uint8Array([1, 2, 3]));
     Y.applyUpdate(fresh.wire, Y.encodeStateAsUpdate(left.wire));
-    await expect(fresh.bridge.settled()).rejects.toThrow("Invalid encrypted");
-    expect(fresh.failure).toHaveBeenCalledOnce();
-    expect(readCookbookText(fresh.doc, "private.md")).toBeNull();
+    await fresh.bridge.settled();
+    expect(readCookbookText(fresh.doc, "private.md")).toBe("private 129");
+    expect(fresh.failure).not.toHaveBeenCalled();
+    expect(fresh.bridge.integrity()).toBe(0);
+  });
+
+  it("quarantines a garbage record by id, applies every good record, and keeps sealing and applying afterward", async () => {
+    const secret = newCookbookId();
+    const left = await peer(secret);
+    for (let n = 0; n < 5; n++) writeCookbookText(left.doc, "recipe.md", `good ${n}`);
+    await left.bridge.settled();
+
+    const fresh = await peer(secret);
+    const garbageId = newEnvelopeId();
+    left.bridge.records.set(garbageId, new Uint8Array([9, 9, 9]));
+    Y.applyUpdate(fresh.wire, Y.encodeStateAsUpdate(left.wire));
+    await fresh.bridge.settled();
+
+    // The good records applied and the failure never surfaced through onError.
+    expect(readCookbookText(fresh.doc, "recipe.md")).toBe("good 4");
+    expect(fresh.failure).not.toHaveBeenCalled();
+    expect(fresh.bridge.integrity()).toBe(1);
+    const seenGarbage: number[] = [];
+    fresh.bridge.onIntegrity((count) => seenGarbage.push(count));
+
+    // The quarantined record is not deleted by folding, nor by a snapshot on this device.
+    for (let n = 0; n < 40; n++) writeCookbookText(fresh.doc, "recipe.md", `fresh ${n}`);
+    await fresh.bridge.settled();
+    expect(fresh.bridge.records.has(garbageId)).toBe(true);
+    await fresh.bridge.compact();
+    expect(fresh.bridge.records.has(garbageId)).toBe(true);
+    expect(fresh.bridge.integrity()).toBe(1);
+    expect(seenGarbage).toEqual([]); // steady at 1 the whole time; no repeat notification
+
+    // Later local publishing and remote applying both keep working past the quarantine.
+    writeCookbookText(fresh.doc, "after.md", "still works locally");
+    await fresh.bridge.settled();
+    expect(readCookbookText(fresh.doc, "after.md")).toBe("still works locally");
+
+    const right = await peer(secret);
+    await exchange(fresh, right);
+    expect(readCookbookText(right.doc, "after.md")).toBe("still works locally");
+    expect(right.bridge.integrity()).toBe(1);
+    expect(right.failure).not.toHaveBeenCalled();
   });
 });

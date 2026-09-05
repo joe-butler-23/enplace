@@ -244,6 +244,52 @@ test("browser back and forward always mount the cookbook the URL names", async (
   }).toPass({ timeout: 15_000 });
 });
 
+test("opening a recipe pushes its own history entry, so browser Back returns to the database", async ({ page }) => {
+  const id = await openFreshCookbook(page);
+
+  await page.getByRole("button", { name: /^Open recipe /, exact: false }).first().click();
+  await expect(page).toHaveURL(new RegExp(`^.*/recipe#k=${id}$`));
+  await expect(page.locator(".recipe-view")).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`#k=${id}$`));
+  await expect(page).not.toHaveURL(/\/recipe/);
+  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+});
+
+test("in-app Back then browser Back reach the database in exactly one further press", async ({ page }) => {
+  await openFreshCookbook(page);
+
+  await openShopping(page);
+  await page.getByRole("button", { name: "Planner", exact: true }).click();
+  await expect(page.locator(".kanban-container")).toBeVisible();
+
+  // In-app Back (the sidebar control) must consume exactly one browser history entry.
+  await page.getByTitle("Go back").click();
+  await expect(page.getByRole("heading", { name: "Shopping list" })).toBeVisible();
+  await expect(page).toHaveURL(/\/shopping/);
+
+  // A single real Back press must then reach the database: no entry was left duplicated
+  // or skipped by the in-app Back above.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/shopping/);
+  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+});
+
+test("reloading on the recipe route still mounts the cookbook the URL names", async ({ page }) => {
+  const id = await openFreshCookbook(page);
+  await page.getByRole("button", { name: /^Open recipe /, exact: false }).first().click();
+  await expect(page).toHaveURL(new RegExp(`^.*/recipe#k=${id}$`));
+
+  await page.reload();
+
+  // The open recipe's identity lives in app state, not the URL, so a cold load has nothing
+  // to show and canonicalises back to the database — but it must be the same cookbook.
+  await expect(page).toHaveURL(new RegExp(`#k=${id}$`));
+  await expect(page).not.toHaveURL(/\/recipe/);
+  await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
+});
+
 test("the cookbook app shell reloads offline after its first visit", async ({ page, context }) => {
   await openFreshCookbook(page);
   await page.evaluate(() => navigator.serviceWorker.ready);

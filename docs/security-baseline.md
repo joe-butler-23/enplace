@@ -14,14 +14,21 @@ AES-256-GCM content key and an independent public room identifier using separate
 `content` and `room` contexts. The secret and content key are never sent to the
 relay. Each record uses a fresh random 96-bit nonce and a 128-bit authentication
 tag; associated data binds the protocol version, room, and record identity.
-Tampered, substituted, truncated, and wrong-key records fail authentication
-before their Yjs updates enter the cookbook.
+Every record authenticates independently. Tampered, substituted, truncated, and
+wrong-key records fail authentication before their Yjs update ever enters the
+cookbook; such a record is quarantined by its id — skipped on every later
+decrypt attempt, never applied, and never folded or replaced by a snapshot —
+while every record that does authenticate still applies. One unreadable record
+therefore cannot disable the shared cookbook for a device, and it remains in
+the wire map for another device (or a future decryption key) to inspect.
 
 The relay synchronises a Yjs map of opaque records, not the plaintext cookbook.
 Browsers compact this projection by replacing only records already decrypted
-into the new snapshot. Concurrent unseen records remain; concurrent encrypted
-snapshots merge through the original Yjs document. This preserves offline edits
-without teaching the relay the cookbook schema or giving it a decryption key.
+into the new snapshot; a quarantined record is never decrypted, so it is never
+one of the records a fold or snapshot replaces. Concurrent unseen records
+remain; concurrent encrypted snapshots merge through the original Yjs document.
+This preserves offline edits without teaching the relay the cookbook schema or
+giving it a decryption key.
 
 Anyone with the full private link can read and change the cookbook. Losing the
 link and every local copy loses access; sharing a new link after an upgrade is

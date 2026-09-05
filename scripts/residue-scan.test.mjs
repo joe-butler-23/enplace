@@ -98,6 +98,30 @@ describe("publication residue scanner", () => {
     expect(result.stderr).toContain("private.txt");
   });
 
+  it("allows the configured relay's workers.dev hostname but blocks any other one", async () => {
+    const root = await fixtureRepository();
+    await writeFile(
+      path.join(root, "allowed.txt"),
+      "wss://enplace-relay.joesdownloads.workers.dev/parties/kitchen\n"
+    );
+    git(root, "add", "allowed.txt");
+    git(root, "commit", "-qm", "reference the configured relay hostname");
+    const allowedResult = run(root, "bash", ["scripts/residue-scan.sh"]);
+    expect(allowedResult.status, allowedResult.stderr).toBe(0);
+    expect(allowedResult.stdout).toContain("Residue scan passed");
+
+    // Built from separate parts so this fixture domain never appears as a contiguous
+    // *.workers.dev hostname in this test file's own source (the scanner would then
+    // flag its own source as the "elsewhere" it's meant to catch).
+    const foreignWorkersDevHost = ["someones-account", "workers", "dev"].join(".");
+    await writeFile(path.join(root, "leaked.txt"), `https://${foreignWorkersDevHost}/room\n`);
+    git(root, "add", "leaked.txt");
+    git(root, "commit", "-qm", "plant an unreviewed workers.dev hostname");
+    const blockedResult = run(root, "bash", ["scripts/residue-scan.sh"]);
+    expect(blockedResult.status).toBe(1);
+    expect(blockedResult.stderr).toContain("leaked.txt");
+  });
+
   it("scans only unpublished commits when the push creates a new remote branch", async () => {
     const root = await fixtureRepository();
     const plantedCredential = `g${"hp_"}${"A".repeat(32)}`;

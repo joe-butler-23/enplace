@@ -35,6 +35,8 @@ Success means the cookbook document remains the sole authority; recipe provenanc
 - Never use the live vault as a test fixture. Use isolated data for importer, browser, and file-write tests.
 - Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` for planner work, and `docs/engineering-guardrails.md` for verification.
 
+The vault note referenced above, Beads issue references, and the `clai validate skill` commands below are the maintainer's own optional tooling, with no public equivalent; skip them if you don't have access. The contributor-facing gate — `nix develop`, `npm ci`, `npm run typecheck`, `npm test`, and `npm run prepush` — is self-contained and requires none of them.
+
 ## Verification
 
 During implementation, run the cheapest affected checks:

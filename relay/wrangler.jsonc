@@ -8,5 +8,12 @@
     "bindings": [{ "name": "Kitchen", "class_name": "Kitchen" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Kitchen"] }],
+  "ratelimits": [
+    {
+      "name": "NEW_ROOM_LIMITER",
+      "namespace_id": "1",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "observability": { "enabled": true }
 }

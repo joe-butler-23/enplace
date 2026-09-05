@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Plugin } from "vite";
 
-const EARLY_HINT_ROUTES = ["/", "/index.html", "/shopping", "/planner", "/settings"] as const;
+const EARLY_HINT_ROUTES = ["/", "/index.html", "/shopping", "/planner", "/recipe", "/settings"] as const;
 // Cloudflare Pages counts the header name and value in its 2,000-character per-line limit.
 const HEADER_LINE_LIMIT = 2_000;
 

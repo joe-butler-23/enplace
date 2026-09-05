@@ -1,7 +1,7 @@
 import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
-import { cookbookCipher } from "../cookbook/crypto";
+import { cookbookCipher, type CookbookCipher } from "../cookbook/crypto";
 import { EncryptedCookbookBridge } from "../cookbook/encrypted-provider";
 import type { VaultStorageAdapter } from "./browser-storage";
 import {
@@ -20,6 +20,9 @@ export type OpenCookbookOptions = {
   onFirstLocalWrite?: () => void;
   WebSocketPolyfill?: typeof WebSocket;
   signal?: AbortSignal;
+  /** Test-only injection point: wraps the derived cipher before it reaches the bridge, the way
+   * encrypted-provider.test.ts's `peer` helper wraps a cipher passed directly to the bridge. */
+  wrapCipher?: (cipher: CookbookCipher) => CookbookCipher;
 };
 export type CookbookConnection = {
   id: string;
@@ -32,6 +35,9 @@ export type CookbookConnection = {
   onRemoteSync: (listener: () => void) => () => void;
   status: () => CookbookStatus;
   onStatus: (listener: (status: CookbookStatus) => void) => () => void;
+  /** The number of shared records that failed to authenticate and were quarantined. */
+  integrity: () => number;
+  onIntegrity: (listener: (count: number) => void) => () => void;
   publish: () => void;
   close: () => Promise<void>;
 };
@@ -87,7 +93,7 @@ function commit(persistence: IndexeddbPersistence): Promise<void> {
 export async function openCookbook(options: OpenCookbookOptions): Promise<CookbookConnection> {
   const persist = options.persist !== false;
   if (persist && typeof indexedDB === "undefined") throw new Error("Cookbook storage is unavailable in this browser.");
-  const cipher = await cookbookCipher(options.id);
+  const cipher = options.wrapCipher ? options.wrapCipher(await cookbookCipher(options.id)) : await cookbookCipher(options.id);
   const name = cookbookDatabaseName(cipher.room);
   if (persist) await prepareDatabase(name, options.signal);
   options.signal?.throwIfAborted();
@@ -155,14 +161,30 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
   const syncListeners = new Set<() => void>();
   let remoteSynced = false;
   const write = (path: string, bytes: Uint8Array): void => writeCookbookBytes(doc, path, bytes, LOCAL_ORIGIN);
+  // A write must not be silently accepted while local edits cannot be sealed. The common case —
+  // the last seal succeeded — stays a synchronous no-op so a write still completes in the same
+  // tick as its caller; only once a seal has actually failed does a write wait for a fresh retry
+  // and reject if that retry fails too.
+  const ensureSealed = (): Promise<void> | undefined => {
+    if (!bridge.sealFailure()) return undefined;
+    return bridge.retrySeal().catch((error: unknown) => {
+      throw new Error(`Cookbook changes cannot be saved right now: ${error instanceof Error ? error.message : "Could not secure the cookbook."}`);
+    });
+  };
   const adapter: VaultStorageAdapter = {
     async readBytes(path) {
       const bytes = readCookbookBytes(doc, path);
       if (bytes === null) throw new Error(`File not found: ${path}`);
       return bytes;
     },
-    async writeBytes(path, bytes) { write(path, bytes); },
+    async writeBytes(path, bytes) {
+      const pending = ensureSealed();
+      if (pending) await pending;
+      write(path, bytes);
+    },
     async writeNewBytesBatch(entries, existing = "skip") {
+      const pending = ensureSealed();
+      if (pending) await pending;
       const occupied = new Set(listCookbookPaths(doc));
       const rawPaths = new Set(cookbookFiles(doc).keys());
       const writable: Array<readonly [string, Uint8Array]> = [];
@@ -184,11 +206,17 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       }, LOCAL_ORIGIN);
       return writable.length;
     },
-    async remove(path, recursive = false) { deleteCookbookPath(doc, path, recursive, LOCAL_ORIGIN); },
+    async remove(path, recursive = false) {
+      const pending = ensureSealed();
+      if (pending) await pending;
+      deleteCookbookPath(doc, path, recursive, LOCAL_ORIGIN);
+    },
     async walkFiles() {
       return walkCookbookFiles(doc);
     },
     async updateText(path, update) {
+      const pending = ensureSealed();
+      if (pending) await pending;
       let next = "";
       doc.transact(() => {
         const current = readCookbookText(doc, path) ?? "";
@@ -261,6 +289,8 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     onRemoteSync(listener) { syncListeners.add(listener); return () => syncListeners.delete(listener); },
     status: () => status,
     onStatus(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    integrity: () => bridge.integrity(),
+    onIntegrity: (listener) => bridge.onIntegrity(listener),
     publish,
     async close() {
       if (closed) return;

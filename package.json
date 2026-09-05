@@ -2,6 +2,14 @@
   "name": "enplace",
   "version": "0.1.0",
   "description": "Enplace — local-first cooking app.",
+  "homepage": "https://enplace-trial.pages.dev/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-butler-23/enplace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joe-butler-23/enplace/issues"
+  },
   "engines": {
     "node": "24.x"
   },

@@ -31,9 +31,13 @@ type Runtime = { settings: StandaloneSettings; plannerOrderStore: PlannerOrderSt
 type PlannerCapability = { status: "idle" | "loading" | "ready" } | { status: "error"; message: string };
 const DEFAULT_VIEW: ViewId = "database";
 const FAILED_LOAD_MESSAGE = "Failed to load file.";
-function initialRouteState(route: RoutedView): readonly [ViewId, boolean] {
+/** The third element is true only when a cold load landed on "/recipe": the open recipe's
+ *  identity lives in app state, never the URL, so there is nothing to show and the mount
+ *  effect canonicalises the address bar back to the database. */
+function initialRouteState(route: RoutedView): readonly [ViewId, boolean, boolean] {
+  if (route === "recipe") return [DEFAULT_VIEW, false, true];
   const settingsOpen = route === "settings";
-  return [settingsOpen ? DEFAULT_VIEW : route, settingsOpen];
+  return [settingsOpen ? DEFAULT_VIEW : route, settingsOpen, false];
 }
 const basename = (path: string): string => path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
 function formatError(error: unknown): string {
@@ -160,12 +164,15 @@ function App(): React.JSX.Element | null {
   }, []);
   React.useEffect(() => { void initialize(); }, [initialize]);
 
-  const [initialView, initialSettingsOpen] = React.useRef(initialRouteState(initialViewForPathname(window.location.pathname))).current;
+  const [initialView, initialSettingsOpen, initialRecipeFallback] = React.useRef(initialRouteState(initialViewForPathname(window.location.pathname))).current;
   const [activeView, setActiveViewState] = React.useState<ViewId>(initialView);
   const activeViewRef = React.useRef(activeView); activeViewRef.current = activeView;
   const [settingsOpen, setSettingsOpen] = React.useState(initialSettingsOpen);
-  const settingsOpenRef = React.useRef(settingsOpen); settingsOpenRef.current = settingsOpen;
   const [history, setHistory] = React.useState<ViewId[]>([activeView]);
+  const historyRef = React.useRef(history); historyRef.current = history;
+  React.useEffect(() => {
+    if (initialRecipeFallback) window.history.replaceState(null, "", pathnameForView(DEFAULT_VIEW));
+  }, [initialRecipeFallback]);
   const recipeRequest = React.useRef(0);
   const activeRecipeRef = React.useRef<RecipeViewHandle>(null);
   const previewRecipeRef = React.useRef<RecipeViewHandle>(null);
@@ -223,16 +230,13 @@ function App(): React.JSX.Element | null {
     databaseSeen.current ||= view === "database";
     activeViewRef.current = view; setHistory((values) => [...values.slice(-9), view]); setActiveViewState(view); return true;
   }, [cancelPendingPlanner, plannerReady, requestPendingPlanner]);
+  // Back always replays a real browser history entry, never a synthetic replaceState: the
+  // internal stack's only job is gating whether a previous entry of ours exists to go back to.
   const goBack = React.useCallback(async () => {
+    if (historyRef.current.length <= 1) return;
     if (!await flushRecipeSave(activeRecipeRef)) return;
-    setHistory((values) => values.length <= 1 ? values : values.slice(0, -1));
+    window.history.back();
   }, []);
-  React.useEffect(() => {
-    const last = history[history.length - 1]; if (!last || last === activeView) return;
-    if (last === "planner" && !plannerReady) { requestPendingPlanner("replace"); return; }
-    cancelPendingPlanner(); databaseSeen.current ||= last === "database"; activeViewRef.current = last; setActiveViewState(last);
-    if (!settingsOpenRef.current) window.history.replaceState(null, "", pathnameForView(last));
-  }, [activeView, cancelPendingPlanner, history, plannerReady, requestPendingPlanner]);
   React.useLayoutEffect(() => {
     const pop = () => {
       const routed = initialViewForPathname(window.location.pathname);
@@ -242,7 +246,13 @@ function App(): React.JSX.Element | null {
       const previous = activeViewRef.current;
       void flushRecipeSave(activeRecipeRef).then((saved) => {
         if (!saved) { window.history.pushState(null, "", pathnameForView(previous)); return; }
-        setHistory([routed]);
+        // One popstate is one real step of browser history: pop exactly one entry when it lands
+        // where our own stack expects (a genuine back step), and only reset the stack when it
+        // does not (a jump this stack cannot account for, e.g. arriving from outside the app's
+        // own entries) so the internal stack and browser stack stay one-to-one.
+        setHistory((values) => (
+          values.length > 1 && values[values.length - 2] === routed ? values.slice(0, -1) : [routed]
+        ));
         if (routed === "planner" && !plannerReady) requestPendingPlanner("none");
         else { cancelPendingPlanner(); databaseSeen.current ||= routed === "database"; activeViewRef.current = routed; setActiveViewState(routed); }
       });

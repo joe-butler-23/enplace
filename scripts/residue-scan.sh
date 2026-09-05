@@ -10,11 +10,14 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 # Personal deployment residue + common secret formats.
-CONTENT_PATTERN='/home/[A-Za-z0-9._-]+/|[A-Za-z0-9.-]+\.ts\.net|[A-Za-z0-9._%+-]+@(gmail|hotmail|outlook)\.com|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{30,}|tskey-[A-Za-z0-9]|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
-# Remove only stable synthetic fixture values before testing the remainder of
-# each matching line. Dropping a whole allowlisted line would let a real secret
-# hide beside a fixture path.
-CONTENT_ALLOWLIST='/home/(student|test|vault)/|[A-Za-z0-9.-]*example\.ts\.net'
+CONTENT_PATTERN='/home/[A-Za-z0-9._-]+/|[A-Za-z0-9.-]+\.ts\.net|[A-Za-z0-9._%+-]+@(gmail|hotmail|outlook)\.com|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{30,}|tskey-[A-Za-z0-9]|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|[A-Za-z0-9.-]+\.workers\.dev'
+# Remove only stable synthetic fixture values, and the already-reviewed
+# personal Cloudflare Workers hostname configured for the reference relay
+# (.env.static, relay/wrangler.jsonc), before testing the remainder of each
+# matching line. Dropping a whole allowlisted line would let a real secret
+# hide beside a fixture path; a new *.workers.dev hostname anywhere else still
+# trips the scan.
+CONTENT_ALLOWLIST='/home/(student|test|vault)/|[A-Za-z0-9.-]*example\.ts\.net|enplace-relay\.joesdownloads\.workers\.dev'
 # Paths that must never leave the machine.
 PATH_DENY_PATTERN='(^|/)\.memory_tmp/|(^|/)backups/sync-backup|^\.beads/|^\.claude/|^\.codex/'
 

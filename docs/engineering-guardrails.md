@@ -30,7 +30,7 @@ Status: Active
 
 Candidates that were tried against a recorded trace and rejected. Re-propose one only with new evidence.
 
-- **`content-visibility: auto` on `.cooking-db__card` (2026-09-04, `mise-en-place-avl`).** Ten paired AB/BA runs at 112 and 500 synthetic cards, compositor-synthesised full-range scroll at 20,000 px/s, headless Chromium 145. Cold load render work fell (about 26% at 112 cards, 61% at 500) but full-range scroll render work rose at both sizes (112: 12 ms to 69 ms; 500: 218 ms to 575 ms; candidate lost 20 of 20 pairs) because every card that scrolls into view re-runs layout, style, and pre-paint. No blank patches were observed. The grid already fences each card with `contain: layout paint style`; that is the retained rule. The scroll cost that mattered was image decode of oversized covers, fixed by import-time resizing in `e22f8d8`.
+- **`content-visibility: auto` on `.cooking-db__card` (2026-09-04).** Ten paired AB/BA runs at 112 and 500 synthetic cards, compositor-synthesised full-range scroll at 20,000 px/s, headless Chromium 145. Cold load render work fell (about 26% at 112 cards, 61% at 500) but full-range scroll render work rose at both sizes (112: 12 ms to 69 ms; 500: 218 ms to 575 ms; candidate lost 20 of 20 pairs) because every card that scrolls into view re-runs layout, style, and pre-paint. No blank patches were observed. The grid already fences each card with `contain: layout paint style`; that is the retained rule. The scroll cost that mattered was image decode of oversized covers, fixed by import-time resizing in `e22f8d8`.
 
 ## Verification
 

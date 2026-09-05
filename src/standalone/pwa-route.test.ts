@@ -17,6 +17,8 @@ describe("initial view route resolution", () => {
     ["/shopping/", "shopping"],
     ["/planner", "planner"],
     ["/planner/", "planner"],
+    ["/recipe", "recipe"],
+    ["/recipe/", "recipe"],
     ["/", "database"],
     ["/unknown", "database"]
   ] as const)("resolves pathname %s to %s", (pathname, expectedView) => {
@@ -51,6 +53,7 @@ describe("PWA route", () => {
     expect(pathnameForView("database")).toBe("/");
     expect(pathnameForView("settings")).toBe("/settings");
     expect(pathnameForView("planner")).toBe("/planner");
+    expect(pathnameForView("recipe")).toBe("/recipe");
   });
 
   it("serves the canonical installed shell for offline navigation", async () => {
