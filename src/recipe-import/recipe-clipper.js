@@ -1,4 +1,4 @@
-// Vendored from the RecipeClipper browser rewrite (src/index.js at commit eaddb30, SHA256 562acad20ebe0cd4…),
+// Vendored from the RecipeClipper browser rewrite (src/index.js at commit e7b9efb, SHA256 06922da04bab5b1c…),
 // MIT licensed, with attribution to Julian Poyourow for the original project. Sync from that
 // repository rather than editing here; the module reads a parsed Document and never fetches.
 
@@ -151,7 +151,7 @@ const region = (nodes, exclude) => {
 
 const httpURL = (value, base) => {
   if (typeof value !== 'string' || !value.trim()) return '';
-  try { const url = new URL(value, base); return /^https?:$/.test(url.protocol) ? url.href : ''; } catch { return ''; }
+  try { const url = new URL(value, base || undefined); return /^https?:$/.test(url.protocol) ? url.href : ''; } catch { return ''; }
 };
 
 /** Extract independent recipe candidates. Reads the current DOM; never fetches or caches. */
