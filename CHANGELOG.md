@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Import from a web page: give the page's address (the relay fetches it) or paste its HTML or open a saved page, see every recipe it publishes with ingredient and step counts, and add the ones you choose as RecipeMD with source, cover, yield and times; existing files are never overwritten and nothing is downloaded
+- Import from a web page: give the page's address (the relay fetches it) or paste its HTML or open a saved page, see every recipe it publishes with ingredient and step counts, and add the ones you choose as RecipeMD with source, yield and times (covers are added in the editor, since the site shows only images it stores); existing files are never overwritten and nothing is downloaded
 - Shared live cookbook: one merge document per household (Yjs), persisted on every device, synced through a y-websocket relay, addressed by an unguessable link in the URL fragment. Works on every browser and phone with no install or sign-in
 - Cookbook panel in Settings: share link and QR code, connection status, zip export and import, starting a new cookbook, and pasting another cookbook's link
 - `scripts/cookbook-relay.mjs`: the reference relay for tests and self-hosting

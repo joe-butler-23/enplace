@@ -44,7 +44,7 @@ export function formatYield(value: string): string | null {
 export function pageRecipeMarkdown(recipe: ClippedRecipe, pageUrl: string): string {
   const title = recipe.title.trim() || "Untitled recipe";
   const description: string[] = [];
-  if (recipe.imageURL) description.push(`![${title}](<${recipe.imageURL}>)`);
+  // A remote cover would not render: the site shows only images it stores itself. Covers are added in the editor.
   const source = recipe.source || pageUrl.trim();
   if (source) description.push(`Source: ${source}`);
   if (recipe.description.trim()) description.push(recipe.description.trim().split("\n").map(proseLine).join("\n"));

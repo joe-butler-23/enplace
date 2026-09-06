@@ -40,7 +40,7 @@ describe("page recipe Markdown", () => {
     const parsed = parseRecipeMD(markdown);
     expect(parsed.title).toBe("Watermelon gazpacho");
     expect(parsed.description).toContain("Source: https://example.test/soups");
-    expect(parsed.description).toContain("![Watermelon gazpacho](<https://example.test/soup.jpg>)");
+    expect(parsed.description).not.toContain("soup.jpg");
     expect(parsed.description).toContain("Prep 20 min · Total 1 h 30 min");
     expect(parsed.yields).toEqual([{ factor: "4", unit: "servings" }]);
     expect(parsed.ingredient_groups.map((group) => group.title)).toEqual(["For the gazpacho", "For the salsa"]);
