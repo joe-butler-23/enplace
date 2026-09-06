@@ -1,4 +1,4 @@
-// Vendored from the RecipeClipper browser rewrite (src/index.js at commit 40539e8, SHA256 e3067ce94c4f9ee1…),
+// Vendored from the RecipeClipper browser rewrite (src/index.js at commit 0020283, SHA256 b514c7af76723c4a…),
 // MIT licensed, with attribution to Julian Poyourow for the original project. Sync from that
 // repository rather than editing here; the module reads a parsed Document and never fetches.
 
@@ -64,21 +64,45 @@ const rowKey = line => (line.toLowerCase()
   .match(/\d+(?:[.,]\d+)?|\p{L}+/gu) || []).map(token => /^\d/.test(token) ? numeral(parseFloat(token.replace(',', '.'))) : token).sort().join(' ');
 const numeralPattern = /\d+(?:\s+\d+\s*\/\s*\d+|\s*\/\s*\d+|[.,]\d+)?(?:\s*[¼½¾⅓⅔⅛⅜⅝⅞⅕⅖⅗⅘⅙⅚])?|[¼½¾⅓⅔⅛⅜⅝⅞⅕⅖⅗⅘⅙⅚]/g;
 
-const labelField = label => /^(ingredients|ingrédients|ingrediënten|ingredientes|ingredienti|ingredienser|zutaten|składniki|hozzávalók|suroviny|υλικά|ингредиенты|材料|用料)$/.test(label) ? 'ingredients'
-  : /^(instructions|cooking instructions|directions|method|procedure|steps|preparation|(?:here['’]s )?how to make it|préparation|zubereitung|bereiden|bereiding|bereidingswijze|preparación|elaboración|preparazione|preparação|modo de preparo|fremgangsmåde|tilberedning|gör så här|przygotowanie|elkészítés|postup|εκτέλεση|приготовление|做法|步骤|作り方)$/.test(label) ? 'instructions' : '';
+// A row that opens with a quantity.
+const quantityLine = /^(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞]|(?:around|about|approx\.?|roughly) \d)/iu;
+
+const labels = new Map([
+  ...['ingredients', "what you'll need", 'what you’ll need', 'what you will need', 'you will need', 'ingrédients', 'ingrediënten', 'ingredientes', 'ingredienti', 'ingredienser', 'zutaten', 'składniki', 'hozzávalók', 'suroviny', 'υλικά', 'ингредиенты', '材料', '用料'].map(label => [label, 'ingredients']),
+  ...['instructions', 'cooking instructions', 'directions', 'method', 'procedure', 'steps', 'preparation', 'how to make it', "here's how to make it", 'here’s how to make it', 'préparation', 'zubereitung', 'bereiden', 'bereiding', 'bereidingswijze', 'preparación', 'elaboración', 'preparazione', 'preparação', 'modo de preparo', 'fremgangsmåde', 'tilberedning', 'gör så här', 'przygotowanie', 'elkészítés', 'postup', 'εκτέλεση', 'приготовление', '做法', '步骤', '作り方'].map(label => [label, 'instructions']),
+]);
+const labelField = label => labels.get(label) || '';
+
+// The field a caption names: a heading may carry a suffix ("Ingredients (serves 4)"); any caption may end in a colon.
+const unglyph = text => { const c = text.charCodeAt(0) | 0x20; return c >= 0x61 && c <= 0x7a || (c ^ 0x20) >= 0x30 && (c ^ 0x20) <= 0x39 ? text : text.replace(/^[^\p{L}\p{N}]+/u, ''); };
+const labelOf = (text, heading) => labelField(unglyph(text.toLowerCase()).replace(heading ? /\s*[:：*(].*$/ : /[:：]\s*$/, '').trim());
+// A visible title equal to the name, or the name less a trailing site label, corroborates the shorter title.
+const titledBy = (name, heading) => {
+  const title = readable(heading), rest = title && name.startsWith(title) ? name.slice(title.length) : null;
+  return rest === '' || !!rest && /^\s*[-–—|:·(]|\s[-–—|·]\s/.test(rest) ? title : '';
+};
 
 const nutritionLabels = {
   calories: 'Calories', fatContent: 'Fat', saturatedFatContent: 'Saturated Fat',
   cholesterolContent: 'Cholesterol', sodiumContent: 'Sodium', carbohydrateContent: 'Carbohydrates',
   fiberContent: 'Fiber', sugarContent: 'Sugar', proteinContent: 'Protein', servingSize: 'Serving Size',
 };
+// Field selectors in reading order: explicit properties, then class names; and the other field's selectors for the purity test.
+const tiers = [['[itemprop', selector => selector.startsWith('[itemprop')], ['class', selector => !selector.startsWith('[itemprop')]]
+  .map(([, tier]) => Object.entries(fields).map(([field, selectors]) => [field, selectors.filter(tier)]).filter(([, selectors]) => selectors.length));
+const otherOf = { ingredients: fields.instructions.join(','), instructions: fields.ingredients.join(',') };
 const canonical = data => ({ ...data,
   ingredients: data.recipeIngredient ?? data.recipeIngredients ?? data.ingredients,
   instructions: data.recipeInstructions ?? data.instructions });
 
-function readable(root, sections, listed) {
+function readable(root, sections, listed, exclude) {
   const visit = node => {
-    if (node.nodeType === 3) return !listed || root.contains(node.parentElement?.closest('li')) ? node.nodeValue.replace(/\s+/g, ' ') : '';
+    if (node.nodeType === 3) {
+      const text = node.nodeValue.replace(/\s+/g, ' ');
+      // Outside the rows of a listed read, text is marked so that only captions survive.
+      return !listed || root.contains(node.parentElement?.closest('li')) ? text : text.trim() ? `\u0001${text}\u0001` : text;
+    }
+    if (exclude && node !== root && node.matches?.(exclude)) return '';
     // A matched tab panel is excluded only when its own tab is unselected.
     if (node.style?.display === 'none' || node.matches?.('script,style,template,button,input,select,svg,.sharedaddy,.print-share,.mw-editsection,[hidden],[aria-hidden="true"],[role="tablist"],[role="tabpanel"]') &&
         (node.getAttribute('role') !== 'tabpanel' || unselectedPanel(node))) return '';
@@ -96,14 +120,34 @@ function readable(root, sections, listed) {
 
 // Document order means a nested match can only follow the outermost match that contains it.
 const outer = (nodes, kept = []) => nodes.filter(node => !kept.at(-1)?.contains(node) && kept.push(node));
-const content = (node, steps) => {
+const content = (node, steps, exclude) => {
   // A nested download/control list cannot suppress surrounding table or definition rows.
   const listed = !steps && node.tagName !== 'LI' && !node.querySelector('tr,dt,dd') && !!node.querySelector('li:not([role="tablist"] li)');
-  let value = readable(node, true, listed).replace(node.nodeType === 1 ? /^\[[^\]\n]*\](?:\n|$)/ : '', '');
+  let value = readable(node, true, listed, exclude);
+  // Among list rows, text outside the rows is kept only as a caption: a heading label or a caption-shaped line.
+  if (listed && value.includes('\u0001')) value = value.split('\n').filter(line => {
+    if (!line.includes('\u0001')) return true;
+    const bare = line.replace(/\u0001/g, '').trim();
+    return bare.startsWith('[') || presentable(bare, false).startsWith('[');
+  }).map(line => line.replace(/\u0001/g, '').trim()).join('\n');
+  value = value.replace(node.nodeType === 1 ? /^\[[^\]\n]*\](?:\n|$)/ : '', '');
   // A single ingredient row may split amount and description into block cells.
   if (!steps && node.matches?.('li,tr') && !node.querySelector('li,tr,dl,br')) value = value.replace(/\n/g, ' ');
   return value;
 }; // An element's own leading heading is its title, not a section.
+
+// A run of sibling nodes read as one region without cloning them; nested recipe cards are excluded while reading.
+const nestedRecipes = `${cardSelector},[itemscope][itemtype~="https://schema.org/Recipe"],[itemscope][itemtype~="http://schema.org/Recipe"],[itemscope][itemtype~="Recipe"]`;
+const region = (nodes, exclude) => {
+  const kept = nodes.filter(node => node.nodeType !== 1 || !exclude || !node.matches(exclude));
+  const inside = (node, hit) => { const bad = exclude && hit.closest(exclude); return !bad || !node.contains(bad); };
+  return {
+    nodeType: 11, childNodes: kept,
+    contains: other => kept.some(node => node === other || node.nodeType === 1 && node.contains(other)),
+    querySelector: selector => { for (const node of kept) { if (node.nodeType !== 1) continue; if (node.matches(selector)) return node; for (const hit of node.querySelectorAll(selector)) if (inside(node, hit)) return hit; } return null; },
+    querySelectorAll: selector => kept.flatMap(node => node.nodeType !== 1 ? [] : [...(node.matches(selector) ? [node] : []), ...[...node.querySelectorAll(selector)].filter(hit => inside(node, hit))]),
+  };
+};
 
 const httpURL = (value, base) => {
   if (typeof value !== 'string' || !value.trim()) return '';
@@ -169,17 +213,13 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
   };
   const normalize = (data, method, scope) => {
     let title = text(data.name);
-    // A document title can carry site/rating text; require two metadata titles and an owned heading to agree.
-    if (scope?.matches('html') && scope.querySelector('title[itemprop~="name"]') && title === clean(doc.title)) {
-      const social = clean(doc.querySelector('meta[property="og:title"]')?.getAttribute('content'));
-      const twitter = clean(doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content'));
-      if (social && social === twitter && title.startsWith(`${social} `)) {
-        const headings = [...scope.querySelectorAll('h1')].filter(heading => {
-          const owner = heading.closest('article,main,[role="main"]');
-          return readable(heading) === social && owner && owner.querySelector(fields.ingredients[0]) && owner.querySelector(fields.instructions[0]);
-        });
-        if (headings.length === 1) title = social;
-      }
+    // A name carrying a trailing site or rating label takes the shorter title when one visible owned heading and both
+    // social metadata titles agree on it.
+    const social = scope && title && /\s[-–—|·]\s|[:(]/.test(title) ? clean(doc.head?.querySelector('meta[property="og:title"]')?.getAttribute('content')) : '';
+    if (social && social !== title && title.startsWith(social) && social === clean(doc.head?.querySelector('meta[name="twitter:title"]')?.getAttribute('content'))) {
+      const owns = heading => { const owner = heading.closest('article,main,[role="main"]'); return !!owner && !!owner.querySelector(fields.ingredients[0]) && !!owner.querySelector(fields.instructions[0]); };
+      const titles = new Set([...scope.querySelectorAll('h1')].filter(heading => !hiddenByAncestor(heading) && owns(heading)).map(heading => titledBy(title, heading)).filter(Boolean));
+      if (titles.size === 1 && titles.has(social)) title = social;
     }
     const nutrition = resolve(data.nutrition);
     const result = {
@@ -236,6 +276,94 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
       if (node.matches(cardSelector) || isType((node.getAttribute('itemtype') || '').split(/\s+/), 'Recipe')) node.remove();
     return root;
   };
+  // An element a reader may take from a scope: owned by it, not concealed, and outside navigation, chrome and dialogs.
+  const visible = (el, scope) => belongs(el, scope) && !hiddenByAncestor(el) && !el.closest('nav,header,footer,[role="navigation"],dialog,[role="dialog"]');
+  // Fields recognised by shape, without any caption: an ingredient list is a list whose rows mostly open with a quantity,
+  // and the method is the first ordered list, or run of "Step 1", "Step 2"… headings, after it. Adjacent such lists
+  // separated only by short captions are one list with [labels]. The reading is taken only when the scope holds one such list.
+  const shapedFields = (scope, known = false) => {
+    const between = (a, b) => {
+      const range = doc.createRange(); range.setStartAfter(a); range.setEndBefore(b);
+      return readable(pruneNestedCards(range.cloneContents())).split('\n').filter(Boolean);
+    };
+    const caption = line => line.length <= 60 && !/\d/.test(line);
+    const label = line => `[${line.replace(/:$/, '').trim()}]`;
+    const ingredientRows = list => {
+      const rows = list.tagName === 'TABLE' ? [...list.querySelectorAll('tr')].filter(row => row.closest('table') === list && row.querySelector('td'))
+        : [...list.children].filter(el => el.tagName === 'LI');
+      if (rows.length < 3 || rows.filter(row => quantityLine.test(row.textContent.trimStart())).length * 2 < rows.length ||
+          rows.some(row => row.querySelector('ul,ol,table,h1,h2,h3,h4,h5,h6,[itemscope]'))) return null;
+      const values = rows.map(row => content(row));
+      return values.every(value => value && !value.includes('\n') && value.length <= 200) ? values : null;
+    };
+    const stepHeading = /^step\s*(\d+)\b/i;
+    const lists = [], procedures = [];
+    for (const el of scope.querySelectorAll('ul,ol,table,h1,h2,h3,h4,h5,h6')) {
+      const heading = /^H/.test(el.tagName);
+      if (heading ? !/^\s*step\s*1\b/i.test(el.textContent) : el.tagName !== 'TABLE' && el.childElementCount < 2) continue;
+      if (!visible(el, scope)) continue;
+      if (heading) {
+        if (stepHeading.exec(readable(el))?.[1] !== '1') continue;
+        const nodes = [];
+        let n = 1;
+        for (let node = el; node; node = node.nextElementSibling) {
+          if (/^H[1-6]$/.test(node.tagName)) {
+            if (node.tagName > el.tagName) { nodes.push(node); continue; }
+            if (stepHeading.exec(readable(node))?.[1] !== String(n++)) break;
+            nodes.push(node);
+          } else if (node.matches('p,ol,ul') && readable(node)) nodes.push(node);
+        }
+        if (n > 2 && nodes.some(node => node.tagName !== 'H' + el.tagName[1] && node.tagName === 'P')) procedures.push({ node: el, nodes });
+        continue;
+      }
+      if (el.matches(fields.instructions.join(','))) continue;
+      const rows = ingredientRows(el);
+      if (rows) { lists.push({ node: el, rows }); continue; }
+      if (el.tagName !== 'OL' || el.querySelector('[itemscope]')) continue;
+      const items = [...el.children].filter(li => li.tagName === 'LI');
+      if (items.length < 2 || !items.every(li => /\p{L}/u.test(readable(li))) || !known && items.reduce((n, li) => n + readable(li).length, 0) < 25 * items.length) continue;
+      // Paragraphs directly after the list finish the method, up to a heading, another list, or a note caption.
+      const nodes = [el];
+      for (let next = el.nextElementSibling; next?.tagName === 'P' && readable(next) && !/^(?:notes?|tips?|options?|hints?)\s*[:：]/i.test(readable(next)); next = next.nextElementSibling) nodes.push(next);
+      procedures.push({ node: el, nodes });
+    }
+    // With the ingredients already read, the scope's only procedure is the method.
+    if (!lists.length) return known && procedures.length === 1 ? { instructions: procedures[0].nodes.map(node => readable(node, true)).filter(Boolean).join('\n') } : null;
+    const groups = [];
+    for (const list of lists) {
+      const last = groups.at(-1), gap = last ? between(last.tail, list.node) : null;
+      if (last && gap.length <= 2 && gap.every(caption)) { last.rows.push(...gap.map(label), ...list.rows); last.tail = list.node; }
+      else groups.push({ head: list.node, tail: list.node, rows: [...list.rows] });
+    }
+    if (groups.length !== 1) return null;
+    const [group] = groups;
+    // A short caption directly above the first rows names the first group, unless it is the field's own heading.
+    const lead = group.head.previousElementSibling;
+    const leadText = lead?.matches('h1,h2,h3,h4,h5,h6,p,strong,b,em,div,span') && !lead.querySelector('ul,ol,table') ? readable(lead) : '';
+    if (leadText && leadText.length <= 48 && caption(leadText) && !labelOf(leadText) &&
+        group.rows.some(row => row.startsWith('['))) group.rows.unshift(label(leadText));
+    // Across more than a caption's worth of content, the method must be introduced by a method caption.
+    const methodCaption = line => {
+      const text = line.toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').replace(/[:：]\s*$/, '').trim();
+      return labelOf(text) === 'instructions' || /^(?:how to make|method\b|directions\b|instructions\b)/.test(text);
+    };
+    const intro = node => {
+      while (node !== scope && !node.previousElementSibling) node = node.parentElement;
+      const prev = node.previousElementSibling;
+      return prev && !prev.querySelector('ul,ol,table') ? readable(prev).split('\n').at(-1) : '';
+    };
+    const apart = p => !group.tail.contains(p.node) && !p.node.contains(group.tail);
+    const procedure = procedures.find(p => {
+      if (!apart(p) || !(group.tail.compareDocumentPosition(p.node) & 4)) return false;
+      const gap = between(group.tail, p.node);
+      return gap.length <= 2 || methodCaption(gap.at(-1));
+    // A method published before its ingredients is taken only when a method caption introduces it.
+    }) || procedures.findLast(p => group.head.compareDocumentPosition(p.node) & 2 && apart(p) && methodCaption(intro(p.node)));
+    const result = { ingredients: group.rows.join('\n') };
+    if (procedure) result.instructions = procedure.nodes.map(node => readable(node, true)).filter(Boolean).join('\n');
+    return result;
+  };
+  let titles;
   const markup = (scope, existing = {}) => {
     const data = canonical(scope.hasAttribute('itemscope') ? readItem(scope) : {});
     if (!has(existing.instructions) && !has(data.instructions)) {
@@ -251,136 +379,145 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
           const list = field === 'ingredients' && !el.previousElementSibling && el.parentElement?.matches('ul,ol') ? el.parentElement : null;
           const heading = list && [...list.children].every(row => ingredientRows.has(row)) ? list.previousElementSibling : null;
           const label = heading?.matches('h1,h2,h3,h4,h5,h6') && belongs(heading, scope) ? readable(heading) : '';
-          const group = label && label !== text(existing.name || data.name) && !labelField(label.toLowerCase().replace(/[:：]\s*$/, '').trim());
+          const group = label && label !== text(existing.name || data.name) && !labelOf(label);
           return [group ? `[${label}]` : '', field === 'ingredients' ? content(el) : readable(el, field === 'instructions')];
         }).filter(Boolean);
         if (values.length) data[field] = field === 'name' ? values[0] : values.join('\n');
       }
     }
-    if (!has(existing.ingredients || data.ingredients) || !has(existing.instructions || data.instructions)) {
-      const readAfter = (start, end) => {
-        const range = doc.createRange();
-        range.selectNodeContents(start.parentElement); range.setStartAfter(start);
-        if (end) range.setEndBefore(end);
-        return readable(pruneNestedCards(range.cloneContents()), true);
+    // Captions name regions. A caption is a heading that opens with a field label, a short block whose whole text is one,
+    // or a control whose target holds the field. A control's region is its target; a caption leading one of two columns owns
+    // the column; any other caption owns what follows it up to the next caption, or heading of no deeper level, inside the
+    // smallest ancestor holding every caption of the scope. The first caption for a field reads it.
+    // An unambiguous caption (the only one for its field) is read before class selectors; the first of several, after.
+    let captions, scopeHeadings;
+    const captionFields = unique => {
+      if (has(existing.ingredients || data.ingredients) && has(existing.instructions || data.instructions)) return;
+      const blank = node => [...node.childNodes].every(child => child.nodeType !== 3 || !child.nodeValue.trim());
+      const captionOf = node => {
+        const tag = node.tagName, heading = tag.length === 2 && tag[0] === 'H';
+        // Emphasis captions a line only from its start; a block caption is short and holds at most one element; a div or
+        // span caption holds nothing but its text.
+        const before = node.previousSibling;
+        if ((tag === 'STRONG' || tag === 'B' || tag === 'EM') && before?.nodeType === 3 && before.nodeValue.trim()) return '';
+        const first = node.firstChild;
+        if (!heading && (node.childElementCount > (tag === 'DIV' || tag === 'SPAN' ? 0 : 1) || first?.nodeType === 3 && first.nodeValue.length > 80 && first.nodeValue.trim().length > 60 ||
+            first?.nodeType === 1 && node.childNodes.length > 2)) return '';
+        const raw = (heading ? node.textContent : !node.childElementCount ? first?.nodeValue ?? '' : first.nodeType === 1 && !first.childElementCount && node.childNodes.length === 1 ? first.firstChild?.nodeValue ?? '' : node.textContent).trim();
+        if (!heading && raw.length > 60) return '';
+        // The cheap text decides whether the element is worth reading at all.
+        const quick = unglyph(raw.toLowerCase()).replace(heading ? /\s*[:：*(].*$/ : /[:：]\s*$/, '').trim();
+        if (!labelField(quick) && !(heading && quick.startsWith('how to make ')) && !/^(?:tools|equipment|utensils)/.test(quick)) return '';
+        const label = unglyph(readable(node).toLowerCase()).replace(heading ? /\s*[:：*(].*$/ : /[:：]\s*$/, '').trim();
+        // "How to make <this recipe>" captions the method when the rest names the page's own title.
+        if (heading && label.startsWith('how to make ') && (titles ??= new Set([...doc.querySelectorAll('h1')].map(h => readable(h).toLowerCase()))).has(label.slice('how to make '.length))) return 'linked';
+        return labelField(label) || (/^(?:tools|equipment|utensils|tools you['’]ll need|equipment needed)$/.test(label) ? 'equipment' : '');
       };
-      const labels = new Map(), columns = new Map();
-      for (const node of scope.querySelectorAll('p,h1,h2,h3,h4,h5,h6')) {
-        const paragraph = node.tagName === 'P';
-        if (paragraph && node.textContent.length > 120) continue; // A caption paragraph is short; ordinary prose need not be read.
-        let field = paragraph ? labelField(readable(node).toLowerCase().replace(/[:：]\s*$/, '').trim()) : '';
-        if (paragraph && !field) continue;
-        // A transparent wrapper does not change ownership of the exact caption.
-        let block = node;
-        while (block.parentElement !== scope && block.parentElement?.children.length === 1 &&
-            [...block.parentElement.childNodes].every(child => child.nodeType !== 3 || !child.nodeValue.trim())) block = block.parentElement;
-        const owner = block.parentElement, root = owner?.parentElement;
-        const column = owner?.firstElementChild === block && root?.children.length === 2 && scope.contains(root) &&
-          [...root.childNodes].every(child => child.nodeType !== 3 || !child.nodeValue.trim());
-        // Headings are eligible only for two-column ownership; ordinary headings need no text traversal here.
-        if (!paragraph) {
-          if (!column) continue;
-          field = labelField(readable(node).toLowerCase().replace(/[:：]\s*$/, '').trim());
+      const scan = !captions;
+      captions ??= [];
+      const collect = selector => {
+        for (const node of scope.querySelectorAll(selector)) {
+          // Only inline elements and controls can sit inside a caption already taken.
+          const tag = node.tagName;
+          if ((tag === 'STRONG' || tag === 'B' || tag === 'EM' || tag === 'SPAN' || tag === 'A' || tag === 'BUTTON') && captions.some(caption => caption.node.contains(node))) continue;
+          const field = captionOf(node);
+          if (!field || !visible(node, scope)) continue;
+          captions.push({ node, field: field === 'linked' ? 'instructions' : field, linked: field === 'linked', level: /^H[1-6]$/.test(node.tagName) ? +node.tagName[1] : 7, control: node.matches('a,button') });
         }
-        if (!field || !belongs(node, scope) || hiddenByAncestor(node) || node.closest('nav,header,footer,[role="navigation"]')) continue;
-        if (paragraph) {
-          const pair = labels.get(node.parentElement) || [];
-          pair.push({ node, field }); labels.set(node.parentElement, pair);
-        }
-        if (column) {
-          const pair = columns.get(root) || [];
-          pair.push({ node: block, field, owner }); columns.set(root, pair);
+      };
+      if (scan) {
+        collect('h1,h2,h3,h4,h5,h6,p,dt,summary,strong,b,em,a[data-target],button[data-target],a[aria-controls],button[aria-controls]');
+        // Bare div and span captions are rarer and dearer to scan for; they are sought only when a field still has none.
+        if (!['ingredients', 'instructions'].every(field => captions.some(caption => caption.field === field))) {
+          collect('div,span');
+          captions.sort((a, b) => a.node.compareDocumentPosition(b.node) & 2 ? 1 : -1);
         }
       }
-      const pairs = [...labels.values()].filter(pair => pair.length === 2 &&
-        pair[0].field === 'ingredients' && pair[1].field === 'instructions');
-      if (pairs.length === 1) {
-        const [ingredients, instructions] = pairs[0];
-        const pair = { ingredients: readAfter(ingredients.node, instructions.node), instructions: readAfter(instructions.node) };
-        if (has(pair.ingredients) && has(pair.instructions)) for (const field of ['ingredients', 'instructions'])
-          if (!has(existing[field]) && !has(data[field])) data[field] = pair[field];
-      }
-      const columnPairs = [...columns.values()].filter(pair => pair.length === 2 &&
-        pair[0].field === 'ingredients' && pair[1].field === 'instructions' && pair[0].owner !== pair[1].owner);
-      if (!pairs.length && columnPairs.length === 1) {
-        const pair = Object.fromEntries(columnPairs[0].map(({ node, field }) => [field, readAfter(node)]));
-        if (has(pair.ingredients) && has(pair.instructions)) for (const field of ['ingredients', 'instructions'])
-          if (!has(existing[field]) && !has(data[field])) data[field] = pair[field];
-      }
-      // Explicit local targets keep collapsed field bodies separate from other accordion panels.
-      const panels = new Map();
-      for (const control of scope.querySelectorAll('a[data-target],button[data-target],a[aria-controls],button[aria-controls]')) {
-        const field = labelField(clean(control.textContent).toLowerCase().replace(/[:：]\s*$/, '').trim());
-        if (!field || !belongs(control, scope) || hiddenByAncestor(control) || control.closest('nav,header,footer,[role="navigation"]')) continue;
-        const fragment = control.getAttribute('data-target');
-        const id = fragment?.startsWith('#') ? fragment.slice(1) : control.getAttribute('aria-controls');
-        const target = id && !/\s/.test(id) ? doc.getElementById(id) : null;
-        const owner = target?.parentElement, root = owner?.parentElement;
-        if (!target || hiddenByAncestor(target) || target.contains(control) || !owner.contains(control) || !scope.contains(root) || !belongs(target, scope)) continue;
-        const pair = panels.get(root) || [];
-        pair.push({ field, target, owner }); panels.set(root, pair);
-      }
-      const panelPairs = [...panels.values()].filter(pair => pair.length === 2 &&
-        pair[0].field === 'ingredients' && pair[1].field === 'instructions' && pair[0].owner !== pair[1].owner);
-      if (panelPairs.length === 1) {
-        const pair = Object.fromEntries(panelPairs[0].map(({ field, target }) => [field, readable(pruneNestedCards(target.cloneNode(true)), true)]));
-        if (has(pair.ingredients) && has(pair.instructions)) for (const field of ['ingredients', 'instructions'])
-          if (!has(existing[field]) && !has(data[field])) data[field] = pair[field];
-      }
-      // This paired recipe component names its food list and its ordered procedure locally.
-      const components = [...scope.querySelectorAll('.recipe-content')].filter(body => belongs(body, scope) &&
-        !hiddenByAncestor(body) && !body.querySelector('[itemscope],.recipe-content,article,main,dialog,[role="dialog"],nav,header,footer') &&
-        !cards.some(card => card !== body && body.contains(card)) && body.children.length === 2 &&
-        [...body.childNodes].every(child => child.nodeType !== 3 || !child.nodeValue.trim()) &&
-        body.children[0].matches('.recipe-left') && body.children[1].matches('.recipe-right'));
-      if (components.length === 1) {
-        const body = components[0], [left, right] = body.children;
-        const titles = [...scope.querySelectorAll('h1')].filter(title => belongs(title, scope) && !hiddenByAncestor(title) &&
-          title.closest('article') === body.closest('article') && readable(title));
-        const captions = [...left.children].filter(node => node.matches('em,p,h1,h2,h3,h4,h5,h6'));
-        const ingredients = captions.filter(node => labelField(readable(node).toLowerCase()) === 'ingredients');
-        const tools = captions.filter(node => /^(tools|equipment)$/i.test(readable(node)));
-        const procedure = right.firstElementChild;
-        if (titles.length === 1 && ingredients.length === 1 && tools.length <= 1 && !hiddenByAncestor(left) && !hiddenByAncestor(right) &&
-            ingredients[0].nextElementSibling?.matches('ul') && procedure?.matches('p,h1,h2,h3,h4,h5,h6') &&
-            /^let['’]s get started!$/i.test(readable(procedure)) && procedure.nextElementSibling?.matches('ol') &&
-            readable(ingredients[0].nextElementSibling) && readable(procedure.nextElementSibling)) {
-          const start = ingredients[0], tool = tools[0], after = tool && !!(start.compareDocumentPosition(tool) & 4);
-          const pair = { ingredients: readAfter(start, after ? tool : null), instructions: readAfter(procedure) };
-          if (has(pair.ingredients) && has(pair.instructions)) {
-            for (const field of ['ingredients', 'instructions']) if (!has(existing[field]) && !has(data[field])) data[field] = pair[field];
-            const first = left.firstElementChild;
-            const genericCaption = first?.matches('h1,h2,h3,h4,h5,h6') && /^things you['’]ll need$/i.test(readable(first));
-            const prefix = first !== start ? (first === tool ? `[${readable(tool)}]\n` : genericCaption ? '' : readable(first, true) + '\n') + readAfter(first, start) : '';
-            const notes = [prefix, after ? `[${readable(tool)}]\n${readAfter(tool)}` : ''].filter(Boolean).join('\n');
-            if (notes && !has(existing.notes) && !has(data.notes)) data.notes = notes;
+      // A title-linked "How to make …" heading yields to any caption from the vocabulary.
+      if (captions.some(c => c.linked) && captions.some(c => c.field === 'instructions' && !c.linked)) captions = captions.filter(c => !c.linked);
+      let owner = captions[0]?.node.parentElement;
+      for (const { node } of captions) while (!owner.contains(node)) owner = owner.parentElement;
+      if (owner && !scope.contains(owner)) owner = scope;
+      const headings = captions.length ? scopeHeadings ??= [...scope.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(h => belongs(h, scope) && !hiddenByAncestor(h)) : [];
+      // A same-field caption deeper than an earlier one ("Method" then "Preparation") sections that field rather than competing.
+      const subs = new Set(unique ? captions.filter(caption => captions.some(other => other.field === caption.field && other.level < caption.level && !!(other.node.compareDocumentPosition(caption.node) & 4) &&
+        !headings.some(h => +h.tagName[1] <= other.level && other.node.compareDocumentPosition(h) & 4 && h.compareDocumentPosition(caption.node) & 4))) : []);
+      for (const [i, caption] of captions.entries()) {
+        const { node, field } = caption;
+        if (field === 'equipment' ? has(existing.notes) || has(data.notes) : has(existing[field]) || has(data[field]) || unique && captions.filter(other => other.field === field && !other.control && !subs.has(other)).length > 1) continue;
+        const control = node.matches('a,button') ? node.getAttribute('data-target') || node.getAttribute('aria-controls') : null;
+        let fragment;
+        if (control !== null) {
+          const id = control.startsWith('#') ? control.slice(1) : control;
+          const target = id && !/\s/.test(id) ? doc.getElementById(id) : null;
+          if (!target || hiddenByAncestor(target) || target.contains(node) || !scope.contains(target) || !belongs(target, scope)) continue;
+          fragment = region([target], nestedRecipes);
+        } else {
+          // A transparent wrapper does not change ownership of the exact caption.
+          let block = node;
+          while (block.parentElement !== scope && block.parentElement?.children.length === 1 && blank(block.parentElement)) block = block.parentElement;
+          const parent = block.parentElement, root = parent?.parentElement;
+          const column = parent?.firstElementChild === block && root?.children.length === 2 && scope.contains(root) && blank(root);
+          // A caption leading its container owns it, plus following sibling sections that open with a deeper heading; a block
+          // caption inside a container stays in it; a heading's field otherwise runs to the ancestor shared with the other captions.
+          const leads = parent !== scope && parent.firstElementChild === block;
+          const within = column || caption.level === 7 && !leads ? parent : owner.contains(block) ? owner : scope;
+          let end = null, stop = null;
+          if (leads && !column) for (let sibling = parent.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
+            const first = sibling.firstElementChild;
+            if (sibling.matches('section,div') && first && /^H[1-6]$/.test(first.tagName) && +first.tagName[1] > caption.level && !captionOf(first)) continue;
+            stop = sibling; break;
+          }
+          const after = other => other !== node && !block.contains(other) && within.contains(other) && !!(node.compareDocumentPosition(other) & 4);
+          // The earliest of: the next caption, the next heading of no deeper level, and the first sibling after a led container.
+          const ends = [captions.slice(i + 1).find(c => (c.field !== field || caption.level < 7 && c.level <= caption.level) && after(c.node))?.node,
+            column ? null : headings.find(h => +h.tagName[1] <= caption.level && (caption.level < 7 || h.parentElement === parent) && after(h)), stop];
+          for (const other of ends) if (other && (!end || other.compareDocumentPosition(end) & 4)) end = other;
+          // Siblings of the caption are read in place; a region crossing containers is cloned.
+          if (block.parentElement === within && (!end || end.parentElement === within)) {
+            const nodes = [];
+            for (let node = block.nextSibling; node && node !== end; node = node.nextSibling) nodes.push(node);
+            fragment = region(nodes, nestedRecipes);
+          } else {
+            const range = doc.createRange();
+            range.selectNodeContents(within); range.setStartAfter(block);
+            if (end) range.setEndBefore(end);
+            fragment = pruneNestedCards(range.cloneContents());
           }
         }
-      }
-    }
-    // A named recipe body may publish taxonomy-linked ingredients beside an explicit method accordion.
-    if (!has(existing.ingredients) && !has(data.ingredients)) {
-      const bodies = [...scope.querySelectorAll('.recipe__body')].filter(body => belongs(body, scope));
-      const body = bodies.length === 1 ? bodies[0] : null;
-      const titles = body ? [...body.parentElement.querySelectorAll('.recipe__title')].filter(title => belongs(title, scope)) : [];
-      const methods = body ? [...body.querySelectorAll('[itemprop~="recipeInstructions"].accordion-trigger')]
-        .filter(trigger => belongs(trigger, scope) && trigger.nextElementSibling?.matches('.accordion__content')) : [];
-      const asides = body ? [...body.querySelectorAll('.recipe__aside')].filter(aside => belongs(aside, scope) && aside.querySelector(':scope > ul')) : [];
-      if (titles?.length === 1 && methods.length === 1 && asides.length === 1) {
-        const aside = asides[0], rows = [...aside.querySelectorAll(':scope > ul > li')];
-        if (rows.length && rows.every(row => belongs(row, scope) && row.querySelector('a[href*="/ingredient/"]'))) {
-          data.ingredients = [...aside.children].filter(el => el.matches('ul,h1,h2,h3,h4,h5,h6'))
-            .map(el => readable(el, true)).filter(Boolean).join('\n');
-          if (!has(existing.name) && !has(data.name)) data.name = readable(titles[0]);
-          if (!has(existing.instructions)) data.instructions = content(methods[0].nextElementSibling, true);
+        const live = Array.isArray(fragment.childNodes);
+        // A bold word alone is weak evidence: a block caption needs the other field captioned or read, or a list of rows under it.
+        const counterpart = { ingredients: 'instructions', instructions: 'ingredients' }[field];
+        if (caption.level === 7 && !caption.control && counterpart && !has(existing[counterpart]) && !has(data[counterpart]) &&
+            !captions.some(other => other.field === counterpart) && fragment.querySelectorAll('li').length < 2) continue;
+        // Trailing paragraphs that open with a note caption ("Tip:", "Note:") are notes, not steps.
+        const notes = [];
+        if (field === 'instructions') {
+          const last = () => live ? fragment.childNodes.findLast(node => node.nodeType === 1) : fragment.lastElementChild;
+          for (let node = last(); node; node = last()) {
+            if (node.tagName !== 'P' || !/^(?:notes?|tips?|options?|hints?|variations?|storage|make ahead|anmerkung|hinweis|tipp|astuces?|conseils?|remarque|notas?|consejos?|opmerking)\s*[:：]\s/i.test(readable(node))) break;
+            notes.unshift(readable(node));
+            if (live) fragment.childNodes.splice(fragment.childNodes.indexOf(node)); else node.remove();
+          }
         }
+        const value = content(fragment, field === 'instructions', live ? nestedRecipes : undefined);
+        // A caption over a bare number or duration ("Preparation" then "20 min") has not named the field, and a bold word
+        // over prose ("Ingredients matter in cooking") needs a quantity row or list rows under it to be one.
+        if (!has(value) || /^\p{N}[\p{N}\s/.,-]*(?:min(?:ute)?s?|m|h(?:ou)?rs?|h|std|uur|minuti|minutos)?\.?$/iu.test(value)) continue;
+        if (caption.level === 7 && field === 'ingredients' && !value.includes('\n') && !quantityLine.test(value.replace(/^[-–—*]\s*/, '')) && fragment.querySelectorAll('li').length < 2) continue;
+        if (field === 'equipment') { data.notes = `[${readable(node).replace(/[:：]\s*$/, '')}]\n${value}`; continue; }
+        data[field] = value;
+        if (notes.length && !has(existing.notes) && !has(data.notes)) data.notes = notes.join('\n');
       }
-    }
-    for (const [field, selectors] of Object.entries(fields)) {
+    };
+    const readSelectors = tier => { for (const [field, selectors] of tier) {
       if (has(existing[field]) || has(data[field])) continue;
       for (const selector of selectors) {
-        const matches = [...scope.querySelectorAll(selector)].filter(el => belongs(el, scope) &&
-          (field !== 'ingredients' || !el.matches(fields.instructions.join(','))));
+        // A container holding the other field's own container is the whole recipe, not this field.
+        const other = otherOf[field] || '';
+        const container = selector === fields.ingredients[2] || selector === fields.instructions[1];
+        const matches = [...scope.querySelectorAll(selector)].filter(el => belongs(el, scope) && (field === 'name' || !container || !el.closest('nav,[role="navigation"]')) &&
+          (!other || !el.matches(other) && (!container || !el.querySelector(other))));
         // Row selection must retain the explicit ancestor visibility honored by a container read.
         if (field === 'ingredients' && selector === fields.ingredients[1]) {
           for (let i = matches.length - 1; i >= 0; i--) {
@@ -392,20 +529,12 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
         }
         const values = outer(matches).map(el => {
           if (field === 'ingredients' && selector === fields.ingredients[1] && el.parentElement?.matches('ul,ol')) {
+            // A short digit-free row that is not itself an ingredient row captions the rows after it.
             const group = el.previousElementSibling;
-            if (group?.matches('li[class*="ingredientSectionHeading" i]') && !matches.includes(group) && belongs(group, scope) && !hiddenByAncestor(group)) {
+            if (group?.tagName === 'LI' && !matches.includes(group) && belongs(group, scope) && !hiddenByAncestor(group)) {
               const label = readable(group);
-              if (label) return `[${label}]\n${content(el)}`;
-            }
-          }
-          if (field === 'ingredients' && selector === fields.ingredients.at(-1)) {
-            const captions = [...el.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(node => belongs(node, scope) && !hiddenByAncestor(node));
-            const fieldOf = node => labelField(readable(node).toLowerCase().replace(/\s*[:*(].*$/, ''));
-            const end = captions.slice(1).find(node => fieldOf(node) === 'instructions');
-            if (captions.length && fieldOf(captions[0]) === 'ingredients' && end) {
-              const range = doc.createRange();
-              range.selectNodeContents(el); range.setStartAfter(captions[0]); range.setEndBefore(end);
-              return content(pruneNestedCards(range.cloneContents()));
+              if (label && label.length <= 48 && !/\d/.test(label) && !labelOf(label) &&
+                  (captionRow.test(label) || /heading|title|label|group|caption/i.test(group.className))) return `[${label}]\n${content(el)}`;
             }
           }
           return /ingredients|instructions/.test(field) ? content(el, field === 'instructions') : readable(el);
@@ -415,128 +544,62 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
           break;
         }
       }
-    }
+    } };
+    // Explicit properties, then unambiguous captions, then class names.
+    readSelectors(tiers[0]);
+    captionFields(true);
+    readSelectors(tiers[1]);
+    // A field whose whole value is its own caption word, as when a collapsed "Method" toggle carries the property, holds no content.
+    for (const field of ['ingredients', 'instructions']) if (typeof data[field] === 'string' && data[field].length <= 48 && labelOf(clean(data[field]))) delete data[field];
     const image = has(existing.image || data.image) ? null : scope.querySelector('[class*="recipe-image" i] img,img[class*="recipe-image" i]');
     data.image ||= image?.getAttribute('data-src') || image?.getAttribute('src') || '';
     if (has(existing.ingredients || data.ingredients) && has(existing.instructions || data.instructions)) return data;
-    const headings = [...scope.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(el => belongs(el, scope) && !hiddenByAncestor(el));
-    // A title-linked, numbered procedure can corroborate a sibling supplies caption.
-    const caption = node => readable(node).toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').trim();
-    const recipeArticle = scope.matches('article') && [...scope.classList].some(name => /(?:^|[-_])recipes?(?:$|[-_])/i.test(name));
-    const procedures = recipeArticle ? headings.filter(node => caption(node).startsWith('how to make ')) : [];
-    const pairedFields = new Map();
-    if (procedures.length === 1) {
-      const method = procedures[0], title = caption(method).slice('how to make '.length);
-      const titles = [...doc.querySelectorAll('h1')].filter(node => !hiddenByAncestor(node) && caption(node) === title);
-      const siblings = headings.filter(node => node.parentElement === method.parentElement);
-      const start = siblings.indexOf(method), end = siblings.findIndex((node, i) => i > start && node.tagName <= method.tagName);
-      const steps = siblings.slice(start + 1, end < 0 ? undefined : end);
-      const ingredients = siblings.slice(0, start).filter(node => node.tagName === method.tagName && /^what you['’]ll need$/.test(caption(node)));
-      if (titles.length === 1 && ingredients.length === 1 && steps.length &&
-          steps.every((node, i) => Number(node.tagName.slice(1)) === Number(method.tagName.slice(1)) + 1 &&
-            /^step\s+(\d+)\s*:/i.exec(readable(node))?.[1] === String(i + 1) &&
-            node.nextElementSibling?.tagName === 'P' && readable(node.nextElementSibling))) {
-        pairedFields.set(ingredients[0], 'ingredients'); pairedFields.set(method, 'instructions');
-      }
-    }
-    const captions = headings.map(node => labelField(readable(node).toLowerCase().replace(/\s*[:*(].*$/, '')));
-    for (let i = 0; i < headings.length; i++) {
-      const heading = headings[i], field = captions[i] || pairedFields.get(heading);
-      if (!field || has(data[field]) || has(existing[field])) continue;
-      const body = heading.closest('[itemprop~="articleBody"],.sqs-layout');
-      const owner = body && scope.contains(body) ? body : scope;
-      // A later field caption ends this field even when its heading level is deeper.
-      const end = headings.slice(i + 1).find((next, k) => owner.contains(next) && (next.tagName <= heading.tagName || captions[i + 1 + k]));
-      const range = doc.createRange();
-      range.selectNodeContents(owner); range.setStartAfter(heading);
-      if (end) range.setEndBefore(end);
-      const fragment = range.cloneContents();
-      data[field] = pairedFields.has(heading) ? readable(fragment, true) : content(fragment, /instructions/.test(field));
-    }
-    // A standalone method caption can own a complete ordered list and explicitly labelled notes.
-    if (has(existing.ingredients || data.ingredients) && !has(existing.instructions || data.instructions)) {
-      const captions = [...scope.querySelectorAll('p')].filter(el => belongs(el, scope) && !hiddenByAncestor(el) &&
-        labelField(readable(el).toLowerCase().replace(/[:：]\s*$/, '').trim()) === 'instructions' && el.nextElementSibling?.tagName === 'OL');
-      if (captions.length === 1) {
-        const list = captions[0].nextElementSibling, notes = [];
-        for (let el = list.nextElementSibling; el; el = el.nextElementSibling) notes.push(el);
-        if (notes.every(el => el.tagName === 'P' && /^(?:notes?|tips?|options?):\s/i.test(readable(el))) &&
-            (!notes.length || !has(existing.notes || data.notes))) {
-          data.instructions = readable(list, true);
-          if (notes.length) data.notes = notes.map(el => readable(el)).join('\n');
-        }
-      }
+    captionFields(false);
+    // Without a caption, the fields are read by shape.
+    if (!has(existing.ingredients || data.ingredients) || !has(existing.instructions || data.instructions)) {
+      const shaped = shapedFields(scope, has(existing.ingredients || data.ingredients));
+      if (shaped) for (const field of ['ingredients', 'instructions']) if (shaped[field] && !has(existing[field]) && !has(data[field])) data[field] = shaped[field];
     }
     return data;
   };
 
-  // Add source quantities only when one owned row set preserves every schema item in order.
-  const quantityRows = (scope, existing, reconcile = false) => {
+  // One alignment of serialised rows to the page's visible lines: every row must appear, in order, with nothing but short
+  // captions between. A row serialised without its quantity matches the line, or pair of lines, that adds a numeral at its
+  // start or end, and takes it whole; a line equal to its row with doubled parentheses collapsed is taken whole; a row with
+  // a decimal lends its numerals the page's spelling. Captions between the rows, and one directly above the first, become [labels].
+  const renderedRows = (root, rows, mode = false) => {
+    const names = !!mode;
     const flat = value => value.replace(/\s+/g, ' ').trim();
     const unwrap = value => value.replace(/\(\(/g, '(').replace(/\)\)/g, ')');
-    if (hiddenByAncestor(scope)) return null;
-    const owned = el => {
-      for (let node = el; node; node = node.parentElement) {
-        if (concealed(node) || node.matches('template,nav,header,footer,[role="navigation"],dialog,[role="dialog"]')) return false;
-        if (node === scope) return true;
-        if (cardSet.has(node) || node.matches('[itemscope],article,main,[role="main"]')) return false;
-      }
-      return false;
-    };
-    const groups = new Map(), nameSelector = classes('ingredient-name ingredient__label');
-    for (const list of scope.querySelectorAll('ul,ol')) {
-      const label = list.previousElementSibling;
-      const labelled = label && (/^H[1-6]$/.test(label.tagName) || label.matches('p') && label.children.length === 1 && label.firstElementChild.matches('b,strong')) &&
-        labelField(readable(label).toLowerCase().split(/\s+/)[0].replace(/[:：]$/, '')) === 'ingredients';
-      if (!owned(list) || list.matches(fields.instructions.join(',')) || !labelled &&
-          !list.matches(fields.ingredients[0] + ',' + fields.ingredients[2]) && !list.parentElement.matches(fields.ingredients[2])) continue;
-      groups.set(list, [...list.children].filter(row => row.tagName === 'LI').map(node => {
-        const names = [...node.querySelectorAll(nameSelector)];
-        return { node, name: names[0], invalid: names.length > 1 };
-      }));
-    }
-    for (const name of scope.querySelectorAll(nameSelector)) {
-      const row = name.parentElement, cells = [...row.children];
-      const amount = cells.find(cell => cell !== name && [...cell.classList].some(token => /(?:^|[-_])(?:amount|quantity)(?:$|[-_])/i.test(token)));
-      const value = cells.length === 2 && amount ? { node: row, name, cells } : { node: row, invalid: true };
-      for (let parent = row.parentElement; parent && parent !== scope; parent = parent.parentElement) {
-        if (parent.matches('[class*="ingredients" i]') && !parent.matches('ul,ol')) {
-          if (!groups.has(parent)) groups.set(parent, []);
-          groups.get(parent).push(value);
-        }
-      }
-    }
-    const wanted = existing.map(flat), matches = [];
-    for (const [owner, rows] of groups) {
-      if (!owned(owner) || rows.length !== wanted.length || rows.some(row => row.invalid || !owned(row.node) || row.node.querySelector('[itemscope],li,ul,ol,article,main,[role="main"],dialog,[role="dialog"],nav,header,footer,[role="navigation"]'))) continue;
-      if (matches.some(match => match.rows.every((row, i) => row.node === rows[i].node))) continue;
-      const values = rows.map(row => flat(row.cells ? row.cells.map(cell => readable(cell)).join(' ') : readable(row.node)));
-      if (!values.every((value, i) => reconcile ? value === unwrap(wanted[i]) : (!rows[i].name || flat(readable(rows[i].name)) === wanted[i]) &&
-          (value === wanted[i] || value.startsWith(wanted[i] + ' ') || value.endsWith(' ' + wanted[i])))) continue;
-      matches.push({ owner, rows, values });
-    }
-    if (matches.length !== 1 || !matches[0].values.some((value, i) => value !== wanted[i])) return null;
-    const { owner, rows, values } = matches[0];
-    const ordered = rows.map((row, i) => ({ node: row.node, value: values[i] }));
-    for (const node of outer([...owner.querySelectorAll('[class*="ingredient__subtitle" i]')])) {
-      if (!owned(node) || rows.some(row => row.node.contains(node) || node.contains(row.node))) continue;
-      const label = flat(readable(node));
-      if (label) ordered.push({ node, value: `[${label}]` });
-    }
-    return ordered.sort((a, b) => a.node.compareDocumentPosition(b.node) & 2 ? 1 : -1).map(row => row.value);
-  };
-
-  // Visible lines that repeat every serialised row in order, with nothing but short captions between them,
-  // are the page's own rendering of the list; they are adopted when their numerals are written differently.
-  const renderedRows = (root, rows) => {
-    const keys = rows.map(rowKey);
+    const wanted = rows.map(row => flat(text(row))), keys = wanted.map(rowKey);
     if (keys.some(key => !key)) return null;
-    const visible = readable(root).split('\n'), matched = [];
+    // The rendering adds a quantity: a numeral, or within one line at most three words such as "etwas" or "to taste".
+    const quantified = (line, row, pair) => {
+      if (line === row) return !pair;
+      if (!line.startsWith(row + ' ') && !line.endsWith(' ' + row)) return false;
+      const extra = line.replace(row, '').trim();
+      return /\d|[¼½¾⅓⅔⅛⅜⅝⅞⅕⅖⅗⅘⅙⅚]/.test(extra) || !pair && extra.split(' ').length <= 3;
+    };
+    // Another item's markup inside the owner (a product card) is not the page's rendering of this list.
+    const visible = readable(root, false, false, '[itemscope]').split('\n'), spans = [];
     let from = 0;
-    for (const key of keys) {
-      const at = visible.findIndex((line, i) => i >= from && rowKey(line) === key);
-      if (at < 0) return null;
-      matched.push(at); from = at + 1;
+    for (const [i, row] of wanted.entries()) {
+      let span = null;
+      for (let k = from; k < visible.length && !span; k++) {
+        const pair = names && k + 1 < visible.length && (visible[k] === row || visible[k + 1] === row) ? `${visible[k]} ${visible[k + 1]}` : '';
+        if (pair && quantified(pair, row, true)) span = { start: k, end: k + 1, line: pair };
+        else if (names ? quantified(visible[k], row) : rowKey(visible[k]) === keys[i]) span = { start: k, end: k, line: visible[k] };
+      }
+      if (!span) return null;
+      spans.push(span); from = span.end + 1;
+    }
+    // A page that renders amounts on their own lines does so for most rows; one lone numeral line is not an amount.
+    const paired = spans.filter(span => span.end > span.start).length;
+    if (paired && paired * 2 < spans.length) return null;
+    // Whole lines are adopted only from the page's own ingredient list: introduced by its caption, with no row left out.
+    if (names) {
+      const before = visible.slice(Math.max(0, spans[0].start - 6), spans[0].start), next = visible[spans.at(-1).end + 1] ?? '';
+      if (quantityLine.test(next) || mode !== 'listed' && !before.some(line => labelOf(line, true) === 'ingredients' || labelField(line.toLowerCase().split(/\s+/)[0]) === 'ingredients')) return null;
     }
     // Only the numerals are re-spelt from the rendering; the serialised row keeps its own punctuation.
     const respelt = (row, line) => {
@@ -549,14 +612,16 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
       });
       return spellings.length === k ? value : row;
     };
+    const decimals = wanted.some(row => /\d\.\d/.test(row));
+    const adopt = (i, line) => names || line === unwrap(wanted[i]) ? line : decimals ? respelt(rows[i], line) : rows[i];
     const result = [];
     let changed = false;
     // A caption directly above the first row names the first group, unless it is the field's own heading.
-    const lead = visible[matched[0] - 1];
-    if (lead && lead.length <= 48 && captionRow.test(lead) && !labelField(lead.toLowerCase().replace(/[:：]\s*$/, '').trim())) result.push(`[${lead.replace(/:$/, '').trim()}]`);
-    for (let i = matched[0]; i <= matched.at(-1); i++) {
-      const line = visible[i], row = matched.indexOf(i);
-      if (row >= 0) { const value = respelt(rows[row], line); result.push(value); changed ||= value !== rows[row]; }
+    const lead = visible[spans[0].start - 1];
+    if (lead && lead.length <= 48 && captionRow.test(lead) && !labelOf(lead)) result.push(`[${lead.replace(/:$/, '').trim()}]`);
+    for (let i = spans[0].start; i <= spans.at(-1).end; i++) {
+      const line = visible[i], row = spans.findIndex(span => span.start === i);
+      if (row >= 0) { const value = adopt(row, spans[row].line); result.push(value); changed ||= value !== rows[row] && value !== wanted[row]; i = spans[row].end; }
       else if (!/\d/.test(line) && line.split(/\s+/).length <= 5) result.push(`[${line.replace(/:$/, '').trim()}]`);
       else return null;
     }
@@ -564,7 +629,6 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
   };
 
   // A paragraph made only of bold lines, most opening with a quantity, is a printed ingredient list.
-  const quantityLine = /^(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞]|(?:around|about|approx\.?|roughly) \d)/iu;
   const quantityBlock = el => {
     if (el.tagName !== 'P') return false;
     const parts = [...el.childNodes].filter(node => node.nodeType !== 3 || node.nodeValue.trim());
@@ -577,7 +641,7 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
   const proseRecipes = scope => {
     const found = [];
     for (const heading of scope.querySelectorAll('h1,h2,h3,h4')) {
-      if (!belongs(heading, scope) || hiddenByAncestor(heading)) continue;
+      if (!visible(heading, scope)) continue;
       const blocks = [];
       for (let el = heading.nextElementSibling; el && !/^H[1-6]$/.test(el.tagName); el = el.nextElementSibling) blocks.push(el); // Any heading ends the recipe.
       const first = blocks.findIndex(quantityBlock);
@@ -627,17 +691,15 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
     }
     const fillMissing = !!scope || !has(data.ingredients) || !has(data.instructions);
     let corroborated = '';
-    if (!scope && recipes.length === 1 && (fillMissing || probeQuantities || scalar)) {
+    const probeParentheses = Array.isArray(data.ingredients) && data.ingredients.some(item => typeof item === 'string' && item.includes('((') && item.includes('))'));
+    if (!scope && recipes.length === 1 && (fillMissing || probeQuantities || probeParentheses || scalar)) {
       const name = text(data.name);
       // A visible title equal to the name, or the name less a trailing site label, corroborates ownership.
-      const titled = heading => {
-        const title = readable(heading), rest = title && name.startsWith(title) ? name.slice(title.length) : null;
-        return rest === '' || !!rest && /^\s*[-–—|:·(]|\s[-–—|·]\s/.test(rest);
-      };
-      const headings = [...doc.querySelectorAll('h1')].filter(heading => !hiddenByAncestor(heading) && titled(heading));
+      const headings = [...doc.querySelectorAll('h1')].filter(heading => !hiddenByAncestor(heading) && titledBy(name, heading));
       // Without any article or main landmark, the document itself is the only possible owner.
       const landmark = doc.querySelector('article,main,[role="main"]');
       const owners = new Set(headings.map(heading => heading.closest('article,main,[role="main"]') || (landmark ? null : doc.body)).filter(Boolean));
+      // The owning title found this way is itself the corroboration of a shorter name.
       if (owners.size === 1) {
         scope = [...owners][0];
         const titles = new Set(headings.filter(heading => scope.contains(heading)).map(heading => readable(heading)));
@@ -663,16 +725,14 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
         }
       }
     }
-    // Serialized rows wrapped in doubled parentheses are rendered once in their visible owned rows.
-    const probeParentheses = Array.isArray(data.ingredients) && data.ingredients.some(item => typeof item === 'string' && item.includes('((') && item.includes('))'));
-    const quantities = probeQuantities && scope ? quantityRows(scope, data.ingredients)
-      : probeParentheses && scope ? quantityRows(scope, data.ingredients, true) : null;
-    if (quantities) additions.ingredients = quantities;
-    // Serialised decimals such as "50.0g" beside a rendered "50g" are re-read from the page's own rows.
-    const rows = !quantities && Array.isArray(data.ingredients) && data.ingredients.length > 1 && data.ingredients.every(item => typeof item === 'string') ? data.ingredients : null;
-    if (rows && rows.some(item => /\d\.\d/.test(item))) {
+    // Rows serialised without their quantities, wrapped in doubled parentheses, or with decimals the page spells otherwise
+    // ("50.0g" beside "50g") are re-read from the page's own rendering of the list.
+    const rows = Array.isArray(data.ingredients) && data.ingredients.length > 1 && data.ingredients.every(item => typeof item === 'string' && item.trim()) ? data.ingredients : null;
+    if (rows && (probeQuantities || probeParentheses || rows.some(item => /\d\.\d/.test(item)))) {
       const landmarks = doc.querySelectorAll('article,main');
-      const rendered = renderedRows(scope || (landmarks.length === 1 ? landmarks[0] : doc.body), rows);
+      const root = scope || (probeQuantities || probeParentheses ? null : landmarks.length === 1 ? landmarks[0] : doc.body);
+      const containers = probeQuantities && root ? [...root.querySelectorAll(fields.ingredients[2])].filter(el => !hiddenByAncestor(el) && !el.matches('ul,ol,li')) : [];
+      const rendered = root ? renderedRows(containers.length === 1 ? containers[0] : root, rows, probeQuantities ? containers.length === 1 ? 'listed' : 'names' : false) : null;
       if (rendered) additions.ingredients = rendered;
     }
     if (corroborated) additions.name = corroborated;

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Page importer: the vendored RecipeClipper runtime is Round 10 (commit 0020283). Ingredient lists and methods are recognised by shape without captions or classes, captions of every kind are read by one resolver, serialised rows are aligned once against the page, and nine site-shaped rules are gone; +39/-7 strict fields on the 967-page corpus, identical output in Firefox and Chromium.
 ### Added
 
 - Import from a web page: give the page's address (the relay fetches it) or paste its HTML or open a saved page, see every recipe it publishes with ingredient and step counts, and add the ones you choose as RecipeMD with source, yield and times (covers are added in the editor, since the site shows only images it stores); existing files are never overwritten and nothing is downloaded
