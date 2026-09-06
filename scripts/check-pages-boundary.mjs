@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const routes = ["/", "/index.html", "/shopping", "/planner", "/recipe", "/settings"];
 const security = {
-  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss://enplace-relay.joesdownloads.workers.dev; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
+  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' wss://enplace-relay.joesdownloads.workers.dev https://enplace-relay.joesdownloads.workers.dev; form-action 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
 };
@@ -111,7 +111,7 @@ async function runPagesBoundary() {
   ]);
   const relay = process.env.VITE_ENPLACE_RELAY_URL ?? (await readFile(".env.static", "utf8")).match(/^VITE_ENPLACE_RELAY_URL=(.*)$/m)?.[1];
   const relayOrigin = relay ? new URL(relay).origin : "";
-  const expectedHeaders = sourceHeaders.trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", relayOrigin);
+  const expectedHeaders = sourceHeaders.trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", `${relayOrigin} ${relayOrigin.replace(/^ws/, "http")}`);
   assert(headers.startsWith(`${expectedHeaders}\n\n`));
   const expectedCsp = expectedHeaders.match(/Content-Security-Policy: (.*)/)?.[1];
   assert(expectedCsp && !expectedCsp.includes("__ENPLACE") && !/connect-src[^;]*(?:\*| wss:;)/.test(expectedCsp));

@@ -289,6 +289,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     databaseContent = (
       <div className="cooking-db__empty cooking-db__onboarding">
         <h2>Add recipe</h2>
+        <p>From a recipe website: <button type="button" className="mep-button mep-button--ghost" onClick={() => setShowPageImport(true)}>Import from a web page</button></p>
         <form className="cooking-db__paste-import" onSubmit={submitPasteImport}>
           <label>Recipe Markdown<textarea aria-label="Recipe Markdown" value={markdown} onChange={(event) => setMarkdown(event.currentTarget.value)} required /></label>
           <label>Or choose a Markdown file<input aria-label="Recipe Markdown file" type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void readMarkdownFile(event.currentTarget.files?.[0])} /></label>
@@ -299,7 +300,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             <button type="button" className="mep-button mep-button--ghost" disabled={importPending} onClick={() => setShowImport(false)}>Cancel</button>
           </div>
         </form>
-        <p>Ask any recipe assistant for <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>, or <button type="button" className="cooking-db__filter-action" onClick={() => setShowPageImport(true)}>import from a web page</button>.</p>
+        <p>Or ask any recipe assistant for <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a> and paste it above.</p>
       </div>
     );
   }

@@ -156,7 +156,38 @@ export async function startRelay({
   if (persistDirectory) await mkdir(persistDirectory, { recursive: true });
 
   const rooms = new Map();
-  const httpServer = createServer((_request, response) => {
+  // GET /page?url=… mirrors the hosted relay's page fetch for URL import (docs/relay.md): public
+  // http(s) HTML pages only, 5 MB cap, 15 s timeout, only for a local app origin.
+  const MAX_PAGE_BYTES = 5 * 1024 * 1024;
+  const pageTarget = (raw) => {
+    let url;
+    try { url = new URL(String(raw ?? "").trim()); } catch { return null; }
+    const host = url.hostname.toLowerCase();
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":") || host === "localhost" || /\.(?:localhost|local|internal)$/.test(host) || !host.includes(".")) return null;
+    url.hash = "";
+    return url;
+  };
+  const servePage = async (request, response) => {
+    const origin = request.headers.origin ?? "";
+    const allowed = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin);
+    const cors = { "access-control-allow-origin": origin, vary: "Origin", "cache-control": "no-store" };
+    if (!allowed) { response.writeHead(403, cors); response.end("Page fetching is only available to Enplace."); return; }
+    const target = pageTarget(new URL(request.url, "http://relay.local").searchParams.get("url"));
+    if (!target) { response.writeHead(400, cors); response.end("Only public web sites can be fetched."); return; }
+    let upstream;
+    try { upstream = await fetch(target.href, { redirect: "follow", signal: AbortSignal.timeout(15_000), headers: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1" } }); }
+    catch { response.writeHead(504, cors); response.end("The page could not be reached."); return; }
+    const type = upstream.headers.get("content-type") ?? "";
+    if (!upstream.ok) { response.writeHead(502, cors); response.end(`The page answered with status ${upstream.status}.`); return; }
+    if (!/^(?:text\/html|application\/xhtml\+xml)\b/i.test(type)) { response.writeHead(415, cors); response.end("That address is not a web page."); return; }
+    const body = new Uint8Array(await upstream.arrayBuffer());
+    if (body.byteLength > MAX_PAGE_BYTES) { response.writeHead(413, cors); response.end("That page is too large to read."); return; }
+    response.writeHead(200, { ...cors, "content-type": type, "x-final-url": upstream.url || target.href, "access-control-expose-headers": "x-final-url" });
+    response.end(body);
+  };
+  const httpServer = createServer((request, response) => {
+    if (request.url?.startsWith("/page")) { void servePage(request, response); return; }
     response.writeHead(200, { "content-type": "text/plain" });
     response.end("okay");
   });

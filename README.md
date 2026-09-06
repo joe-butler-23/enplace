@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `2963bd6f7687`, 2026-09-06.
+> Published snapshot of a private repository, refreshed at each release. Source commit `bf9dfcea9bfe`, 2026-09-06.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -33,7 +33,7 @@ Everything exports as plain Markdown and images. Download the whole cookbook as 
 
 ## Adding recipes
 
-Paste a recipe as Markdown, import a saved or pasted web page (every recipe on the page is listed and you choose which to add; nothing is downloaded), import files or a zip from Settings, or let an assistant do the extraction: the `recipe-extraction` skill in this repository produces Enplace Markdown from a link, text, or photo, and `mep add` validates and files it.
+Paste a recipe as Markdown, import from a web page by address (the relay fetches the page, every recipe on it is listed and you choose which to add; pasting the page's HTML or opening a saved copy still works when a site cannot be fetched), import files or a zip from Settings, or let an assistant do the extraction: the `recipe-extraction` skill in this repository produces Enplace Markdown from a link, text, or photo, and `mep add` validates and files it.
 
 ## Sharing and sync
 

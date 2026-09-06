@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: "node",
     env: { NODE_ENV: "test" },
-    include: ["src/**/*.test.{ts,tsx}", "cli/**/*.test.ts", "scripts/**/*.test.mjs"],
+    include: ["src/**/*.test.{ts,tsx}", "cli/**/*.test.ts", "relay/src/**/*.test.ts", "scripts/**/*.test.mjs"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"]

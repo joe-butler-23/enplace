@@ -192,6 +192,9 @@ button.organiser-column-note,
 .mep-import-page__meta { color: var(--muted); font-size: 0.85rem; }
 .mep-import-page__warning { color: var(--danger); font-size: 0.85rem; }
 .mep-import-page__error { margin: 0; color: var(--danger); white-space: pre-line; }
+.mep-import-page__fallback { display: grid; gap: 8px; }
+.mep-import-page__fallback > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.mep-import-page__fallback label { display: grid; gap: 4px; font-size: 0.9rem; }
 .cooking-db__paste-import input,
 .cooking-db__paste-import textarea { font: inherit; padding: 0.6rem; }
 .cooking-db__paste-import textarea { min-height: 16rem; resize: vertical; }

@@ -1,4 +1,5 @@
 import { routePartykitRequest, type Connection, type ConnectionContext, type WSMessage } from "partyserver";
+import { allowedOrigin, fetchPage, pageResponse, pageTarget } from "./page";
 import { YServer } from "y-partyserver";
 import * as decoding from "lib0/decoding";
 import * as syncProtocol from "y-protocols/sync";
@@ -270,11 +271,26 @@ export class Kitchen extends YServer<Env> {
   }
 }
 
+/** GET /page?url=… fetches one public HTML page for the app's own origin; see page.ts for the limits. */
+async function handlePage(request: Request, env: Env, url: URL): Promise<Response> {
+  const origin = allowedOrigin(request.headers.get("origin"), env.PAGE_ORIGIN);
+  if (!origin) return new Response("Page fetching is only available to Enplace.", { status: 403 });
+  const cors = { "access-control-allow-origin": origin, vary: "Origin" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET" } });
+  if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: cors });
+  const { success } = await env.PAGE_LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" });
+  if (!success) return new Response("Too many pages fetched from this address, try again shortly.", { status: 429, headers: cors });
+  const target = pageTarget(url.searchParams.get("url"));
+  if (!target.ok) return new Response(target.message, { status: target.status, headers: cors });
+  return pageResponse(await fetchPage(target.url), origin);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const match = /^\/parties\/kitchen\/([^/]+)$/.exec(url.pathname);
     if (url.pathname === "/") return new Response("Enplace cookbook relay", { status: 200 });
+    if (url.pathname === "/page") return handlePage(request, env, url);
     if (!match || !ROOM_ID.test(match[1])) return new Response("Not found", { status: 404 });
     return (await routePartykitRequest(request, env)) ?? new Response("Not found", { status: 404 });
   },

@@ -79,7 +79,7 @@ function appShellServiceWorker(): Plugin {
       if (linkHeader.length > HEADER_LINE_LIMIT) {
         this.error(`Generated Link header is ${linkHeader.length} characters; Cloudflare Pages permits ${HEADER_LINE_LIMIT}.`);
       }
-      const trackedHeaders = readFileSync(path.resolve(__dirname, "public/_headers"), "utf8").trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", relayOrigin);
+      const trackedHeaders = readFileSync(path.resolve(__dirname, "public/_headers"), "utf8").trimEnd().replace("__ENPLACE_RELAY_ORIGIN__", `${relayOrigin} ${relayOrigin.replace(/^ws/, "http")}`);
       const navigationHeaders = EARLY_HINT_ROUTES
         .map((route) => `${route}\n  Cache-Control: no-store\n${linkHeader}`)
         .join("\n\n");

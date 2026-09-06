@@ -8,11 +8,17 @@
     "bindings": [{ "name": "Kitchen", "class_name": "Kitchen" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Kitchen"] }],
+  "vars": { "PAGE_ORIGIN": "https://enplace-trial.pages.dev" },
   "ratelimits": [
     {
       "name": "NEW_ROOM_LIMITER",
       "namespace_id": "1",
       "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "PAGE_LIMITER",
+      "namespace_id": "2",
+      "simple": { "limit": 30, "period": 60 }
     }
   ],
   "observability": { "enabled": true }
