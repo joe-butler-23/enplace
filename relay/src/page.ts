@@ -5,7 +5,17 @@
  * and time, only for the app's own origin, and rate limited per client address.
  */
 export const MAX_PAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const PAGE_TIMEOUT_MS = 15_000;
+
+/** What the relay fetches on the app's behalf: a recipe page, or the picture a recipe page names. */
+export type FetchKind = "page" | "image";
+const kinds = {
+  page: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1", type: /^(?:text\/html|application\/xhtml\+xml)\b/i, bytes: MAX_PAGE_BYTES,
+    wrongType: "That address is not a web page.", tooLarge: "That page is too large to read.", failed: "The page answered with status", slow: "The page took too long to answer.", unreachable: "The page could not be reached." },
+  image: { accept: "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1", type: /^image\/(?:jpeg|png|webp|gif|avif)\b/i, bytes: MAX_IMAGE_BYTES,
+    wrongType: "That address is not a picture.", tooLarge: "That picture is too large to fetch.", failed: "The picture answered with status", slow: "The picture took too long to answer.", unreachable: "The picture could not be reached." },
+} as const;
 
 export type PageTarget = { ok: true; url: URL } | { ok: false; status: number; message: string };
 
@@ -39,20 +49,21 @@ export function allowedOrigin(origin: string | null, configured: string | undefi
 
 export type FetchedPage = { status: number; body?: Uint8Array; contentType?: string; finalUrl?: string; message?: string };
 
-export async function fetchPage(target: URL, fetcher: typeof fetch = fetch): Promise<FetchedPage> {
+export async function fetchPage(target: URL, fetcher: typeof fetch = fetch, kind: FetchKind = "page"): Promise<FetchedPage> {
+  const rules = kinds[kind];
   let response: Response;
   try {
     response = await fetcher(target.href, {
       redirect: "follow",
       signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
-      headers: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1", "accept-language": "en-GB,en;q=0.8", "user-agent": "Mozilla/5.0 (compatible; Enplace/1.0; +https://github.com/joe-butler-23/enplace)" },
+      headers: { accept: rules.accept, "accept-language": "en-GB,en;q=0.8", "user-agent": "Mozilla/5.0 (compatible; Enplace/1.0; +https://github.com/joe-butler-23/enplace)" },
     });
   } catch (error) {
-    return { status: 504, message: error instanceof Error && error.name === "TimeoutError" ? "The page took too long to answer." : "The page could not be reached." };
+    return { status: 504, message: error instanceof Error && error.name === "TimeoutError" ? rules.slow : rules.unreachable };
   }
-  if (!response.ok) return { status: 502, message: `The page answered with status ${response.status}.` };
+  if (!response.ok) return { status: 502, message: `${rules.failed} ${response.status}.` };
   const contentType = response.headers.get("content-type") ?? "";
-  if (!/^(?:text\/html|application\/xhtml\+xml)\b/i.test(contentType)) return { status: 415, message: "That address is not a web page." };
+  if (!rules.type.test(contentType)) return { status: 415, message: rules.wrongType };
   const chunks: Uint8Array[] = [];
   let total = 0;
   const reader = response.body?.getReader();
@@ -61,7 +72,7 @@ export async function fetchPage(target: URL, fetcher: typeof fetch = fetch): Pro
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_PAGE_BYTES) { await reader.cancel(); return { status: 413, message: "That page is too large to read." }; }
+      if (total > rules.bytes) { await reader.cancel(); return { status: 413, message: rules.tooLarge }; }
       chunks.push(value);
     }
   }

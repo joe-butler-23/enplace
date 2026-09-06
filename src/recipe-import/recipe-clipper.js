@@ -1,4 +1,4 @@
-// Vendored from the RecipeClipper browser rewrite (src/index.js at commit 0020283, SHA256 b514c7af76723c4a…),
+// Vendored from the RecipeClipper browser rewrite (src/index.js at commit eaddb30, SHA256 562acad20ebe0cd4…),
 // MIT licensed, with attribution to Julian Poyourow for the original project. Sync from that
 // repository rather than editing here; the module reads a parsed Document and never fetches.
 
@@ -779,6 +779,11 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
         for (const recipe of proseRecipes(scope)) results.push(normalize(recipe, 'headings', scope));
       }
     }
+  }
+  // A page's single recipe without an image of its own takes the page's social image.
+  if (results.length === 1 && !results[0].imageURL) {
+    const social = doc.head?.querySelector('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"]');
+    results[0].imageURL = httpURL(social?.getAttribute('content'), base);
   }
   // Identical normalized results (a recipe published twice) collapse; distinct recipes stay.
   if (results.length < 2) return results;

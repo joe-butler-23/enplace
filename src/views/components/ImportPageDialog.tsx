@@ -1,6 +1,6 @@
 import * as React from "react";
 import { setIcon } from "@/platform-primitives";
-import { configuredPageEndpoint, fetchPageHtml } from "../../recipe-import/page-fetch";
+import { configuredImageEndpoint, configuredPageEndpoint, fetchImageBlob, fetchPageHtml } from "../../recipe-import/page-fetch";
 import { importPageRecipes, readPageRecipes, type PageRecipe } from "../../recipe-import/page-import";
 
 const notify = (message: string): void => { window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } })); };
@@ -60,10 +60,12 @@ export function ImportPageDialog({ onClose, onImported }: { onClose: () => void;
     if (!chosen.length) return;
     setBusy("adding"); setError("");
     try {
-      const results = await importPageRecipes(chosen);
+      const imageEndpoint = configuredImageEndpoint();
+      const results = await importPageRecipes(chosen, imageEndpoint ? (url) => fetchImageBlob(url, imageEndpoint) : undefined);
       const added = results.filter((result) => result.path !== null);
       const failed = results.filter((result) => result.error !== null);
-      if (added.length) { notify(`Added ${plural(added.length, "recipe")}${failed.length ? `; ${plural(failed.length, "recipe")} skipped` : ""}.`); onImported(added.map((result) => result.path!)); }
+      const pictured = added.filter((result) => result.cover).length;
+      if (added.length) { notify(`Added ${plural(added.length, "recipe")}${pictured ? pictured === added.length ? (added.length === 1 ? " with its picture" : " with their pictures") : `, ${pictured} with a picture` : ""}${failed.length ? `; ${plural(failed.length, "recipe")} skipped` : ""}.`); onImported(added.map((result) => result.path!)); }
       if (failed.length) setError(failed.map((result) => `${result.title}: ${result.error}`).join("\n"));
       else ref.current?.close();
     } finally { setBusy(""); }

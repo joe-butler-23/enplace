@@ -1,16 +1,21 @@
-/** The relay's page endpoint, derived from the configured relay address; null when there is no relay. */
-export function pageEndpoint(relayUrl: string | null | undefined): string | null {
+/** A relay HTTP endpoint, derived from the configured relay address; null when there is no relay. */
+function relayEndpoint(relayUrl: string | null | undefined, path: "/page" | "/image"): string | null {
   if (!relayUrl?.trim()) return null;
   let url: URL;
   try { url = new URL(relayUrl.trim()); } catch { return null; }
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  url.pathname = "/page"; url.search = ""; url.hash = "";
+  url.pathname = path; url.search = ""; url.hash = "";
   return url.href;
 }
 
-export function configuredPageEndpoint(): string | null {
-  return pageEndpoint((import.meta as ImportMeta & { env?: { VITE_ENPLACE_RELAY_URL?: string } }).env?.VITE_ENPLACE_RELAY_URL);
-}
+/** The relay's page endpoint. */
+export function pageEndpoint(relayUrl: string | null | undefined): string | null { return relayEndpoint(relayUrl, "/page"); }
+/** The relay's picture endpoint, which fetches the image a recipe page names. */
+export function imageEndpoint(relayUrl: string | null | undefined): string | null { return relayEndpoint(relayUrl, "/image"); }
+
+const configuredRelay = (): string | undefined => (import.meta as ImportMeta & { env?: { VITE_ENPLACE_RELAY_URL?: string } }).env?.VITE_ENPLACE_RELAY_URL;
+export function configuredPageEndpoint(): string | null { return pageEndpoint(configuredRelay()); }
+export function configuredImageEndpoint(): string | null { return imageEndpoint(configuredRelay()); }
 
 const messages: Record<number, string> = {
   403: "The relay fetches pages only for Enplace itself.",
@@ -42,4 +47,17 @@ export async function fetchPageHtml(address: string, endpoint: string, fetcher: 
   }
   const html = decode(await response.arrayBuffer(), response.headers.get("content-type") ?? "");
   return { html, url: response.headers.get("x-final-url") || address.trim() };
+}
+
+/** Fetches a recipe's picture through the relay. A picture is optional, so any failure yields null rather than an error. */
+export async function fetchImageBlob(address: string, endpoint: string, fetcher: typeof fetch = fetch): Promise<Blob | null> {
+  if (!/^https?:\/\//i.test(address.trim())) return null;
+  try {
+    const response = await fetcher(`${endpoint}?url=${encodeURIComponent(address.trim())}`);
+    if (!response.ok) return null;
+    const type = response.headers.get("content-type") ?? "";
+    if (!/^image\//i.test(type)) return null;
+    const bytes = await response.arrayBuffer();
+    return bytes.byteLength ? new Blob([bytes], { type: type.split(";")[0].trim() }) : null;
+  } catch { return null; }
 }

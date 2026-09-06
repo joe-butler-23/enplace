@@ -49,6 +49,8 @@ open connection is never throttled by this.
 
 `GET /page?url=<address>` fetches one public HTML page for URL import and returns its bytes unchanged with `x-final-url`; extraction stays in the browser. It answers only requests whose `Origin` is the configured site (`PAGE_ORIGIN`, plus its preview deployments and local development), only http(s) targets on public host names, only HTML, at most 5 MB within 15 s, and at most 30 fetches a minute per client address (`PAGE_LIMITER`). The reference Node relay serves the same route for local origins.
 
+`GET /image?url=<address>` fetches the picture a recipe page names, under the same origin check and rate limit, so the importer can store it as the recipe's cover: public http(s) addresses only, JPEG, PNG, WebP, GIF or AVIF only, 8 MB cap, 15 s timeout, bytes returned unchanged with their content type. A picture that cannot be fetched leaves the recipe without a cover; it never fails an import.
+
 After the root `npm ci`, deploy with `npm run deploy --workspace=enplace-relay`,
 then build/deploy the app with `scripts/deploy-site.sh`. Both require the configured
 Wrangler account. Only encrypted rooms are accepted; rooms from before

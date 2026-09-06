@@ -12,6 +12,8 @@ export type PageRecipe = {
   /** RecipeMD ready to add, or null when the page's recipe cannot be rendered. */
   markdown: string | null;
   error: string | null;
+  /** The picture the page names for this recipe, fetched through the relay when the recipe is added. */
+  imageUrl: string;
 };
 
 const isLabel = (line: string): boolean => /^\[.+\]$/.test(line);
@@ -44,7 +46,8 @@ export function formatYield(value: string): string | null {
 export function pageRecipeMarkdown(recipe: ClippedRecipe, pageUrl: string): string {
   const title = recipe.title.trim() || "Untitled recipe";
   const description: string[] = [];
-  // A remote cover would not render: the site shows only images it stores itself. Covers are added in the editor.
+  // The picture is not linked from the Markdown: the site shows only images it stores itself, so the importer
+  // fetches it through the relay and stores it as the recipe's cover.
   const source = recipe.source || pageUrl.trim();
   if (source) description.push(`Source: ${source}`);
   if (recipe.description.trim()) description.push(recipe.description.trim().split("\n").map(proseLine).join("\n"));
@@ -80,7 +83,7 @@ export function readPageRecipes(html: string, pageUrl: string): PageRecipe[] {
       index, title: recipe.title || "Untitled recipe",
       ingredientCount: recipe.ingredients.filter((line) => !isLabel(line)).length,
       instructionCount: recipe.instructions.filter((line) => !isLabel(line)).length,
-      missing: recipe.missing,
+      missing: recipe.missing, imageUrl: recipe.imageURL,
     };
     try {
       const markdown = pageRecipeMarkdown(recipe, url);
@@ -92,18 +95,25 @@ export function readPageRecipes(html: string, pageUrl: string): PageRecipe[] {
   });
 }
 
-export type PageImportResult = { title: string; path: string | null; error: string | null };
+export type PageImportResult = { title: string; path: string | null; error: string | null; cover: boolean };
+/** Fetches the picture a page names, or null when it cannot be had; a picture is never a reason to fail an import. */
+export type CoverFetcher = (imageUrl: string) => Promise<Blob | null>;
 
-/** Adds each chosen recipe as a new cookbook file; an existing file is never overwritten. */
-export async function importPageRecipes(recipes: readonly PageRecipe[]): Promise<PageImportResult[]> {
+/** Adds each chosen recipe as a new cookbook file, with its picture as the cover when one can be fetched and
+ *  stored; an existing file is never overwritten, and a picture that cannot be stored leaves the recipe without one. */
+export async function importPageRecipes(recipes: readonly PageRecipe[], fetchCover?: CoverFetcher): Promise<PageImportResult[]> {
   const results: PageImportResult[] = [];
   for (const recipe of recipes) {
-    if (!recipe.markdown) { results.push({ title: recipe.title, path: null, error: recipe.error ?? "This recipe is incomplete." }); continue; }
+    if (!recipe.markdown) { results.push({ title: recipe.title, path: null, error: recipe.error ?? "This recipe is incomplete.", cover: false }); continue; }
+    const blob = fetchCover && recipe.imageUrl ? await fetchCover(recipe.imageUrl).catch(() => null) : null;
+    const cover = blob && blob.size > 0 ? new File([blob], "cover", { type: blob.type }) : null;
     try {
-      const added = await importPastedRecipe({ markdown: recipe.markdown });
-      results.push({ title: added.title, path: added.markdownPath, error: null });
+      let added: Awaited<ReturnType<typeof importPastedRecipe>>, stored = false;
+      try { added = await importPastedRecipe({ markdown: recipe.markdown, cover }); stored = !!cover; }
+      catch (error) { if (!cover) throw error; added = await importPastedRecipe({ markdown: recipe.markdown }); }
+      results.push({ title: added.title, path: added.markdownPath, error: null, cover: stored });
     } catch (error) {
-      results.push({ title: recipe.title, path: null, error: error instanceof Error ? error.message : String(error) });
+      results.push({ title: recipe.title, path: null, error: error instanceof Error ? error.message : String(error), cover: false });
     }
   }
   return results;

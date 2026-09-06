@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedOrigin, fetchPage, MAX_PAGE_BYTES, pageResponse, pageTarget } from "./page";
+import { allowedOrigin, fetchPage, MAX_IMAGE_BYTES, MAX_PAGE_BYTES, pageResponse, pageTarget } from "./page";
 
 const html = (body: string, init: ResponseInit = {}) => new Response(body, { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, ...init });
 
@@ -46,5 +46,23 @@ describe("fetching a page", () => {
     expect((await fetchPage(target, async () => html("x".repeat(MAX_PAGE_BYTES + 1)))).status).toBe(413);
     expect((await fetchPage(target, async () => { throw new TypeError("fetch failed"); })).status).toBe(504);
     expect(pageResponse({ status: 415, message: "no" }, "https://enplace-trial.pages.dev").status).toBe(415);
+  });
+});
+
+describe("fetching a picture", () => {
+  const target = new URL("https://www.example.com/soup.jpg");
+  const png = (body = "png-bytes", init: ResponseInit = {}) => new Response(body, { status: 200, headers: { "content-type": "image/png" }, ...init });
+  it("returns image bytes with their type and refuses pages, other types, failures and oversized files", async () => {
+    const picture = await fetchPage(target, async () => png(), "image");
+    expect(picture.status).toBe(200);
+    expect(picture.contentType).toBe("image/png");
+    expect(new TextDecoder().decode(picture.body)).toBe("png-bytes");
+    expect(pageResponse(picture, "https://enplace-trial.pages.dev").headers.get("content-type")).toBe("image/png");
+    expect((await fetchPage(target, async () => html("<p>hi</p>"), "image"))).toMatchObject({ status: 415, message: "That address is not a picture." });
+    expect((await fetchPage(target, async () => new Response("x", { headers: { "content-type": "image/svg+xml" } }), "image")).status).toBe(415);
+    expect((await fetchPage(target, async () => new Response("gone", { status: 404 }), "image")).status).toBe(502);
+    expect((await fetchPage(target, async () => png("x".repeat(MAX_IMAGE_BYTES + 1)), "image")).status).toBe(413);
+    // A page fetch still refuses a picture.
+    expect((await fetchPage(target, async () => png())).status).toBe(415);
   });
 });

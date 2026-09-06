@@ -156,9 +156,12 @@ export async function startRelay({
   if (persistDirectory) await mkdir(persistDirectory, { recursive: true });
 
   const rooms = new Map();
-  // GET /page?url=… mirrors the hosted relay's page fetch for URL import (docs/relay.md): public
-  // http(s) HTML pages only, 5 MB cap, 15 s timeout, only for a local app origin.
-  const MAX_PAGE_BYTES = 5 * 1024 * 1024;
+  // GET /page?url=… and GET /image?url=… mirror the hosted relay's fetches for URL import (docs/relay.md):
+  // public http(s) HTML pages (5 MB) or pictures (8 MB) only, 15 s timeout, only for a local app origin.
+  const kinds = {
+    page: { bytes: 5 * 1024 * 1024, accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1", type: /^(?:text\/html|application\/xhtml\+xml)\b/i, wrongType: "That address is not a web page.", tooLarge: "That page is too large to read." },
+    image: { bytes: 8 * 1024 * 1024, accept: "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1", type: /^image\/(?:jpeg|png|webp|gif|avif)\b/i, wrongType: "That address is not a picture.", tooLarge: "That picture is too large to fetch." },
+  };
   const pageTarget = (raw) => {
     let url;
     try { url = new URL(String(raw ?? "").trim()); } catch { return null; }
@@ -168,7 +171,8 @@ export async function startRelay({
     url.hash = "";
     return url;
   };
-  const servePage = async (request, response) => {
+  const servePage = async (request, response, kind) => {
+    const rules = kinds[kind];
     const origin = request.headers.origin ?? "";
     const allowed = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin);
     const cors = { "access-control-allow-origin": origin, vary: "Origin", "cache-control": "no-store" };
@@ -176,18 +180,19 @@ export async function startRelay({
     const target = pageTarget(new URL(request.url, "http://relay.local").searchParams.get("url"));
     if (!target) { response.writeHead(400, cors); response.end("Only public web sites can be fetched."); return; }
     let upstream;
-    try { upstream = await fetch(target.href, { redirect: "follow", signal: AbortSignal.timeout(15_000), headers: { accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1" } }); }
+    try { upstream = await fetch(target.href, { redirect: "follow", signal: AbortSignal.timeout(15_000), headers: { accept: rules.accept } }); }
     catch { response.writeHead(504, cors); response.end("The page could not be reached."); return; }
     const type = upstream.headers.get("content-type") ?? "";
     if (!upstream.ok) { response.writeHead(502, cors); response.end(`The page answered with status ${upstream.status}.`); return; }
-    if (!/^(?:text\/html|application\/xhtml\+xml)\b/i.test(type)) { response.writeHead(415, cors); response.end("That address is not a web page."); return; }
+    if (!rules.type.test(type)) { response.writeHead(415, cors); response.end(rules.wrongType); return; }
     const body = new Uint8Array(await upstream.arrayBuffer());
-    if (body.byteLength > MAX_PAGE_BYTES) { response.writeHead(413, cors); response.end("That page is too large to read."); return; }
+    if (body.byteLength > rules.bytes) { response.writeHead(413, cors); response.end(rules.tooLarge); return; }
     response.writeHead(200, { ...cors, "content-type": type, "x-final-url": upstream.url || target.href, "access-control-expose-headers": "x-final-url" });
     response.end(body);
   };
   const httpServer = createServer((request, response) => {
-    if (request.url?.startsWith("/page")) { void servePage(request, response); return; }
+    if (request.url?.startsWith("/page")) { void servePage(request, response, "page"); return; }
+    if (request.url?.startsWith("/image")) { void servePage(request, response, "image"); return; }
     response.writeHead(200, { "content-type": "text/plain" });
     response.end("okay");
   });

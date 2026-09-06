@@ -4,19 +4,26 @@ import { expect, test, type Page } from "@playwright/test";
 // Requests the app shell's service worker proxies cannot be intercepted, so this spec runs without it.
 test.use({ serviceWorkers: "block" });
 
-const recipe = (name: string, ingredients: string[], steps: string[]) => ({
+const recipe = (name: string, ingredients: string[], steps: string[], image?: string) => ({
   "@context": "https://schema.org", "@type": "Recipe", name, recipeIngredient: ingredients, recipeYield: "2 servings",
-  recipeInstructions: steps.map((text) => ({ "@type": "HowToStep", text })),
+  recipeInstructions: steps.map((text) => ({ "@type": "HowToStep", text })), ...(image ? { image } : {}),
 });
+// A 1×1 PNG: the picture the relay returns for the first recipe.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const twoSoups = `<!doctype html><html><head><title>Two chilled soups</title>
 <script type="application/ld+json">${JSON.stringify([
-  recipe("Cucumber and yoghurt soup", ["1 cucumber", "100g greek yoghurt"], ["Blend everything.", "Chill and serve."]),
+  recipe("Cucumber and yoghurt soup", ["1 cucumber", "100g greek yoghurt"], ["Blend everything.", "Chill and serve."], "https://example.test/cucumber.png"),
   recipe("Watermelon gazpacho", ["250g watermelon flesh", "800g ripe tomatoes"], ["Blitz until smooth."]),
 ]).replaceAll("<", "\\u003c")}</script></head><body><h1>Two chilled soups</h1></body></html>`;
 
-/** The relay's page route, answered here so the test never leaves the machine. */
+/** The relay's page and picture routes, answered here so the test never leaves the machine. */
 async function servePages(page: Page, pages: Record<string, string>): Promise<string[]> {
   const asked: string[] = [];
+  await page.route(/\/image\?url=/, async (route) => {
+    const target = new URL(route.request().url()).searchParams.get("url") ?? "";
+    asked.push(`image:${target}`);
+    return target.endsWith(".png") ? route.fulfill({ status: 200, contentType: "image/png", body: PNG }) : route.fulfill({ status: 415, contentType: "text/plain", body: "That address is not a picture." });
+  });
   await page.route(/\/page\?url=/, async (route) => {
     const target = new URL(route.request().url()).searchParams.get("url") ?? "";
     asked.push(target);
@@ -48,9 +55,13 @@ test("an address alone fetches the page through the relay, lists its recipes and
   await expect(dialog.getByRole("button", { name: "Add 2 recipes" })).toBeEnabled();
   await found.nth(1).getByRole("checkbox").uncheck();
   await dialog.getByRole("button", { name: "Add recipe", exact: true }).click();
-  await expect(page.locator(".mep-notices")).toContainText("Added 1 recipe.");
+  // The picture is fetched through the relay and stored as the cover; an engine that cannot encode WebP keeps the recipe without one.
+  const pictured = test.info().project.name !== "webkit";
+  await expect(page.locator(".mep-notices")).toContainText(pictured ? "Added 1 recipe with its picture." : /Added 1 recipe( with its picture)?\./);
+  expect(asked).toContain("image:https://example.test/cucumber.png");
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Cucumber and yoghurt soup", { exact: true })).toBeVisible();
+  if (pictured) await expect(page.locator(".cooking-db__cover img").filter({ hasNot: page.locator("[src^='/']") }).first()).toBeVisible();
   await expect(page.getByText("Watermelon gazpacho", { exact: true })).toHaveCount(0);
   await expect(page.getByText("12 recipes", { exact: true })).toBeVisible();
 });
@@ -66,7 +77,7 @@ test("a page the relay cannot fetch reports the reason, and pasted HTML still wo
   await dialog.getByText("Page can't be fetched?").click();
   await dialog.getByLabel("Page HTML").fill(twoSoups);
   await dialog.getByRole("button", { name: "Add 2 recipes" }).click();
-  await expect(page.locator(".mep-notices")).toContainText("Added 2 recipes.");
+  await expect(page.locator(".mep-notices")).toContainText(/Added 2 recipes(, 1 with a picture)?\./);
   await expect(page.getByText("13 recipes", { exact: true })).toBeVisible();
 
   await openImport(page);

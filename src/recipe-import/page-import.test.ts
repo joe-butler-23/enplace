@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+const { createCoverFiles } = vi.hoisted(() => ({ createCoverFiles: vi.fn() }));
+vi.mock("../cookbook/covers", async (importOriginal) => ({ ...(await importOriginal<typeof import("../cookbook/covers")>()), createCoverFiles }));
 import { newCookbookId, readCookbookText, writeCookbookText } from "../cookbook/doc";
 import { openCookbook, type CookbookConnection } from "../host-client/cookbook-storage";
 import { setCurrentCookbookConnection } from "../cookbook/current";
@@ -100,7 +102,7 @@ describe("importing chosen recipes", () => {
     writeCookbookText(connection.doc, "tomato-gazpacho.md", "# Tomato gazpacho\n\n---\n\n- *1* tomato\n\n---\n\n1. Keep me.\n");
     const found = readPageRecipes(jsonLd([recipe("Cucumber soup", ["1 cucumber"]), recipe("Tomato gazpacho", ["800g tomatoes"])]), "");
     const results = await importPageRecipes(found);
-    expect(results[0]).toEqual({ title: "Cucumber soup", path: "cucumber-soup.md", error: null });
+    expect(results[0]).toEqual({ title: "Cucumber soup", path: "cucumber-soup.md", error: null, cover: false });
     expect(results[1].path).toBeNull();
     expect(results[1].error).toContain("already exists");
     expect(readCookbookText(connection.doc, "tomato-gazpacho.md")).toContain("Keep me.");
@@ -108,7 +110,24 @@ describe("importing chosen recipes", () => {
   });
   it("skips an unrenderable recipe with its reason", async () => {
     await emptyCookbook();
-    const results = await importPageRecipes([{ index: 0, title: "Broken", ingredientCount: 0, instructionCount: 0, missing: [], markdown: null, error: "Invalid RecipeMD amount: x" }]);
-    expect(results).toEqual([{ title: "Broken", path: null, error: "Invalid RecipeMD amount: x" }]);
+    const results = await importPageRecipes([{ index: 0, title: "Broken", ingredientCount: 0, instructionCount: 0, missing: [], markdown: null, error: "Invalid RecipeMD amount: x", imageUrl: "" }]);
+    expect(results).toEqual([{ title: "Broken", path: null, error: "Invalid RecipeMD amount: x", cover: false }]);
+  });
+  it("stores the page's picture as the cover, and adds the recipe without one when the picture cannot be had or stored", async () => {
+    const connection = await emptyCookbook();
+    createCoverFiles.mockReset().mockResolvedValue({ cover: new Uint8Array([4, 5]), thumbnail: new Uint8Array([6]) });
+    const page = jsonLd([{ ...recipe("Pea soup", ["1 pea"]), image: "https://example.test/pea.jpg" }, { ...recipe("Bean soup", ["1 bean"]), image: "https://example.test/bean.jpg" }, recipe("Plain soup", ["1 leek"])]);
+    const found = readPageRecipes(page, "https://example.test/soups");
+    expect(found.map((item) => item.imageUrl)).toEqual(["https://example.test/pea.jpg", "https://example.test/bean.jpg", ""]);
+    const fetched: string[] = [];
+    const results = await importPageRecipes(found, async (url) => { fetched.push(url); return url.endsWith("pea.jpg") ? new Blob([new Uint8Array([1, 2])], { type: "image/jpeg" }) : null; });
+    expect(fetched).toEqual(["https://example.test/pea.jpg", "https://example.test/bean.jpg"]);
+    expect(results.map((result) => [result.path, result.cover, result.error])).toEqual([["pea-soup.md", true, null], ["bean-soup.md", false, null], ["plain-soup.md", false, null]]);
+    expect(readCookbookText(connection.doc, "pea-soup.md")).toContain("![Pea soup](<images/pea-soup.webp>)");
+    expect(readCookbookText(connection.doc, "bean-soup.md")).not.toContain("images/");
+    createCoverFiles.mockReset().mockRejectedValue(new Error("This browser could not encode the cover image as WebP."));
+    const again = await importPageRecipes(readPageRecipes(jsonLd([{ ...recipe("Corn soup", ["1 cob"]), image: "https://example.test/corn.jpg" }]), ""), async () => new Blob([new Uint8Array([1])], { type: "image/jpeg" }));
+    expect(again).toEqual([{ title: "Corn soup", path: "corn-soup.md", error: null, cover: false }]);
+    expect(readCookbookText(connection.doc, "corn-soup.md")).not.toContain("images/");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchPageHtml, pageEndpoint } from "./page-fetch";
+import { fetchImageBlob, fetchPageHtml, imageEndpoint, pageEndpoint } from "./page-fetch";
 
 describe("page endpoint", () => {
   it("derives the relay's HTTP page route from its websocket address", () => {
@@ -29,5 +29,21 @@ describe("fetching a page through the relay", () => {
     await expect(fetchPageHtml("https://x.example", endpoint, async () => new Response("", { status: 429 }))).rejects.toThrow(/wait a minute/);
     await expect(fetchPageHtml("https://x.example", endpoint, async () => new Response("Only public web sites can be fetched.", { status: 400 }))).rejects.toThrow("Only public web sites can be fetched.");
     await expect(fetchPageHtml("https://x.example", endpoint, async () => { throw new TypeError("offline"); })).rejects.toThrow(/reach the relay/);
+  });
+});
+
+describe("picture fetching", () => {
+  it("derives the picture endpoint beside the page endpoint", () => {
+    expect(imageEndpoint("wss://relay.example/parties")).toBe("https://relay.example/image");
+    expect(imageEndpoint("")).toBeNull();
+  });
+  it("returns a typed blob for a picture and null for anything else", async () => {
+    const ok = async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+    const blob = await fetchImageBlob("https://example.test/soup.png", "https://relay.example/image", ok as unknown as typeof fetch);
+    expect(blob?.type).toBe("image/png"); expect(blob?.size).toBe(3);
+    expect(await fetchImageBlob("https://example.test/soup.png", "https://relay.example/image", (async () => new Response("no", { status: 415 })) as unknown as typeof fetch)).toBeNull();
+    expect(await fetchImageBlob("https://example.test/soup.png", "https://relay.example/image", (async () => new Response("<p>", { headers: { "content-type": "text/html" } })) as unknown as typeof fetch)).toBeNull();
+    expect(await fetchImageBlob("https://example.test/soup.png", "https://relay.example/image", (async () => { throw new TypeError("offline"); }) as unknown as typeof fetch)).toBeNull();
+    expect(await fetchImageBlob("data:image/png;base64,AAAA", "https://relay.example/image", ok as unknown as typeof fetch)).toBeNull();
   });
 });
