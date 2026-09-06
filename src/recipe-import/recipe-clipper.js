@@ -1,4 +1,4 @@
-// Vendored from the RecipeClipper browser rewrite (src/index.js at commit d18c145, SHA256 1ed5f3f4e4f94d14…),
+// Vendored from the RecipeClipper browser rewrite (src/index.js at commit 40539e8, SHA256 e3067ce94c4f9ee1…),
 // MIT licensed, with attribution to Julian Poyourow for the original project. Sync from that
 // repository rather than editing here; the module reads a parsed Document and never fetches.
 
@@ -563,6 +563,40 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
     return changed ? result : null;
   };
 
+  // A paragraph made only of bold lines, most opening with a quantity, is a printed ingredient list.
+  const quantityLine = /^(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞]|(?:around|about|approx\.?|roughly) \d)/iu;
+  const quantityBlock = el => {
+    if (el.tagName !== 'P') return false;
+    const parts = [...el.childNodes].filter(node => node.nodeType !== 3 || node.nodeValue.trim());
+    if (parts.length < 3 || !parts.every(node => node.nodeType === 1 && (node.tagName === 'BR' || node.matches('strong,b')))) return false;
+    const lines = readable(el).split('\n');
+    return lines.length >= 3 && lines.filter(line => quantityLine.test(line)).length * 2 >= lines.length;
+  };
+  // Each heading owning such a block is a recipe: intro paragraphs before it, every bold block (with a short
+  // caption directly above it as a group label) as ingredients, and the prose after the first block as the method.
+  const proseRecipes = scope => {
+    const found = [];
+    for (const heading of scope.querySelectorAll('h1,h2,h3,h4')) {
+      if (!belongs(heading, scope) || hiddenByAncestor(heading)) continue;
+      const blocks = [];
+      for (let el = heading.nextElementSibling; el && !/^H[1-6]$/.test(el.tagName); el = el.nextElementSibling) blocks.push(el); // Any heading ends the recipe.
+      const first = blocks.findIndex(quantityBlock);
+      if (first < 0) continue;
+      const ingredients = [], steps = [];
+      blocks.slice(first).forEach((el, i, rest) => {
+        if (quantityBlock(el)) {
+          const caption = i > 0 ? rest[i - 1] : null;
+          if (caption?.tagName === 'P' && !quantityBlock(caption) && steps.at(-1) === readable(caption) && readable(caption).length <= 48 && !/\d/.test(readable(caption))) ingredients.push(`[${steps.pop().replace(/:$/, '')}]`);
+          ingredients.push(readable(el));
+        } else if (el.matches('p,ol,ul') && readable(el)) steps.push(readable(el, true));
+      });
+      if (!steps.length) continue;
+      const description = blocks.slice(0, first).filter(el => el.tagName === 'P').map(el => readable(el)).filter(Boolean).join('\n');
+      found.push({ name: readable(heading), description, ingredients: ingredients.join('\n'), instructions: steps.join('\n') });
+    }
+    return found;
+  };
+
   const distinct = [...new Map(objects.map(resolve).map(node => [JSON.stringify(node), canonical(node)])).values()];
   // A recipe published twice under one name is one recipe; its twin may only supply fields the first lacks.
   const recipes = [], byName = new Map();
@@ -678,8 +712,12 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
           }
         }
       }
-      if (microdata || data.ingredients || cards.length && data.instructions)
+      if (microdata || data.ingredients || cards.length && data.instructions) {
         results.push(normalize(data, microdata ? 'microdata' : cards.length ? 'markup' : 'headings', scope));
+      } else if (!microdata && !cards.length && !has(data.ingredients) && !has(data.instructions)) {
+        // A newspaper recipe: a heading, an intro, a paragraph of bold quantity lines, then the method as prose.
+        for (const recipe of proseRecipes(scope)) results.push(normalize(recipe, 'headings', scope));
+      }
     }
   }
   // Identical normalized results (a recipe published twice) collapse; distinct recipes stay.
