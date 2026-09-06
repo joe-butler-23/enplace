@@ -1,4 +1,4 @@
-import { openFreshCookbook } from "./helpers";
+import { exportedCookbookText, openFreshCookbook } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 
 // Requests the app shell's service worker proxies cannot be intercepted, so this spec runs without it.
@@ -87,4 +87,33 @@ test("a page the relay cannot fetch reports the reason, and pasted HTML still wo
   await again.getByRole("button", { name: "Add 2 recipes" }).click();
   await expect(again.getByRole("alert")).toContainText("already exists");
   await expect(page.getByText("13 recipes", { exact: true })).toBeVisible();
+});
+
+
+test("page import never swaps ingredient quantities when visible numerals appear in a different order", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await openFreshCookbook(page);
+  const data = { ...recipe("Quantity-safe soup", ["2.0 onions, 400 g", "1.0 tbsp oil"], ["Cook the onions."]),
+    "@id": "https://example.test/soup#recipe" };
+  const html = `<script type="application/ld+json">${JSON.stringify(data)}</script>
+    <article id="recipe" class="wprm-recipe-container"><h1>Quantity-safe soup</h1><h2>Ingredients</h2>
+    <ul><li>400 g onions, 2</li><li>1 tbsp oil</li></ul><h2>Method</h2><p>Cook the onions.</p></article>`;
+  await servePages(page, { "https://example.test/soup": html });
+  await openImport(page);
+  const dialog = page.getByRole("dialog", { name: "Import from a web page" });
+  await dialog.getByLabel("Page address").fill("https://example.test/soup");
+  await dialog.getByRole("button", { name: "Fetch page" }).click();
+  await expect(dialog.getByRole("list", { name: "Recipes found" })).toContainText("2 ingredients · 1 step");
+  await dialog.getByRole("button", { name: "Add recipe", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByText("Quantity-safe soup", { exact: true }).click();
+  await expect(page.getByText("2 onions, 400 g", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/clipper-quantity-safe.png" });
+  await page.reload();
+  const markdown = await exportedCookbookText(page, "quantity-safe-soup.md");
+  expect(markdown).toMatch(/\*2(?:\.0)?\* onions, 400 g/);
+  expect(markdown).not.toContain("400 onions");
+  expect(markdown).toContain("Cook the onions.");
+  expect(errors).toEqual([]);
 });

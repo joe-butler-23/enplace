@@ -25,7 +25,7 @@ Success means the cookbook document remains the sole authority; recipe provenanc
 - Storage adapters live in `src/host-client/`: `cookbook-storage.ts` implements the browser adapter over Yjs, IndexedDB, and the encrypted relay projection; `browser-storage.ts` defines the adapter contract and storage helpers. Shared recipe, planning, and shopping rules belong in the pure TypeScript `src/core.ts`.
 - The optional `mep` Node CLI lives in `cli/`, uses plain filesystem access, imports the same `src/core.ts`, and operates on files only. It has no network or sync dependencies.
 - `src/cookbook/crypto.ts` derives independent AES-GCM and room keys from a fresh link secret; `encrypted-provider.ts` exposes only sealed Yjs updates to the transport. The plaintext cookbook remains the sole content authority. Never give it directly to a network provider.
-- The only network transport is the y-websocket relay connection for the encrypted projection. Frontend features must not add another transport, a second store for cookbook content, accounts, or provider sign-in. Page extraction inside the app is only the vendored, network-free RecipeClipper parser in `src/recipe-import/recipe-clipper.js`. The page itself, and the picture it names, arrive through two further requests: `GET /page?url=…` and `GET /image?url=…` on the relay, which fetch a public HTML page or picture for the app's own origin and return the bytes (limits in `relay/src/page.ts`); the picture is stored as the recipe's cover, and pasted or opened HTML remains the fallback. Photos and free text still go through agents or a chat assistant.
+- The only network transport is the y-websocket relay connection for the encrypted projection. Frontend features must not add another transport, a second store for cookbook content, accounts, or provider sign-in. Page extraction inside the app is only the embedded, network-free RecipeClipper parser maintained here in `src/recipe-import/recipe-clipper.js`. The page itself, and the picture it names, arrive through two further requests: `GET /page?url=…` and `GET /image?url=…` on the relay, which fetch a public HTML page or picture for the app's own origin and return the bytes (limits in `relay/src/page.ts`); the picture is stored as the recipe's cover, and pasted or opened HTML remains the fallback. Photos and free text still go through agents or a chat assistant.
 - `cooking/enplace-shared-cookbook.md` in the vault records the design decision and the provider-API evidence behind it.
 - `.agents/skills/recipe-extraction/SKILL.md` owns agent-led extraction and CLI addition. `.agents/skills/recipe-qa/SKILL.md` owns read-only QA of existing recipes.
 
@@ -36,6 +36,10 @@ Success means the cookbook document remains the sole authority; recipe provenanc
 - Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` for planner work, and `docs/engineering-guardrails.md` for verification.
 
 The vault note referenced above, Beads issue references, and the `clai validate skill` commands below are the maintainer's own optional tooling, with no public equivalent; skip them if you don't have access. The contributor-facing gate — `nix develop`, `npm ci`, `npm run typecheck`, `npm test`, and `npm run prepush` — is self-contained and requires none of them.
+
+## Measured Retentions
+
+- **RecipeClipper printed-prose path (2026-09-06):** retain pending a mechanism that proves recipe admission and method ownership. The shared-reader trial replaced steps with notes/nutrition and promoted non-recipes. Read `docs/recipe-clipper.md` before retrying; its negative tests and executable-size evidence govern reopening.
 
 ## Verification
 

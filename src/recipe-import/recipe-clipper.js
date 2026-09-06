@@ -1,6 +1,6 @@
-// Vendored from the RecipeClipper browser rewrite (src/index.js at commit e7b9efb, SHA256 06922da04bab5b1c…),
-// MIT licensed, with attribution to Julian Poyourow for the original project. Sync from that
-// repository rather than editing here; the module reads a parsed Document and never fetches.
+// Enplace's network-free RecipeClipper, based on the MIT browser rewrite at e7b9efb
+// (source SHA256 06922da04bab5b1c…). Attribution to Julian Poyourow for the original project.
+// Maintained here; reads a parsed Document synchronously and never fetches.
 
 const array = value => value == null ? [] : Array.isArray(value) ? value : [value];
 const has = value => Array.isArray(value) ? value.some(has) : (typeof value === 'string' ? value.trim() : value != null);
@@ -55,7 +55,7 @@ const presentable = (line, steps) => {
 
 // Row identity across serialisations: numbers by value, words by letters, punctuation ignored.
 const fractionValues = { '¼': 0.25, '½': 0.5, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875, '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1 / 6, '⅚': 5 / 6 };
-const numeral = value => String(Math.round(value * 100) / 100);
+const numeral = value => String(value);
 const rowKey = line => (line.toLowerCase()
   .replace(/(\d+)\s+(\d+)\s*\/\s*(\d+)/g, (_, a, b, c) => numeral(+a + b / c))
   .replace(/(\d+)\s*\/\s*(\d+)/g, (_, a, b) => numeral(a / b))
@@ -604,13 +604,14 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
     // Only the numerals are re-spelt from the rendering; the serialised row keeps its own punctuation.
     const respelt = (row, line) => {
       const spellings = [...line.matchAll(numeralPattern)].map(m => ({ text: m[0], spaced: /\s/.test(line[m.index + m[0].length] ?? ' ') }));
-      let k = 0;
+      let k = 0, agrees = true;
       const value = row.replace(numeralPattern, (found, offset) => {
         const spelling = spellings[k++];
-        if (!spelling) return found;
+        // A word/number multiset identifies a row, not which quantity belongs in each position.
+        if (!spelling || rowKey(found) !== rowKey(spelling.text)) { agrees = false; return found; }
         return spelling.text + (spelling.spaced && /\p{L}/u.test(row[offset + found.length] ?? '') ? ' ' : '');
       });
-      return spellings.length === k ? value : row;
+      return agrees && spellings.length === k ? value : row;
     };
     const decimals = wanted.some(row => /\d\.\d/.test(row));
     const adopt = (i, line) => names || line === unwrap(wanted[i]) ? line : decimals ? respelt(rows[i], line) : rows[i];
@@ -628,6 +629,7 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
     return changed ? result : null;
   };
 
+  // Retained after the shared prose-reader trial failed field ownership; see docs/recipe-clipper.md.
   // A paragraph made only of bold lines, most opening with a quantity, is a printed ingredient list.
   const quantityBlock = el => {
     if (el.tagName !== 'P') return false;

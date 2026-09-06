@@ -1,0 +1,18 @@
+Publication copy: the local repository path is replaced with <repo>; raw evidence is retained locally and its hashes are recorded.
+
+
+> enplace@0.1.0 test:static-pwa
+> playwright test --config=playwright.static-pwa.config.ts tests/static-pwa/import-page.spec.ts
+
+
+Running 3 tests using 1 worker
+
+(node:896774) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:896774) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/static-pwa/import-page.spec.ts:43:1 › an address alone fetches the page through the relay, lists its recipes and adds the chosen ones (828ms)
+  ✓  2 [chromium] › tests/static-pwa/import-page.spec.ts:69:1 › a page the relay cannot fetch reports the reason, and pasted HTML still works (1.1s)
+  ✓  3 [chromium] › tests/static-pwa/import-page.spec.ts:93:1 › page import never swaps ingredient quantities when visible numerals appear in a different order (1.0s)
+
+  3 passed (8.8s)
