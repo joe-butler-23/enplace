@@ -75,6 +75,15 @@ describe("reading a page", () => {
     expect(found[0].markdown).toContain("Source: https://example.test/two-soups");
     expect(parseRecipeMD(found[1].markdown!).yields).toEqual([{ factor: "2", unit: "servings" }]);
   });
+  it("never records this app's own address as a source when no page address is given", () => {
+    const before = window.location.href;
+    window.history.replaceState(null, "", "/#k=e1_secretcookbookkey");
+    try {
+      const [found] = readPageRecipes(jsonLd([recipe("Plain soup", ["1 leek"])]), "");
+      expect(found.markdown).not.toContain("Source:");
+      expect(found.markdown).not.toContain("secretcookbookkey");
+    } finally { window.history.replaceState(null, "", before); }
+  });
   it("reports an incomplete recipe instead of rendering it silently", () => {
     const [found] = readPageRecipes(jsonLd([{ "@type": "Recipe", name: "Only a name" }]), "");
     expect(found.missing).toEqual(["ingredients", "instructions"]);

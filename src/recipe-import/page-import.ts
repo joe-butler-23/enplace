@@ -73,7 +73,9 @@ export function pageRecipeMarkdown(recipe: ClippedRecipe, pageUrl: string): stri
 export function readPageRecipes(html: string, pageUrl: string): PageRecipe[] {
   const url = pageUrl.trim();
   const doc = new DOMParser().parseFromString(html, "text/html");
-  return clipRecipes(doc, url ? { url } : {}).map((recipe, index) => {
+  // Always pass the address, even empty: the parsed document otherwise inherits this app's own URL,
+  // whose fragment is the cookbook secret, and it would become the recipe's source.
+  return clipRecipes(doc, { url }).map((recipe, index) => {
     const base = {
       index, title: recipe.title || "Untitled recipe",
       ingredientCount: recipe.ingredients.filter((line) => !isLabel(line)).length,
