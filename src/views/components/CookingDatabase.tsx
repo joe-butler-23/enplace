@@ -4,6 +4,7 @@ import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import type { StandaloneSettings } from "@/standalone/settings";
 import { databaseQuery, initialDatabaseState, projectDatabaseView } from "./database-query";
 import { importPastedRecipe } from "../../recipe-import/paste-import";
+import { ImportPageDialog } from "./ImportPageDialog";
 import { RecipeCard } from "./RecipeCard";
 
 export type MarkedFilter = "all" | "marked" | "unmarked";
@@ -100,6 +101,11 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   const [importError, setImportError] = React.useState("");
   const [importSuccess, setImportSuccess] = React.useState("");
   const [markdown, setMarkdown] = React.useState("");
+  const [showPageImport, setShowPageImport] = React.useState(false);
+  const pageImported = (paths: string[]) => {
+    setImportSuccess(`Added ${paths.length} recipe${paths.length === 1 ? "" : "s"} from the page.`);
+    setShowImport(false);
+  };
   const submitPasteImport = async (event: React.FormEvent) => {
     event.preventDefault();
     setImportPending(true);
@@ -275,6 +281,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
         <h2>No recipes yet</h2>
         <p>Add complete recipe Markdown to start your cookbook.</p>
         <button type="button" className="cooking-db__filter-action" onClick={() => setShowImport(true)}>Add recipe</button>
+        <button type="button" className="cooking-db__filter-action" onClick={() => setShowPageImport(true)}>Import from a web page</button>
       </div>
     );
   }
@@ -292,7 +299,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             <button type="button" className="mep-button mep-button--ghost" disabled={importPending} onClick={() => setShowImport(false)}>Cancel</button>
           </div>
         </form>
-        <p>Ask any recipe assistant for <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>.</p>
+        <p>Ask any recipe assistant for <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>, or <button type="button" className="cooking-db__filter-action" onClick={() => setShowPageImport(true)}>import from a web page</button>.</p>
       </div>
     );
   }
@@ -496,6 +503,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
       </div>
 
       {importSuccess ? <p className="cooking-db__import-success" role="status">{importSuccess}</p> : null}
+      {showPageImport ? <ImportPageDialog onClose={() => setShowPageImport(false)} onImported={pageImported} /> : null}
       <div className="cooking-db__grid-container">
         {databaseContent}
       </div>

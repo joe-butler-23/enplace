@@ -183,6 +183,15 @@ button.organiser-column-note,
 .organiser-column-note.is-empty:hover { opacity: 1; }
 .cooking-db__paste-import { display: grid; gap: 0.75rem; margin: 1rem auto; max-width: 36rem; text-align: left; }
 .cooking-db__paste-import label { display: grid; gap: 0.25rem; }
+.mep-import-page { display: grid; gap: 12px; }
+.mep-import-page > label { display: grid; gap: 4px; font-size: 0.9rem; }
+.mep-import-page textarea { min-height: 96px; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.mep-import-page__recipes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mep-import-page__recipe { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.mep-import-page__recipe input { margin-top: 3px; }
+.mep-import-page__meta { color: var(--muted); font-size: 0.85rem; }
+.mep-import-page__warning { color: var(--danger); font-size: 0.85rem; }
+.mep-import-page__error { margin: 0; color: var(--danger); white-space: pre-line; }
 .cooking-db__paste-import input,
 .cooking-db__paste-import textarea { font: inherit; padding: 0.6rem; }
 .cooking-db__paste-import textarea { min-height: 16rem; resize: vertical; }
