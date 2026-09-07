@@ -65,10 +65,10 @@ function useCookbookImages(): {
     })
   ), [paths]);
   const resolveImage = React.useCallback((path: string, source: string): string | null => (
-    path.startsWith("/") || /^https?:/i.test(path) ? path : imageUrls.get(resolvePath(path, source) ?? "") ?? null
+    imageUrls.get(resolvePath(path, source) ?? "") ?? null
   ), [imageUrls, resolvePath]);
   const resolveCover = React.useCallback((path: string | null, source: string): string | null => {
-    if (!path || path.startsWith("/") || /^https?:/i.test(path)) return path || null;
+    if (!path) return null;
     const coverPath = resolvePath(path, source);
     if (!coverPath) return null;
     return cardCoverUrl(coverPath, imageUrls);

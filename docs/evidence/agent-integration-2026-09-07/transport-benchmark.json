@@ -1,0 +1,146 @@
+{
+  "node": "v24.19.0",
+  "transport": "loopback persisted relay; no model time or WAN latency",
+  "fixture": {
+    "recipes": 250,
+    "coverBytes": 1048576
+  },
+  "summary": {
+    "cold": {
+      "samples": 10,
+      "medianMs": 39.88260999999994,
+      "p95Ms": 47.24099500000011,
+      "receivedBytes": [
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463,
+        1076463
+      ]
+    },
+    "session": {
+      "samples": 10,
+      "medianMs": 23.421099500000082,
+      "p95Ms": 30.024265000000014,
+      "receivedBytes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "samples": [
+    {
+      "mode": "cold",
+      "ms": 42.78978900000004,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "session",
+      "ms": 23.80693199999996,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "session",
+      "ms": 23.222121000000016,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "cold",
+      "ms": 38.72791099999995,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "cold",
+      "ms": 38.22217999999998,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "session",
+      "ms": 23.62835300000006,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "session",
+      "ms": 23.16977099999997,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "cold",
+      "ms": 43.76550299999997,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "cold",
+      "ms": 38.53618600000004,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "session",
+      "ms": 22.914225999999985,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "session",
+      "ms": 22.995419999999967,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "cold",
+      "ms": 43.960391999999956,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "cold",
+      "ms": 40.78021000000001,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "session",
+      "ms": 23.62007800000015,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "session",
+      "ms": 30.024265000000014,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "cold",
+      "ms": 38.985009999999875,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "cold",
+      "ms": 47.24099500000011,
+      "receivedBytes": 1076463
+    },
+    {
+      "mode": "session",
+      "ms": 25.726889999999912,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "session",
+      "ms": 22.611429999999928,
+      "receivedBytes": 0
+    },
+    {
+      "mode": "cold",
+      "ms": 37.60135100000002,
+      "receivedBytes": 1076463
+    }
+  ]
+}

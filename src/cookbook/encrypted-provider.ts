@@ -172,6 +172,16 @@ export class EncryptedCookbookBridge {
     do { pending = this.pending; await pending; } while (pending !== this.pending);
   }
 
+  /** Finishes encryption before a caller asks the relay to commit; unlike settled, failures reject. */
+  async flush(): Promise<void> {
+    await this.settled();
+    if (this.closed) throw new Error("Cookbook connection is closed.");
+    if (this.sealError) throw this.sealError;
+    if (this.queue.length) throw new Error("Cookbook changes are still waiting to be encrypted.");
+  }
+
+  authenticatedRecords(): number { return this.plain.size; }
+
   destroy(): void {
     this.closed = true;
     this.records.unobserve(this.receive);

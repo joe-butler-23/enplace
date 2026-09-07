@@ -4,6 +4,7 @@ import { YServer } from "y-partyserver";
 import * as decoding from "lib0/decoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
+import { commitFrame, MESSAGE_COMMIT, readCommitFrame } from "../../src/cookbook/commit-protocol";
 
 /**
  * The Enplace cookbook relay on Cloudflare.
@@ -131,6 +132,9 @@ export class Kitchen extends YServer<Env> {
   // Serializes storage flushes so a burst of messages triggers one write at a time instead of
   // overlapping `onSave()` calls racing on the same chunk keys.
   #saveChain: Promise<void> = Promise.resolve();
+  #messageChain: Promise<void> = Promise.resolve();
+  #queuedMessageBytes = 0;
+  #storageFailure: unknown = null;
   // Encoded size of the last snapshot plus every update appended since: an upper bound on the
   // document, since applying an update can only add that many bytes, and cheap to keep.
   #documentBytes = 0;
@@ -157,7 +161,7 @@ export class Kitchen extends YServer<Env> {
     this.#pendingCount = (await this.ctx.storage.get<number>(PENDING_COUNT_KEY)) ?? 0;
   }
 
-  async onSave(): Promise<void> {
+  async #snapshot(): Promise<void> {
     const update = Y.encodeStateAsUpdate(this.document);
     const entries: Record<string, Uint8Array | number> = {};
     let count = 0;
@@ -173,22 +177,26 @@ export class Kitchen extends YServer<Env> {
     if (stale.length || pending.length) await this.ctx.storage.delete([...stale, ...pending, PENDING_COUNT_KEY]);
     this.#documentBytes = update.byteLength;
     this.#pendingCount = 0;
+    this.#storageFailure = null;
   }
 
+  onSave(): Promise<void> { return this.#persist(() => this.#snapshot()); }
+
   /** One small row per edit keeps the update durable across hibernation; the next snapshot folds it in. */
-  async #append(update: Uint8Array): Promise<void> {
-    if (update.byteLength > CHUNK_BYTES) { await this.#flush(); return; }
-    const seq = this.#pendingCount;
-    this.#pendingCount += 1;
-    this.#documentBytes += update.byteLength;
-    await this.ctx.storage.put({ [`${PENDING_PREFIX}${String(seq).padStart(9, "0")}`]: update, [PENDING_COUNT_KEY]: this.#pendingCount });
+  #append(update: Uint8Array): Promise<void> {
+    return this.#persist(async () => {
+      if (update.byteLength > CHUNK_BYTES) { await this.#snapshot(); return; }
+      const seq = this.#pendingCount;
+      this.#pendingCount += 1;
+      this.#documentBytes += update.byteLength;
+      await this.ctx.storage.put({ [`${PENDING_PREFIX}${String(seq).padStart(9, "0")}`]: update, [PENDING_COUNT_KEY]: this.#pendingCount });
+    });
   }
 
   /** Chains onto any in-flight save so writes for this room are never issued concurrently. */
-  async #flush(): Promise<void> {
-    const settled = this.#saveChain.catch(() => undefined);
-    const current = settled.then(() => this.onSave());
-    this.#saveChain = current.catch(() => undefined);
+  #persist(write: () => Promise<void>): Promise<void> {
+    const current = this.#saveChain.then(write);
+    this.#saveChain = current.catch((error) => { this.#storageFailure = error; });
     return current;
   }
 
@@ -209,15 +217,37 @@ export class Kitchen extends YServer<Env> {
     return super.fetch(request);
   }
 
-  override async onMessage(connection: Connection, message: WSMessage): Promise<void> {
-    if (messageByteLength(message) > MAX_MESSAGE_BYTES) {
+  override onMessage(connection: Connection, message: WSMessage): Promise<void> {
+    const length = messageByteLength(message);
+    if (length > MAX_MESSAGE_BYTES || this.#queuedMessageBytes + length > 2 * MAX_MESSAGE_BYTES) {
       connection.close(1009, "message too large");
-      return;
+      return Promise.resolve();
     }
+    this.#queuedMessageBytes += length;
+    // WebSocket delivery order must extend through the awaited storage write, even when
+    // another Durable Object event arrives while the previous handler is awaiting storage.
+    const current = this.#messageChain.then(() => this.#handleMessage(connection, message));
+    this.#messageChain = current.catch(() => { connection.close(1011, "cookbook persistence failed"); })
+      .finally(() => { this.#queuedMessageBytes -= length; });
+    return current;
+  }
+
+  async #handleMessage(connection: Connection, message: WSMessage): Promise<void> {
+    if (connection.readyState !== 1) return;
 
     const kitchenConnection = connection as KitchenConnection;
     let applied: Uint8Array | null = null;
     const bytes = messageAsBytes(message);
+    if (bytes?.[0] === MESSAGE_COMMIT) {
+      const request = readCommitFrame(bytes);
+      if (!request || request.status !== "request") { connection.close(1008, "invalid cookbook commit request"); return; }
+      await this.#saveChain;
+      // A prior storage error may have left memory ahead of storage. Only a complete
+      // successful snapshot can certify that content on a later connection.
+      if (this.#storageFailure) await this.onSave();
+      connection.send(commitFrame(request.id, "committed"));
+      return;
+    }
     if (bytes) {
       try {
         const peek = decoding.createDecoder(bytes);
@@ -259,7 +289,7 @@ export class Kitchen extends YServer<Env> {
   override async onClose(connection: Connection, code: number, reason: string, wasClean: boolean): Promise<void> {
     super.onClose(connection, code, reason, wasClean);
     if (!hasOpenConnection(this.getConnections(), connection.id)) {
-      await this.#flush();
+      await this.onSave();
       await this.ctx.storage.setAlarm(Date.now() + ROOM_RETENTION_MS);
     }
   }

@@ -1,7 +1,7 @@
 {
   "name": "enplace",
   "version": "0.1.0",
-  "description": "Enplace — local-first cooking app.",
+  "description": "Enplace \u2014 local-first cooking app.",
   "homepage": "https://enplace-trial.pages.dev/",
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "npm run build:sample-pack && vite build --mode static",
     "build:static": "npm run build:sample-pack && vite build --mode static",
-    "build:cli": "rm -rf dist-cli && tsc -p tsconfig.cli.json",
+    "build:cli": "tsc -p tsconfig.cli.json && node scripts/build-cli.mjs",
     "build:release": "npm run build:static && npm run build:cli && npm run build --workspace=enplace-relay",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "relay": "node scripts/cookbook-relay.mjs",
@@ -39,11 +39,19 @@
     "test:watch": "vitest watch",
     "prepack": "npm run build:cli",
     "build:sample-covers": "node scripts/build-sample-covers.mjs",
-    "build:sample-pack": "node scripts/build-sample-pack.mjs"
+    "build:sample-pack": "node scripts/build-sample-pack.mjs",
+    "benchmark:agent": "npm run build:cli && node scripts/benchmark-agent.mjs"
   },
   "license": "MIT",
   "dependencies": {
-    "marked": "^18.0.11"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ajv": "^8.20.0",
+    "fflate": "^0.8.3",
+    "lib0": "^0.2.117",
+    "marked": "^18.0.11",
+    "y-indexeddb": "^9.0.12",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -57,9 +65,8 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "4.1.10",
     "dompurify": "^3.4.14",
-    "fflate": "^0.8.3",
+    "esbuild": "^0.28.1",
     "happy-dom": "^20.11.12",
-    "lib0": "^0.2.117",
     "pikaday": "^1.8.2",
     "preact": "^10.29.8",
     "preact-render-to-string": "^6.7.0",
@@ -68,10 +75,7 @@
     "vite": "^8.0.16",
     "vitest": "^4.0.18",
     "wrangler": "4.128.0",
-    "ws": "^8.21.3",
-    "y-indexeddb": "^9.0.12",
-    "y-websocket": "^3.1.0",
-    "yjs": "^13.6.32"
+    "ws": "^8.21.3"
   },
   "bin": {
     "mep": "dist-cli/cli/index.js"

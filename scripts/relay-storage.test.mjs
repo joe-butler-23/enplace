@@ -5,6 +5,7 @@ import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { commitFrame, readCommitFrame } from '../src/cookbook/commit-protocol.ts';
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
@@ -23,11 +24,27 @@ beforeAll(async () => {
       import relay, { Kitchen as ProductionKitchen } from './relay/src/index.ts';
       export class Kitchen extends ProductionKitchen {
         async onMessage(connection, message) {
+          if (message === '__checkpoint__') { connection.send('__checkpoint__'); return; }
           await super.onMessage(connection, message);
           connection.send('${FLUSHED_SIGNAL}');
         }
         async fetch(request) {
           const path = new URL(request.url).pathname;
+          if (path === '/hold-storage') {
+            const put = this.ctx.storage.put.bind(this.ctx.storage);
+            let held = false;
+            this.ctx.storage.put = async (...args) => {
+              if (!held) {
+                held = true;
+                const released = new Promise(resolve => { this.releaseStorage = resolve; });
+                for (const socket of this.getConnections()) socket.send('__storage_held__');
+                await released;
+              }
+              return put(...args);
+            };
+            return new Response('holding next storage write');
+          }
+          if (path === '/release-storage') { this.releaseStorage?.(); return new Response('released'); }
           if (path === '/seed') {
             const entries = await request.json();
             for (const [key, value] of Object.entries(entries)) {
@@ -48,7 +65,7 @@ beforeAll(async () => {
       export default {
         fetch(request, env) {
           const url = new URL(request.url);
-          if (url.pathname === '/seed' || url.pathname === '/stored' || url.pathname === '/run-alarm') {
+          if (url.pathname === '/seed' || url.pathname === '/stored' || url.pathname === '/run-alarm' || url.pathname === '/hold-storage' || url.pathname === '/release-storage') {
             return env.Kitchen.get(env.Kitchen.idFromName(url.searchParams.get('id'))).fetch(request);
           }
           return relay.fetch(request, env);
@@ -256,6 +273,85 @@ function storedRows(stored) {
 async function fetchStored(id) {
   return (await runtime.dispatchFetch(`http://relay/stored?id=${id}`)).json();
 }
+
+it('withholds the production commit receipt until earlier storage writes finish', async () => {
+  const id = freshRoomId();
+  const socket = await connectRaw(id);
+  const receipts = [];
+  socket.addEventListener('message', event => {
+    if (typeof event.data === 'string') return;
+    const receipt = readCommitFrame(new Uint8Array(event.data));
+    if (receipt) receipts.push(receipt);
+  });
+  const signal = value => within(new Promise(resolve => {
+    const handler = event => {
+      if (event.data !== value) return;
+      socket.removeEventListener('message', handler); resolve();
+    };
+    socket.addEventListener('message', handler);
+  }), value);
+  const nonce = 'b'.repeat(32);
+  const acknowledged = within(new Promise(resolve => {
+    const handler = event => {
+      if (typeof event.data === 'string') return;
+      const receipt = readCommitFrame(new Uint8Array(event.data));
+      if (receipt?.id !== nonce) return;
+      socket.removeEventListener('message', handler); resolve(receipt);
+    };
+    socket.addEventListener('message', handler);
+  }), 'durable production receipt');
+  await runtime.dispatchFetch(`http://relay/hold-storage?id=${id}`);
+  const wire = new Y.Doc();
+  wire.getMap('sealed-v1').set('opaque-record', new Uint8Array([10, 20, 30]));
+  const held = signal('__storage_held__');
+  socket.send(updateFrame(Y.encodeStateAsUpdate(wire)));
+  try {
+    await held;
+    socket.send(commitFrame(nonce, 'request'));
+    const checkpoint = signal('__checkpoint__');
+    socket.send('__checkpoint__');
+    await checkpoint;
+    expect(receipts).toEqual([]);
+  } finally {
+    await runtime.dispatchFetch(`http://relay/release-storage?id=${id}`);
+  }
+  expect(await acknowledged).toEqual({ id: nonce, status: 'committed' });
+  const persisted = docFromStoredChunks(await fetchStored(id));
+  expect(persisted.getMap('sealed-v1').get('opaque-record')).toEqual(new Uint8Array([10, 20, 30]));
+  expect(socket.readyState).toBe(1);
+  persisted.destroy(); wire.destroy();
+});
+
+it('rejects malformed commit frames instead of issuing a receipt', async () => {
+  const socket = await connectRaw(freshRoomId());
+  const closed = within(new Promise(resolve => socket.addEventListener('close', event => resolve(event.code), { once: true })), 'invalid commit to close');
+  socket.send(new Uint8Array([4]));
+  expect(await closed).toBe(1008);
+});
+
+it('bounds queued relay bytes while persistence is blocked', async () => {
+  const id = freshRoomId(); const socket = await connectRaw(id);
+  await runtime.dispatchFetch(`http://relay/hold-storage?id=${id}`);
+  const held = within(new Promise(resolve => {
+    const handler = event => {
+      if (event.data !== '__storage_held__') return;
+      socket.removeEventListener('message', handler); resolve();
+    };
+    socket.addEventListener('message', handler);
+  }), 'blocked storage');
+  const wire = new Y.Doc(); wire.getMap('sealed-v1').set('record', new Uint8Array([1]));
+  socket.send(updateFrame(Y.encodeStateAsUpdate(wire)));
+  try {
+    await held;
+    const closed = within(new Promise(resolve => socket.addEventListener('close', event => resolve(event.code), { once: true })), 'queued byte limit to close');
+    const message = 'x'.repeat(14 * 1024 * 1024);
+    socket.send(message); socket.send(message); socket.send(message);
+    expect(await closed).toBe(1009);
+  } finally {
+    await runtime.dispatchFetch(`http://relay/release-storage?id=${id}`);
+    wire.destroy();
+  }
+});
 
 it('rejects incomplete stored snapshots before a websocket can receive false-empty sync', async () => {
   const id = 'e1-' + 'a'.repeat(64);

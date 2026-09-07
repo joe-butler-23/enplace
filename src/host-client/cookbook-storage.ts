@@ -3,6 +3,7 @@ import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import { cookbookCipher, type CookbookCipher } from "../cookbook/crypto";
 import { EncryptedCookbookBridge } from "../cookbook/encrypted-provider";
+import { commitFrame, MESSAGE_COMMIT, readCommitFrame } from "../cookbook/commit-protocol";
 import type { VaultStorageAdapter } from "./browser-storage";
 import {
   deleteCookbookPath, cookbookFiles, cookbookPathConflict, listCookbookPaths,
@@ -11,6 +12,7 @@ import {
 
 export type CookbookStatus = "local-only" | "connecting" | "connected" | "offline";
 export type LocalCopyState = "pending" | "ready" | Error;
+export type CookbookWaitOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type OpenCookbookOptions = {
   id: string;
   relayUrl: string | null;
@@ -39,9 +41,16 @@ export type CookbookConnection = {
   integrity: () => number;
   onIntegrity: (listener: (count: number) => void) => () => void;
   publish: () => void;
+  /** Current relay hydration, including authentication; does not treat an unknown empty room as a cookbook. */
+  ready: (options?: CookbookWaitOptions) => Promise<void>;
+  /** Resolves only after queued encryption and a durable receipt for this connection's preceding writes. */
+  commit: (options?: CookbookWaitOptions) => Promise<void>;
+  /** A synchronous group of domain writes, guarded and published as one local transaction. */
+  mutate: <T>(update: () => T) => Promise<T>;
   close: () => Promise<void>;
 };
 const LOCAL_ORIGIN = Symbol("enplace-cookbook-local-write");
+const DEFAULT_COMMIT_TIMEOUT_MS = 15_000;
 /** The persisted copy is the encrypted projection, named by the public room so no secret is stored. */
 export const cookbookDatabaseName = (room: string): string => `enplace-cookbook-${room}`;
 
@@ -101,6 +110,7 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
   const wire = new Y.Doc();
   const persistence = persist ? new IndexeddbPersistence(name, wire) : null;
   let closed = false;
+  const lifetime = new AbortController();
   let localCopy: LocalCopyState = "pending";
   const copyListeners = new Set<() => void>();
   const setLocalCopy = (next: LocalCopyState): void => {
@@ -171,6 +181,13 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       throw new Error(`Cookbook changes cannot be saved right now: ${error instanceof Error ? error.message : "Could not secure the cookbook."}`);
     });
   };
+  const mutate = async <T>(update: () => T): Promise<T> => {
+    if (closed) throw new Error("Cookbook connection is closed.");
+    const pending = ensureSealed();
+    if (pending) await pending;
+    if (closed) throw new Error("Cookbook connection is closed.");
+    return doc.transact(update, LOCAL_ORIGIN);
+  };
   const adapter: VaultStorageAdapter = {
     async readBytes(path) {
       const bytes = readCookbookBytes(doc, path);
@@ -235,6 +252,8 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
       connect: false, disableBc: true, WebSocketPolyfill: options.WebSocketPolyfill,
     });
     provider.awareness.setLocalState(null);
+    // Receipts are handled by the operation waiting on this exact socket, never as Yjs content.
+    provider.messageHandlers[MESSAGE_COMMIT] = () => {};
     provider.on("status", ({ status: next }: { status: string }) => {
       setStatus(next === "connected" ? "connected" : next === "connecting" ? "connecting" : "offline");
     });
@@ -281,6 +300,96 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     doc.on("afterTransaction", localWriteListener);
   }
   if (options.relayUrl && !deferredRelay) connectRelay();
+  const bounded = async (label: string, waitOptions: CookbookWaitOptions, work: (signal: AbortSignal) => Promise<void>): Promise<void> => {
+    const timeoutMs = waitOptions.timeoutMs ?? DEFAULT_COMMIT_TIMEOUT_MS;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) throw new Error("Cookbook timeout must be a positive bounded duration.");
+    const deadline = new AbortController();
+    const signal = AbortSignal.any([lifetime.signal, deadline.signal, ...(waitOptions.signal ? [waitOptions.signal] : [])]);
+    signal.throwIfAborted();
+    const timeout = setTimeout(() => deadline.abort(new Error(`${label} timed out; relay persistence was not confirmed.`)), timeoutMs);
+    let abort = (): void => {};
+    try {
+      await Promise.race([
+        work(signal),
+        new Promise<never>((_, reject) => {
+          abort = () => reject(signal.reason);
+          signal.addEventListener("abort", abort, { once: true });
+          if (signal.aborted) abort();
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      // Stops any subscription still waiting after an error from another stage.
+      deadline.abort(new Error(`${label} ended.`));
+    }
+  };
+  const hydrate = async (signal: AbortSignal): Promise<void> => {
+    signal.throwIfAborted();
+    if (!options.relayUrl) throw new Error("This cookbook has no relay; shared persistence cannot be confirmed.");
+    publish();
+    connectRelay();
+    const transport = provider!;
+    await new Promise<void>((resolve, reject) => {
+      const finish = (error?: unknown): void => {
+        transport.off("sync", inspect);
+        transport.off("connection-error", failed);
+        transport.off("closed", failed);
+        signal.removeEventListener("abort", aborted);
+        if (error) reject(error); else resolve();
+      };
+      const inspect = (): void => { if (transport.synced && transport.wsconnected) finish(); };
+      const failed = (): void => finish(new Error("Could not synchronise the cookbook relay."));
+      const aborted = (): void => finish(signal.reason);
+      transport.on("sync", inspect);
+      transport.on("connection-error", failed);
+      transport.on("closed", failed);
+      signal.addEventListener("abort", aborted, { once: true });
+      inspect();
+      if (signal.aborted) aborted();
+    });
+    await bridge.settled();
+    const failedSeal = bridge.sealFailure();
+    if (failedSeal) {
+      // Retry the retained update bytes, never the domain operation. A recovered seal
+      // must not leave its old error masquerading as a permanent storage failure.
+      await bridge.retrySeal();
+      await bridge.settled();
+      if (localCopy === failedSeal) setLocalCopy("ready");
+    }
+    signal.throwIfAborted();
+    if (bridge.integrity()) throw new Error("Cookbook authentication failed; shared records are unreadable.");
+    if (localCopy instanceof Error) throw localCopy;
+    if (!bridge.authenticatedRecords()) throw new Error("This relay has no authenticated cookbook. Publish it from an existing device, or explicitly create a new cookbook.");
+    if (!transport.synced || !transport.wsconnected) throw new Error("Cookbook relay disconnected during hydration.");
+    setStatus("connected");
+  };
+  const durableReceipt = (signal: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const socket = provider?.ws;
+    if (!socket || socket.readyState !== 1 || !provider?.synced) { reject(new Error("Cookbook relay disconnected; persistence was not confirmed.")); return; }
+    const id = crypto.randomUUID().replace(/-/g, "");
+    const finish = (error?: unknown): void => {
+      socket.removeEventListener("message", received);
+      socket.removeEventListener("close", disconnected);
+      socket.removeEventListener("error", disconnected);
+      signal.removeEventListener("abort", aborted);
+      if (error) reject(error); else resolve();
+    };
+    const received = (event: MessageEvent): void => {
+      const bytes = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : event.data instanceof Uint8Array ? event.data : null;
+      const receipt = bytes ? readCommitFrame(bytes) : null;
+      if (!receipt || receipt.id !== id || receipt.status === "request") return;
+      finish(receipt.status === "committed" ? undefined : new Error("The relay could not durably store this cookbook; persistence was not confirmed."));
+    };
+    const disconnected = (): void => finish(new Error("Cookbook relay disconnected before its receipt; persistence was not confirmed."));
+    const aborted = (): void => finish(signal.reason);
+    socket.addEventListener("message", received);
+    socket.addEventListener("close", disconnected);
+    socket.addEventListener("error", disconnected);
+    signal.addEventListener("abort", aborted, { once: true });
+    try { socket.send(commitFrame(id, "request")); } catch (error) { finish(error); }
+  });
   return {
     id: options.id, doc, adapter, relayUrl: options.relayUrl,
     localCopy: () => localCopy,
@@ -292,9 +401,20 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
     integrity: () => bridge.integrity(),
     onIntegrity: (listener) => bridge.onIntegrity(listener),
     publish,
+    ready: (waitOptions = {}) => bounded("Cookbook hydration", waitOptions, hydrate),
+    commit: (waitOptions = {}) => bounded("Cookbook commit", waitOptions, async (signal) => {
+      await hydrate(signal);
+      await bridge.flush();
+      signal.throwIfAborted();
+      if (persistence) await commit(persistence);
+      signal.throwIfAborted();
+      await durableReceipt(signal);
+    }),
+    mutate,
     async close() {
       if (closed) return;
       closed = true;
+      lifetime.abort(new Error("Cookbook connection is closed; persistence was not confirmed."));
       if (localWriteListener) doc.off("afterTransaction", localWriteListener);
       localWriteListener = null;
       if (typeof window !== "undefined") {

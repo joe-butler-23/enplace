@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `d827a1ff187b`, 2026-09-07.
+> Published snapshot of a private repository, refreshed at each release. Source commit `38ff851ae453`, 2026-09-07.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -41,7 +41,9 @@ Devices encrypt cookbook updates before sending them through the Yjs websocket r
 
 ## Optional CLI
 
-For terminal or agent-assisted workflows, the optional Node 24 `mep` CLI checks, adds or converts recipes, lists a folder’s recipes, and rebuilds `Shopping.md` for a planned week. Import its files into the PWA deliberately. Build it with `npm run build:cli`; the web app does not require it.
+Connect the optional Node 24 CLI once with `mep cookbook use`, pasting the private link from Settings at its hidden prompt. `mep chat` opens a cooking-only session in your existing signed-in Claude Code: it can read and amend recipes, plan meals and manage shopping directly in the same cookbook. `mep agent "plan three dinners for this week"` delegates a request and returns only trusted operation counts to the calling assistant.
+
+`mep mcp` exposes the same cooking tools to other compatible clients. `mep tools` prints their schemas; `mep call` runs an operation with JSON arguments. Ordinary `mep list`, `show`, `add` and `amend` use the connected cookbook. Folder commands remain available with `--folder`; no folder sync is created. Build with `npm run build:cli`. See [agent integration](docs/agent-integration.md) for setup, retries and the execution boundary.
 
 ## Development
 

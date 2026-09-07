@@ -6,6 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { startRelay } from "./cookbook-relay.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const COMMAND_DEADLINE_MS = 5 * 60_000;
@@ -60,8 +63,8 @@ async function successful(command, args, options) {
   return result;
 }
 
-function installedCli(bin, consumer) {
-  const options = { cwd: consumer, env: { ...process.env, NODE_PATH: "" } };
+function installedCli(bin, consumer, env = {}) {
+  const options = { cwd: consumer, env: { ...process.env, NODE_PATH: "", ...env } };
   return {
     run: (args) => run(bin, args, options),
     successful: (args) => successful(bin, args, options),
@@ -102,11 +105,11 @@ async function main() {
     const tarball = path.join(packDirectory, manifest.filename);
     await successful("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: consumer });
     const installedPackage = JSON.parse(await readFile(path.join(consumer, "node_modules/enplace/package.json"), "utf8"));
-    assert.deepEqual(installedPackage.dependencies, { marked: "^18.0.11" });
+    assert.deepEqual(installedPackage.dependencies, JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8")).dependencies);
     await assert.rejects(access(path.join(consumer, "node_modules/ws")));
     for (const browserOnly of [
       "@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities",
-      "fflate", "pikaday", "preact", "qrcode", "y-indexeddb", "yjs", "y-websocket",
+      "pikaday", "preact", "qrcode", "happy-dom",
     ]) {
       await assert.rejects(access(path.join(consumer, "node_modules", ...browserOnly.split("/"))), `${browserOnly} leaked into the production install`);
     }
@@ -154,8 +157,50 @@ async function main() {
     assert.equal(invalid.code, 1);
     assert.equal(invalid.stdout, "");
     assert.equal(invalid.stderr, "mep: recipe needs valid RecipeMD (https://recipemd.org/specification.html) or an existing ## Ingredients section\n");
+    const relay = await startRelay({ port: 0, persist: path.join(scratch, "relay") });
+    const id = "e1_" + "a".repeat(52), relayUrl = relay.url;
+    const config = path.join(scratch, "cookbook.json");
+    await writeFile(config, JSON.stringify({ id, relayUrl }), { mode: 0o600 });
+    await successful(process.execPath, ["--input-type=module", "-e", `
+      import { openCookingSession } from './node_modules/enplace/dist-cli/src/agent/session.js';
+      import { readFile } from 'node:fs/promises';
+      const association = JSON.parse(await readFile(process.argv[1], 'utf8'));
+      const session = await openCookingSession({ ...association, create: true });
+      try { await session.cookbook.commit(); } finally { await session.close(); }
+    `, config], { cwd: consumer });
+    const transport = new StdioClientTransport({ command: bin, args: ["mcp", "--config", config], cwd: consumer, stderr: "pipe" });
+    const client = new Client({ name: "installed-package-check", version: "1" });
+    try {
+      await client.connect(transport);
+      const { tools } = await client.listTools();
+      assert.equal(tools.length, 24);
+      assert(tools.some(tool => tool.name === "recipe_update"));
+      const invalid = await client.callTool({ name: "recipe_delete", arguments: { path: "../../secret" } });
+      assert.equal(invalid.isError, true);
+      const created = await client.callTool({ name: "recipe_create", arguments: { operationId: "installed-create-soup", markdown: "# Installed soup\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" } });
+      assert.notEqual(created.isError, true, JSON.stringify(created));
+      const added = JSON.parse(created.content[0].text);
+      const planResponse = await client.callTool({ name: "plan_read", arguments: {} });
+      const plan = JSON.parse(planResponse.content[0].text);
+      const planned = await client.callTool({ name: "plan_add", arguments: { operationId: "installed-plan-soup", path: added.path, date: "2026-09-09", expectedRevision: plan.revision } });
+      assert.notEqual(planned.isError, true);
+      await client.close();
+      const readback = await cli.successful(["show", added.path, "--config", config]);
+      assert.match(readback.stdout, /Installed soup/);
+      const listed = await cli.successful(["list", "--config", config, "--json"]);
+      assert.equal(JSON.parse(listed.stdout).recipes.length, 1);
+      const configHome = path.join(scratch, "config");
+      await mkdir(path.join(configHome, "enplace"), { recursive: true, mode: 0o700 });
+      await writeFile(path.join(configHome, "enplace/cookbook.json"), JSON.stringify({ id, relayUrl }), { mode: 0o600 });
+      const localShopping = path.join(consumer, "Shopping.md");
+      await writeFile(localShopping, "Local folder must remain untouched.\n");
+      const liveCli = installedCli(bin, consumer, { XDG_CONFIG_HOME: configHome });
+      const built = await liveCli.successful(["shop", "--week", "2026-09-07"]);
+      assert(JSON.parse(built.stdout).items.some(item => item.content.includes("onions")));
+      assert.equal(await readFile(localShopping, "utf8"), "Local folder must remain untouched.\n");
+    } finally { await client.close(); await relay.close(); }
     console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node production-only install.`);
-    console.log("Installed check/add/list/shop commands passed with no browser or sync dependencies.");
+    console.log("Installed folder commands and live MCP create/readback passed; browser rendering dependencies absent.");
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as awarenessProtocol from "y-protocols/awareness";
@@ -10,6 +10,7 @@ import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import { WebSocket, WebSocketServer } from "ws";
 import * as Y from "yjs";
+import { commitFrame, MESSAGE_COMMIT, readCommitFrame } from "../src/cookbook/commit-protocol.ts";
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
@@ -87,6 +88,17 @@ function policyViolation(message) {
 
 function persistedRoomPath(directory, name) {
   return resolve(directory, `${encodeURIComponent(name)}.yjs`);
+}
+
+async function persistRoom(directory, name, update) {
+  const path = persistedRoomPath(directory, name);
+  const temporary = `${path}.tmp`;
+  const file = await open(temporary, "w");
+  try { await file.writeFile(update); await file.sync(); }
+  finally { await file.close(); }
+  await rename(temporary, path);
+  const folder = await open(directory, "r");
+  try { await folder.sync(); } finally { await folder.close(); }
 }
 
 function validateAwarenessUpdate(room, socket, update, maxAwarenessBytes) {
@@ -198,6 +210,24 @@ export async function startRelay({
   });
   const socketServer = new WebSocketServer({ noServer: true, maxPayload: maxMessageBytes });
   const liveSockets = new WeakSet();
+  const requestWrite = (room) => {
+    if (!persistDirectory) return;
+    room.writeRequested = true;
+    if (room.writeRunning) return;
+    room.writeRunning = true;
+    room.writeChain = (async () => {
+      try {
+        while (room.writeRequested) {
+          room.writeRequested = false;
+          await persistRoom(persistDirectory, room.name, Y.encodeStateAsUpdate(room.doc));
+          room.writeError = null;
+        }
+      } catch (error) {
+        room.writeError = error;
+        console.error(`could not persist room ${room.name}:`, error);
+      } finally { room.writeRunning = false; }
+    })();
+  };
 
   const getRoom = (name) => {
     const existing = rooms.get(name);
@@ -215,6 +245,7 @@ export async function startRelay({
       writeChain: Promise.resolve(),
       writeRequested: false,
       writeRunning: false,
+      writeError: null,
       ready: Promise.resolve(),
     };
     rooms.set(name, room);
@@ -232,24 +263,7 @@ export async function startRelay({
       doc.on("update", (update) => {
         const message = syncMessage((output) => syncProtocol.writeUpdate(output, update));
         for (const socket of room.sockets) send(socket, message);
-        if (persistDirectory) {
-          room.writeRequested = true;
-          if (!room.writeRunning) {
-            room.writeRunning = true;
-            room.writeChain = (async () => {
-              try {
-                while (room.writeRequested) {
-                  room.writeRequested = false;
-                  await writeFile(persistedRoomPath(persistDirectory, name), Y.encodeStateAsUpdate(doc));
-                }
-              } catch (error) {
-                console.error(`could not persist room ${name}:`, error);
-              } finally {
-                room.writeRunning = false;
-              }
-            })();
-          }
-        }
+        requestWrite(room);
       });
       awareness.on("update", ({ added, updated, removed }, origin) => {
         if (room.controlledIds.has(origin)) {
@@ -265,21 +279,19 @@ export async function startRelay({
     return room;
   };
 
-  const evictRoom = (room) => {
-    void (async () => {
-      await room.ready.catch(() => undefined);
-      while (room.sockets.size === 0 && rooms.get(room.name) === room) {
-        const write = room.writeChain;
-        await write;
-        if (write !== room.writeChain) continue;
-        if (room.sockets.size === 0 && rooms.get(room.name) === room) {
-          rooms.delete(room.name);
-          room.awareness.destroy();
-          room.doc.destroy();
-        }
-        return;
+  const evictRoom = async (room) => {
+    await room.ready.catch(() => undefined);
+    while (room.sockets.size === 0 && rooms.get(room.name) === room) {
+      const write = room.writeChain;
+      await write;
+      if (write !== room.writeChain) continue;
+      if (room.sockets.size === 0 && rooms.get(room.name) === room) {
+        rooms.delete(room.name);
+        room.awareness.destroy();
+        room.doc.destroy();
       }
-    })();
+      return;
+    }
   };
 
   socketServer.on("connection", (socket, request, name) => {
@@ -295,12 +307,20 @@ export async function startRelay({
     });
     socket.on("pong", () => liveSockets.add(socket));
     socket.on("message", (raw) => {
-      void room.ready.then(() => {
+      void room.ready.then(async () => {
         if (!room.sockets.has(socket)) return;
         try {
           const input = decoding.createDecoder(bytes(raw));
           const messageType = decoding.readVarUint(input);
-          if (messageType === MESSAGE_SYNC) {
+          if (messageType === MESSAGE_COMMIT) {
+            const request = readCommitFrame(bytes(raw));
+            if (!request || request.status !== "request") throw new Error("invalid cookbook commit request");
+            // Updates before this barrier were synchronously applied and queued above. Their
+            // write chain includes atomic replacement and fsync, never just a peer broadcast.
+            await room.writeChain;
+            if (room.writeError) { requestWrite(room); await room.writeChain; }
+            send(socket, commitFrame(request.id, persistDirectory && !room.writeError ? "committed" : "rejected"));
+          } else if (messageType === MESSAGE_SYNC) {
             const reply = encoding.createEncoder();
             encoding.writeVarUint(reply, MESSAGE_SYNC);
             const syncType = decoding.readVarUint(input);
@@ -342,7 +362,7 @@ export async function startRelay({
         for (const id of ids) room.awareness.meta.delete(id);
       }
       room.sockets.delete(socket);
-      if (room.sockets.size === 0 && rooms.get(room.name) === room) evictRoom(room);
+      if (room.sockets.size === 0 && rooms.get(room.name) === room) void evictRoom(room);
     });
 
     void room.ready.then(() => {

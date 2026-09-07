@@ -214,6 +214,8 @@ export async function execute(argv: string[], options: ExecuteOptions = {}): Pro
 
 async function main(): Promise<void> {
   try {
+    const { executeLiveCli } = await import("./live");
+    if (await executeLiveCli(process.argv.slice(2), realpathSync(process.argv[1]))) return;
     process.stdout.write(await execute(process.argv.slice(2)));
   }
   catch (error) {
