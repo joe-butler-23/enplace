@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
+import { once } from "node:events";
 import { startRelay } from "../../scripts/cookbook-relay.mjs";
 import { openCookbook, type CookbookConnection, type CookbookStatus } from "./cookbook-storage";
 import { listCookbookPaths, observeCookbook, readCookbookBytes, readCookbookText, writeCookbookText, newCookbookId } from "../cookbook/doc";
@@ -156,6 +157,24 @@ describe("cookbook storage adapter", () => {
 });
 
 describe("cookbook relay", () => {
+  it("closes a ready relay connection with a normal close handshake", async () => {
+    let socket: WebSocket;
+    class ObservedWebSocket extends WebSocket {
+      constructor(url: string, protocols?: string | string[]) {
+        super(url, protocols);
+        socket = this;
+      }
+    }
+    const connection = await open({
+      relayUrl: relay.url, seed: () => {},
+      WebSocketPolyfill: ObservedWebSocket as unknown as typeof globalThis.WebSocket,
+    });
+    await connection.ready();
+    const closed = once(socket!, "close", { signal: AbortSignal.timeout(2000) });
+    await connection.close();
+    expect((await closed)[0]).toBe(1000);
+  });
+
   it("converges concurrent live text updates without an event bridge", async () => {
     const id = newCookbookId();
     const port = new URL(relay.url).port;

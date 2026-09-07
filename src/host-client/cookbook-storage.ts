@@ -422,6 +422,8 @@ export async function openCookbook(options: OpenCookbookOptions): Promise<Cookbo
         window.removeEventListener("online", wake);
       }
       bridge.destroy();
+      // The relay needs a normal close frame to finish the handshake promptly.
+      provider?.ws?.close(1000);
       provider?.destroy();
       listeners.clear();
       copyListeners.clear();

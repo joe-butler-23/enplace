@@ -173,7 +173,11 @@ async function main() {
       import { readFile } from 'node:fs/promises';
       const association = JSON.parse(await readFile(process.argv[1], 'utf8'));
       const session = await openCookingSession({ ...association, create: true });
-      try { await session.cookbook.commit(); } finally { await session.close(); }
+      try {
+        await session.execute('recipe.create', { operationId: 'installed-prose-only', markdown: '# A vegetarian quick suggestion\\n\\n---\\n\\n- *2* onions\\n\\n---\\n\\n1. Cook.\\n' });
+        await session.execute('recipe.create', { operationId: 'installed-meat-soup', markdown: '# B meat soup\\n\\n*non-vegetarian, quick*\\n\\n---\\n\\n- *2* onions\\n\\n---\\n\\n1. Cook.\\n' });
+        await session.cookbook.commit();
+      } finally { await session.close(); }
     `, config], { cwd: consumer });
     const call = async (operation, args) => {
       const input = path.join(scratch, "operation.json");
@@ -185,9 +189,14 @@ async function main() {
       assert.equal(tools.length, 24);
       assert(tools.some(tool => tool.name === "recipe.update"));
       await assert.rejects(call("recipe.delete", { path: "../../secret" }), /arguments must have required property 'operationId'/);
-      const added = await call("recipe.create", { operationId: "installed-create-soup", markdown: "# Installed soup\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" });
+      const added = await call("recipe.create", { operationId: "installed-create-soup", markdown: "# Installed soup\n\n*vegetarian, quick*\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" });
       const original = await call("recipe.get", { path: added.path });
       assert.match(original.markdown, /2.*onions/);
+      const selected = await call("recipe.search", { tags: ["VeGeTaRiAn", "QUICK"], query: "onions", includeIngredients: true, limit: 1 });
+      assert.deepEqual(selected.recipes.map(recipe => recipe.path), [added.path]);
+      assert.deepEqual(selected.recipes[0].ingredients, original.recipe.ingredients);
+      assert.deepEqual((await call("recipe.search", { tags: ["vegetarian"], query: "bake" })).recipes, []);
+      await assert.rejects(call("recipe.search", { tags: ["vegetarian"], includeIngredients: "true" }), /must be boolean/);
       const amended = original.markdown.replace("Simmer.", "Simmer for 20 minutes.");
       await call("recipe.update", { operationId: "installed-amend-soup", path: added.path, base: original.markdown, markdown: amended });
       const plan = await call("plan.read", {});
@@ -200,7 +209,7 @@ async function main() {
       assert.match(readback.stdout, /Installed soup/);
       assert.match(readback.stdout, /Simmer for 20 minutes/);
       const listed = await cli.successful(["list", "--config", config, "--json"]);
-      assert.equal(JSON.parse(listed.stdout).recipes.length, 1);
+      assert.equal(JSON.parse(listed.stdout).recipes.length, 3);
       const configHome = path.join(scratch, "config");
       await mkdir(path.join(configHome, "enplace"), { recursive: true, mode: 0o700 });
       await writeFile(path.join(configHome, "enplace/cookbook.json"), JSON.stringify({ id, relayUrl }), { mode: 0o600 });

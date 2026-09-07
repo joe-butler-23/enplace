@@ -55,7 +55,12 @@ function definition(name: string, description: string, properties: Record<string
 
 export const COOKING_OPERATIONS: readonly CookingOperationDefinition[] = [
   definition("recipe.list", "List recipes, exact paths, tags and planned dates; report unreadable recipe files.", {}),
-  definition("recipe.search", "Search recipe text, title, path and tags by literal words. Returns exact paths, not a write selection.", { query: string("Literal search text.", { minLength: 1 }), limit: { type: "integer", minimum: 1, maximum: 1000 } }, ["query"]),
+  definition("recipe.search", "Search recipes by literal words and exact tags together. Omitted filters browse recipes in title order. Returns exact paths, not a write selection.", {
+    query: string("Every literal word must occur in recipe text, title, path or tags, case-insensitively.", { minLength: 1 }),
+    tags: { type: "array", description: "Every supplied tag must match a complete recipe tag, case-insensitively. An empty array does not filter.", items: string("Exact recipe tag.", { minLength: 1 }), maxItems: 100, uniqueItems: true },
+    includeIngredients: { type: "boolean", description: "Include parsed ingredient lines in each result; omitted by default." },
+    limit: { type: "integer", description: "Maximum matches after filtering; defaults to 100.", minimum: 1, maximum: 1000 },
+  }),
   definition("recipe.get", "Read a recipe's complete Markdown and revision, including malformed recipes that need repair.", { path }, ["path"]),
   definition("recipe.create", "Add valid RecipeMD at a path derived from its title and retry token. Never overwrite an existing recipe.", { markdown }, ["markdown"], true),
   definition("recipe.update", "Amend a recipe with complete RecipeMD and the original base text. Preserve concurrent edits and return explicit merge conflicts.", { path, base: markdown, markdown }, ["path", "base", "markdown"], true),
@@ -158,12 +163,13 @@ function resolve(source: Snapshot, reference: string): Recipe {
   if (matches.length !== 1) fail(matches.length ? "ambiguous_recipe" : "recipe_missing", `Plan reference ${reference} matches ${matches.length} recipes; repair the plan using exact paths.`);
   return matches[0];
 }
-function recipeRows(source: Snapshot): Result[] {
+function recipeRows(source: Snapshot, recipes = source.recipes, includeIngredients = false): Result[] {
   const plan = parsePlan(textAt(source, "Plan.md"));
   const refersTo = (reference: string, recipe: Recipe): boolean => {
     try { return resolve(source, reference).path === recipe.path; } catch { return false; }
   };
-  return source.recipes.map(recipe => ({ path: recipe.path, title: recipe.title, tags: recipe.tags, addedAt: recipe.added, cover: recipe.cover !== null,
+  return recipes.map(recipe => ({ path: recipe.path, title: recipe.title, tags: recipe.tags, addedAt: recipe.added, cover: recipe.cover !== null,
+    ...(includeIngredients ? { ingredients: recipe.ingredients } : {}),
     marked: plan.marked.some(reference => refersTo(reference, recipe)),
     scheduledDates: [...plan.days].filter(([, entries]) => entries.some(reference => refersTo(reference, recipe))).map(([date]) => date).sort() }));
 }
@@ -335,8 +341,15 @@ export async function executeCookingOperation(context: CookingOperationContext, 
   if (!definition.mutates) {
     if (name === "recipe.list") return { recipes: recipeRows(source), invalidRecipes: invalidRecipes(source) };
     if (name === "recipe.search") {
-      const words = (args.query as string).toLowerCase().trim().split(/\s+/);
-      return { recipes: recipeRows(source).filter(recipe => words.every(word => `${recipe.path}\n${recipe.title}\n${(recipe.tags as string[]).join(" ")}\n${source.texts.get(recipe.path as string)}`.toLowerCase().includes(word))).slice(0, args.limit as number ?? 100), invalidRecipes: invalidRecipes(source) };
+      const words = args.query ? (args.query as string).toLowerCase().trim().split(/\s+/) : [];
+      const tags = ((args.tags as string[] | undefined) ?? []).map(tag => tag.toLowerCase());
+      const recipes = source.recipes.filter(recipe => {
+        if (!tags.every(tag => recipe.tags.some(candidate => candidate.toLowerCase() === tag))) return false;
+        if (!words.length) return true;
+        const text = `${recipe.path}\n${recipe.title}\n${recipe.tags.join(" ")}\n${source.texts.get(recipe.path)}`.toLowerCase();
+        return words.every(word => text.includes(word));
+      }).slice(0, args.limit as number ?? 100);
+      return { recipes: recipeRows(source, recipes, args.includeIngredients === true), invalidRecipes: invalidRecipes(source) };
     }
     if (name === "recipe.get") return recipeResult(args.path as string, requiredText(source, args.path as string));
     if (name === "recipe.recoveries") return { recoveries: [...context.doc.getMap<string>(RECOVERIES)].map(([recoveryId, raw]) => {

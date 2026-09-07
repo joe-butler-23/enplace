@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { COOKING_OPERATIONS, cookingTextRevision, executeCookingOperation, type CookingOperationContext } from "./operations";
 import { listCookbookPaths, readCookbookText, writeCookbookText } from "../cookbook/doc";
-import { parsePlan, parseShopping } from "../core";
+import { parsePlan, parseRecipe, parseShopping } from "../core";
 
 const docs: Y.Doc[] = [];
 const receipts = "enplace-agent-operation-receipts";
@@ -124,6 +124,52 @@ describe("agent operation contract", () => {
     book.doc.getMap<string>(recoveries).set("forged-recovery", JSON.stringify({ path: "Plan.md", markdown: soup, revision: await cookingTextRevision(soup) }));
     await expect(run(book, "recipe.restore", { recoveryId: "forged-recovery", operationId: "restore-forged-1" })).rejects.toMatchObject({ code: "invalid_recipe_path" });
     expect(readCookbookText(book.doc, "Plan.md")).toBeNull();
+  });
+});
+
+describe("recipe search", () => {
+  it("filters complete case-insensitive tags, intersects query words, and limits after filtering without mutations", async () => {
+    const book = context({
+      "prose.md": pie.replace("# Pie", "# A vegetarian suggestion"),
+      "non-vegetarian.md": soup.replace("# Soup", "# B meat soup").replace("cheap, vegetarian", "cheap, non-vegetarian"),
+      "slow.md": soup.replace("# Soup", "# C slow soup").replace("cheap, vegetarian", "vegetarian, slow"),
+      "soup.md": soup,
+    });
+    const before = Y.encodeStateAsUpdate(book.doc);
+    const paths = async (args: Record<string, unknown>) => (await run(book, "recipe.search", args)).recipes as { path: string }[];
+    expect((await paths({ tags: ["VeGeTaRiAn"] })).map(recipe => recipe.path)).toEqual(["slow.md", "soup.md"]);
+    expect((await paths({ tags: ["VEGETARIAN", "CHEAP"], limit: 1 })).map(recipe => recipe.path)).toEqual(["soup.md"]);
+    expect((await paths({ query: "simmer soup", tags: ["vegetarian", "cheap"] })).map(recipe => recipe.path)).toEqual(["soup.md"]);
+    expect(await paths({ query: "bake", tags: ["vegetarian"] })).toEqual([]);
+    expect(Y.encodeStateAsUpdate(book.doc)).toEqual(before);
+  });
+
+  it("returns optional ingredients from the shared parser while keeping default results lightweight", async () => {
+    const markdown = soup.replace("- *2* onions, diced", "## Soup base\n\n- *2* onions, diced").replace("- *1 tsp* salt", "## Finish\n\n- *1 tsp* salt");
+    const book = context({ "soup.md": markdown, "bad.md": "# Broken" });
+    const lightweight = await run(book, "recipe.search", { tags: ["vegetarian"] });
+    const detailed = await run(book, "recipe.search", { tags: ["vegetarian"], includeIngredients: true });
+    const rows = detailed.recipes as Record<string, unknown>[];
+    expect(rows).toEqual([{ ...(lightweight.recipes as Record<string, unknown>[])[0], ingredients: parseRecipe("soup.md", markdown)!.ingredients }]);
+    expect(rows[0].ingredients).toEqual(["*2* onions, diced", "*1 tsp* salt"]);
+    expect(rows[0]).not.toHaveProperty("markdown");
+    expect((lightweight.recipes as Record<string, unknown>[])[0]).not.toHaveProperty("ingredients");
+    expect(await run(book, "recipe.search", { tags: ["vegetarian"], includeIngredients: false })).toEqual(lightweight);
+    expect(detailed.invalidRecipes).toEqual(["bad.md"]);
+  });
+
+  it("supports bounded browsing with omitted filters or an empty tag list", async () => {
+    const book = context({ "soup.md": soup, "pie.md": pie });
+    const listed = (await run(book, "recipe.list")).recipes as Record<string, unknown>[];
+    expect((await run(book, "recipe.search", { limit: 1 })).recipes).toEqual(listed.slice(0, 1));
+    expect(await run(book, "recipe.search", { tags: [], limit: 1 })).toEqual(await run(book, "recipe.search", { limit: 1 }));
+  });
+
+  it.each([
+    { tags: "vegetarian" }, { tags: [1] }, { tags: [""] }, { tags: ["vegetarian", "vegetarian"] },
+    { includeIngredients: "true" }, { query: "" }, { limit: 0 }, { limit: 1001 }, { command: "run this" },
+  ])("rejects invalid arguments %j", async args => {
+    await expect(run(context({ "soup.md": soup }), "recipe.search", args)).rejects.toMatchObject({ code: "invalid_arguments" });
   });
 });
 
