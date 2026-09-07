@@ -69,7 +69,7 @@ test("the built CSP blocks unrelated connections and rendered Markdown stays ine
   await page.getByTitle("Close settings").click();
   await page.getByRole("button", { name: "Open recipe Hostile recipe" }).click();
   const rendered = page.locator(".recipe-view__read-document");
-  await expect(rendered).toBeVisible();
+  await expect(page.locator(".recipe-view__method .recipe-view__read-document")).toBeVisible();
   await expect(rendered.locator("script,svg,iframe,[onerror],[onclick]")).toHaveCount(0);
   await expect(rendered.getByRole("link", { name: /bad scheme|encoded scheme|data scheme|protocol relative/ })).toHaveCount(0);
   await expect(rendered.getByRole("link", { name: "good link" })).toHaveAttribute("href", "https://example.com/recipe");

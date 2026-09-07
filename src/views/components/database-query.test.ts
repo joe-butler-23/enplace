@@ -47,6 +47,14 @@ describe("database query projection", () => {
       const result = buildDatabaseView(recipes, plan({ days: new Map([["2026-03-02", ["Beta"]], ["2026-03-01", ["Missing"]]]) }), { sort });
       expect(result.items.map(({ title }) => title)).toEqual(titles);
     });
+  it("sorts added instants chronologically, retaining same-day times and treating invalid dates as unknown", () => {
+    const entries = [recipe(1, { title: "Zulu newest", added: "2026-09-07T11:30:00.000Z" }),
+      recipe(2, { title: "Alpha earlier", added: "2026-09-07T12:00:00+01:00" }),
+      recipe(3, { title: "Legacy day", added: "2026-09-07" }),
+      recipe(4, { title: "Invalid", added: "not-a-date" }), recipe(5)];
+    expect(paths(entries, { sort: "added-desc" })).toEqual(entries.map(({ path }) => path));
+    expect(paths(entries, { sort: "added-asc" })).toEqual([entries[3].path, entries[4].path, entries[2].path, entries[1].path, entries[0].path]);
+  });
   it("reports pre-limit total but global tags and marked count", () => {
     const recipes = Array.from({ length: 510 }, (_, index) => recipe(index, { tags: index === 509 ? ["global"] : [] }));
     const view = buildDatabaseView(recipes, plan({ marked: [recipes[509].link] }), { limit: 500 });

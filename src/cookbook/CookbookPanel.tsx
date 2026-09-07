@@ -1,5 +1,6 @@
 import * as React from "react";
-import { parseRecipe } from "@/core";
+import { isRecipePath, parseRecipe } from "@/core";
+import { withRecipeAdded } from "../recipe-document";
 import { type CookbookStatus } from "@/host-client/cookbook-storage";
 import { currentCookbookConnection } from "./current";
 import {
@@ -181,7 +182,13 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
       }
 
       const before = new Set((await connection.adapter.walkFiles()).map(({ path }) => path));
-      const imported = await connection.adapter.writeNewBytesBatch(entries);
+      const added = new Date().toISOString();
+      const imported = await connection.adapter.writeNewBytesBatch(entries.map(([path, bytes]) => {
+        if (!isRecipePath(path)) return [path, bytes];
+        const markdown = new TextDecoder().decode(bytes);
+        const next = withRecipeAdded(path, markdown, added);
+        return [path, next === markdown ? bytes : new TextEncoder().encode(next)];
+      }));
       const recognised = (await connection.adapter.walkFiles()).filter(({ path, bytes }) => (
         !before.has(path) && path.toLowerCase().endsWith(".md")
         && parseRecipe(path, new TextDecoder().decode(bytes)) !== null

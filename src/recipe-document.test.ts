@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseRecipeDocument, renderImportedRecipe } from "./core";
+import { withRecipeAdded } from "./recipe-document";
 import {
   composeMarkdown,
   extractHeroImage,
@@ -257,5 +258,78 @@ describe("recipe parser compatibility", () => {
     expect(unclosedParsed.body).toBe(unclosed);
     expect(unclosedParsed.view.title).toBe("Body title");
     expect(composeMarkdown(unclosedParsed.rawFrontmatter, unclosedParsed.body)).toBe(unclosed);
+  });
+});
+
+
+describe("recipe import added metadata", () => {
+  const added = "2026-09-07T10:45:12.345Z";
+  const recipeMD = "# Soup\n\nSource: https://example.test/soup\n\n![Soup](images/soup.webp)\n\n*quick, lunch*\n\n**2 servings**\n\n---\n\n- *1* cucumber\n\n---\n\n1. Blend.\n";
+  const legacy = "# Soup\n\n## Ingredients\n- cucumber\n\n## Method\n1. Blend.\n";
+
+  it.each(["2026-09-07", added, "2026-09-07T12:45:12.345+02:00", "unknown", ""])(
+    "retains the complete explicit RecipeMD Added value %s and never overwrites it", (value) => {
+      const markdown = recipeMD.replace("Source:", `Added: ${value}\n\nSource:`);
+      expect(parse(markdown).recipe.added).toBe(value || null);
+      expect(withRecipeAdded("soup.md", markdown, added)).toBe(markdown);
+    },
+  );
+
+  it.each(["# Soup", "Soup\n====", "Cucumber\nsoup\n===="])(
+    "adds metadata after the CommonMark title %s without rewriting the recipe", (title) => {
+      const markdown = recipeMD.replace("# Soup", title);
+      const next = withRecipeAdded("soup.md", markdown, added);
+      expect(next.replace(`Added: ${added}\n\n`, "")).toBe(markdown);
+      expect(parse(next).recipe).toEqual({ ...parse(markdown).recipe, added });
+      expect(parse(next).recipeMD).toEqual({
+        ...parse(markdown).recipeMD,
+        description: `Added: ${added}\n\n${parse(markdown).recipeMD!.description}`,
+      });
+      expect(withRecipeAdded("soup.md", next, "2026-09-08T00:00:00Z")).toBe(next);
+    },
+  );
+
+  it.each([recipeMD, recipeMD.replace("# Soup", "Soup\n===="), legacy,
+    `---\nsource: https://example.test/soup\ncustom: 'keep exact'\n---\n\n${legacy}`])(
+    "keeps CRLF source bytes and records a parseable timestamp", (source) => {
+      const markdown = source.replace(/\n/g, "\r\n");
+      const next = withRecipeAdded("soup.md", markdown, added);
+      expect(parse(next).recipe.added).toBe(added);
+      expect(next.replace(/\r\n/g, "")).not.toContain("\n");
+      if (parse(markdown).recipeMD) expect(next.replace(`Added: ${added}\r\n\r\n`, "")).toBe(markdown);
+      else if (markdown.startsWith("---")) expect(next.replace(`added: ${added}\r\n`, "")).toBe(markdown);
+      else expect(next).toBe(`---\r\nadded: ${added}\r\n---\r\n${markdown}`);
+    },
+  );
+
+  it("preserves mixed line endings around a RecipeMD title", () => {
+    const markdown = recipeMD.replace("# Soup\n", "# Soup\r\n");
+    const next = withRecipeAdded("soup.md", markdown, added);
+    expect(next.replace(`Added: ${added}\r\n\r\n`, "")).toBe(markdown);
+    expect(parse(next).recipe.added).toBe(added);
+  });
+
+  it("adds legacy metadata without changing any existing frontmatter or body bytes", () => {
+    const markdown = `---\nsource: https://example.test/soup\ncustom: 'keep exact'\n---\n\n${legacy}`;
+    const next = withRecipeAdded("soup.md", markdown, added);
+    expect(next.replace(`added: ${added}\n`, "")).toBe(markdown);
+    expect(parse(next).recipe).toEqual({ ...parse(markdown).recipe, added });
+    expect(withRecipeAdded("soup.md", legacy, added)).toBe(`---\nadded: ${added}\n---\n${legacy}`);
+  });
+
+  it.each(["2026-09-07", added, "unknown", ""])("preserves explicit legacy added: %s", (value) => {
+    const markdown = `---\nadded: ${value}\n---\n\n${legacy}`;
+    expect(withRecipeAdded("soup.md", markdown, added)).toBe(markdown);
+    expect(parse(markdown).recipe.added).toBe(value || null);
+  });
+
+  it.each([
+    ["notes.md", "# Notes\n\nKeep this exact."],
+    ["image.webp", recipeMD],
+    ["Plan.md", legacy],
+    ["Shopping.md", legacy],
+    ["Aisles.md", legacy],
+  ])("does not stamp non-recipe input %s", (path, markdown) => {
+    expect(withRecipeAdded(path, markdown, added)).toBe(markdown);
   });
 });

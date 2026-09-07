@@ -57,8 +57,8 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
           >
             {recipe.title}
           </div>
-          <div className="cooking-db__meta">
-            {recipe.added ? `Added ${recipe.added}` : ""}
+          <div className="cooking-db__meta" title={recipe.added ?? undefined}>
+            {recipe.added ? `Added ${recipe.added.slice(0, 10)}` : ""}
           </div>
         </div>
       </button>

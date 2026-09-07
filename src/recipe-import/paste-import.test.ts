@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseRecipe } from "../core";
 
 const { createCoverFiles, writeNewBytesBatch } = vi.hoisted(() => ({
   createCoverFiles: vi.fn(), writeNewBytesBatch: vi.fn(),
@@ -23,6 +24,8 @@ A simple soup.
 
 1. Simmer.
 `;
+
+afterEach(() => vi.useRealTimers());
 
 describe("pasted RecipeMD import", () => {
   beforeEach(() => {
@@ -50,6 +53,21 @@ describe("pasted RecipeMD import", () => {
     expect(entries[1][1]).toEqual(new Uint8Array([4, 5]));
     expect(entries[2][1]).toEqual(new Uint8Array([6]));
     expect(entries.some(([, bytes]: readonly [string, Uint8Array]) => bytes === raw)).toBe(false);
+  });
+
+  it("records each new import time without replacing a supplied added date", async () => {
+    vi.useFakeTimers();
+    const first = "2026-09-07T10:00:00.000Z", second = "2026-09-07T11:00:00.000Z";
+    vi.setSystemTime(first);
+    await importPastedRecipe({ markdown });
+    vi.setSystemTime(second);
+    await importPastedRecipe({ markdown: markdown.replace("Tomato Soup", "Zucchini Soup") });
+    const imported = writeNewBytesBatch.mock.calls.map(([entries]) => new TextDecoder().decode(entries[0][1]));
+    expect(imported.map(text => parseRecipe("recipe.md", text)?.added)).toEqual([first, second]);
+    expect(imported[0].replace(`Added: ${first}\n\n`, "")).toBe(markdown);
+    await importPastedRecipe({ markdown: imported[0] });
+    const [entries] = writeNewBytesBatch.mock.calls[2];
+    expect(new TextDecoder().decode(entries[0][1])).toBe(imported[0]);
   });
 
   it("rejects non-recipe Markdown with a plain-language message", async () => {

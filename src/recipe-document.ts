@@ -1,3 +1,4 @@
+import { Lexer } from "marked";
 import { parseRecipeMD, flattenIngredients, ingredientText, type RecipeMD } from "./recipemd.js";
 export type ParsedRecipeDocument = {
   recipeMD?: RecipeMD;
@@ -263,7 +264,7 @@ export function parseRecipeDocument(path: string, markdown: string): ParsedRecip
     const description = standard.description ?? "";
     const lines = description.split(/\r?\n/);
     const source = /(?:^|\n)Source:\s*(?:\[[^\]]*\]\(([^)]+)\)|([^\n]+))/.exec(description);
-    const added = /(?:^|\n)Added:\s*(\d{4}-\d{2}-\d{2})/.exec(description)?.[1] ?? null;
+    const added = /^Added:[ \t]*([^\r\n]*)/m.exec(description)?.[1].trim() || null;
     const view = viewMetadata(description, {}, lines);
     return { path, markdown, body: markdown, rawFrontmatter: null, frontmatter: {}, recipeMD: standard,
       recipe: { title: standard.title, ingredients, cover: recipeMetadata(path, description, {}, lines).cover, added, tags: standard.tags },
@@ -288,4 +289,35 @@ export function parseRecipeDocument(path: string, markdown: string): ParsedRecip
     recipe: recipeMetadata(path, recipeBody, normalizedFrontmatter, recipeLines),
     view: viewMetadata(body, frontmatter, displayLines),
   };
+}
+
+export const isRecipePath = (path: string): boolean => /\.md$/i.test(path) && !["Plan.md", "Shopping.md", "Aisles.md"].includes(path);
+
+/** Adds import metadata to a new recipe without rewriting its existing content or explicit metadata. */
+export function withRecipeAdded(path: string, markdown: string, added: string): string {
+  if (!isRecipePath(path)) return markdown;
+  const parsed = parseRecipeDocument(path, markdown);
+  if (parsed.recipe.ingredients === null) return markdown;
+  const newline = markdown.includes("\r\n") ? "\r\n" : "\n";
+  if (parsed.recipeMD) {
+    if (/^Added:/m.test(parsed.recipeMD.description ?? "")) return markdown;
+    // CommonMark also permits setext and multiline titles. Use its title span, but retain the source bytes.
+    const normalized = markdown.replace(/\r\n?/g, "\n");
+    const title = Lexer.lex(normalized, { gfm: false }).find((token) => token.type === "heading");
+    if (!title) return markdown;
+    let end = normalized.indexOf(title.raw) + title.raw.length;
+    while (normalized[end] === "\n") end += 1;
+    let index = 0;
+    for (let offset = 0; offset < end; offset += 1, index += 1) {
+      if (markdown[index] === "\r" && markdown[index + 1] === "\n") index += 1;
+    }
+    return `${markdown.slice(0, index)}Added: ${added}${newline}${newline}${markdown.slice(index)}`;
+  }
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (frontmatter) {
+    if (/^added:/m.test(frontmatter[1])) return markdown;
+    const index = markdown.indexOf("\n") + 1;
+    return `${markdown.slice(0, index)}added: ${added}${newline}${markdown.slice(index)}`;
+  }
+  return `---${newline}added: ${added}${newline}---${newline}${markdown}`;
 }

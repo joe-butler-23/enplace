@@ -97,10 +97,10 @@ export function buildDatabaseView(
   items.sort((left, right) => {
     if (sort === "title-asc") return left.title.localeCompare(right.title);
     if (sort === "title-desc") return right.title.localeCompare(left.title);
-    if (sort === "added-asc") return (left.added ?? "").localeCompare(right.added ?? "");
+    if (sort === "added-asc") return (left.addedTimestamp ?? 0) - (right.addedTimestamp ?? 0);
     if (sort === "scheduled-asc") return (left.scheduled ?? "").localeCompare(right.scheduled ?? "");
     if (sort === "scheduled-desc") return (right.scheduled ?? "").localeCompare(left.scheduled ?? "");
-    return (right.added ?? "").localeCompare(left.added ?? "");
+    return (right.addedTimestamp ?? 0) - (left.addedTimestamp ?? 0);
   });
   const total = items.length;
   if (query.limit !== undefined) items = items.slice(0, query.limit);

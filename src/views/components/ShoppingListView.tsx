@@ -1,5 +1,6 @@
 import * as React from "react";
 import { SegmentedControl } from "./SegmentedControl";
+import { AddButton } from "./AddButton";
 import { currentCookbookConnection, onCurrentCookbookConnection } from "../../cookbook/current";
 
 import { SHOPPING_AISLES, mergeShoppingItems, shoppingIngredient, type ShoppingItem, type ShoppingRow } from "../../core";
@@ -196,7 +197,7 @@ export function ShoppingListView({
         <button type="submit" className="shopping-button" disabled={busy || !draft.trim()}>Add</button>
       </form>
     ) : (
-      <button type="button" className="shopping-fab" aria-label="Add an item" aria-expanded={false} onClick={() => setComposerOpen(true)}>+</button>
+      <AddButton label="Add an item" onClick={() => setComposerOpen(true)} />
     ) : null}
   </section>;
 }

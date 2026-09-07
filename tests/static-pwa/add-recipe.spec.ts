@@ -152,8 +152,13 @@ test("Markdown errors can be corrected and file contents are reviewed before dur
   await expect(page.getByRole("button", { name: "Open recipe Corrected lentils", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open recipe Reviewed file lentils", exact: true })).toBeVisible();
   await expect(page.getByText("13 recipes", { exact: true })).toBeVisible();
-  expect(await exportedCookbookText(page, "corrected-lentils.md")).toBe(markdown("Corrected lentils"));
-  expect(await exportedCookbookText(page, "reviewed-file-lentils.md")).toBe(reviewed);
+  for (const [path, original] of [["corrected-lentils.md", markdown("Corrected lentils")], ["reviewed-file-lentils.md", reviewed]]) {
+    const exported = await exportedCookbookText(page, path);
+    const added = /^Added: (.+)$/m.exec(exported)?.[1];
+    expect(added).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(Number.isFinite(Date.parse(added!))).toBe(true);
+    expect(exported.replace(`Added: ${added}\n\n`, "")).toBe(original);
+  }
   expect(errors).toEqual([]);
 });
 

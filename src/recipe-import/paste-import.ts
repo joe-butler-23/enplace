@@ -1,4 +1,5 @@
 import { parseRecipe } from "../core";
+import { withRecipeAdded } from "../recipe-document";
 import { writeNewBytesBatch } from "../host-client/browser-storage";
 import { createCoverFiles, thumbnailPathForCover } from "../cookbook/covers";
 
@@ -29,7 +30,7 @@ export async function importPastedRecipe(input: PasteRecipeInput): Promise<{
   const markdownPath = `${slug}.md`;
   const coverPath = input.cover && input.cover.size > 0 ? `images/${slug}.webp` : undefined;
   const markdown = coverPath ? addCover(input.markdown, recipe.title, coverPath) : input.markdown;
-  const entries: Array<readonly [string, Uint8Array]> = [[markdownPath, new TextEncoder().encode(markdown)]];
+  const entries: Array<readonly [string, Uint8Array]> = [[markdownPath, new TextEncoder().encode(withRecipeAdded(markdownPath, markdown, new Date().toISOString()))]];
   if (coverPath && input.cover) {
     const files = await createCoverFiles(input.cover);
     entries.push([coverPath, files.cover], [thumbnailPathForCover(coverPath), files.thumbnail]);

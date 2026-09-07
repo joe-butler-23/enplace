@@ -1,7 +1,7 @@
 import { parseRecipeIngredient, type RecipeAmount } from "./recipemd.js";
 import { formatIngredient } from "./recipe-migration.js";
-import { parseRecipeDocument } from "./recipe-document.js";
-export { parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
+import { isRecipePath, parseRecipeDocument } from "./recipe-document.js";
+export { isRecipePath, parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
 
 export type Recipe = {
   path: string;
@@ -91,8 +91,6 @@ export function setAisle(markdown: string, name: string, aisle: string): string 
     return nouns.length ? [`## ${label}\n${nouns.map(key => `- ${key}`).join('\n')}\n`] : [];
   }).join('\n');
 }
-
-export const isRecipePath = (path: string): boolean => /\.md$/i.test(path) && !['Plan.md', 'Shopping.md', 'Aisles.md'].includes(path);
 
 export function parseRecipe(path: string, markdown: string): Recipe | null {
   const parsed = parseRecipeDocument(path, markdown);

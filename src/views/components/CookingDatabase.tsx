@@ -4,6 +4,7 @@ import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import type { StandaloneSettings } from "@/standalone/settings";
 import { databaseQuery, initialDatabaseState, projectDatabaseView } from "./database-query";
 import { AddRecipeDialog } from "./AddRecipeDialog";
+import { AddButton } from "./AddButton";
 import { RecipeCard } from "./RecipeCard";
 
 export type MarkedFilter = "all" | "marked" | "unmarked";
@@ -246,7 +247,6 @@ export const CookingDatabase = React.memo(function CookingDatabase({
       <div className="cooking-db__empty cooking-db__onboarding">
         <h2>No recipes yet</h2>
         <p>Import a web page, paste Markdown, or open a file to start your cookbook.</p>
-        <button type="button" className="cooking-db__filter-action" onClick={() => setShowImport(true)}>Add recipe</button>
       </div>
     );
   }
@@ -259,7 +259,6 @@ export const CookingDatabase = React.memo(function CookingDatabase({
         <div className="cooking-db__count">
           {sourceError ? "Unavailable" : formatVisibleCount(recipes, totalCount)}
         </div>
-        <button type="button" className="cooking-db__select cooking-db__add" onClick={() => setShowImport(true)}>Add recipe</button>
 
         <div className="cooking-db__searchbox">
           {state.tags.length > 0 && (
@@ -316,6 +315,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
           )}
         </div>
 
+        <div className="cooking-db__tools">
         <div className="cooking-db__popover cooking-db__sort">
           <button
             className="cooking-db__select cooking-db__popover-toggle"
@@ -443,8 +443,10 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             </div>
           )}
         </div>
+        </div>
       </div>
 
+      <AddButton label="Add recipe" expanded={showImport} onClick={() => setShowImport(true)} />
       {showImport ? <AddRecipeDialog onClose={() => setShowImport(false)} /> : null}
       <div className="cooking-db__grid-container">
         {databaseContent}

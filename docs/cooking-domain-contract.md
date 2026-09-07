@@ -7,7 +7,7 @@ The shared cookbook document is the complete cooking data authority. Paths in th
 New recipes use [RecipeMD 2.4](https://recipemd.org/specification.html). `src/recipemd.ts` parses CommonMark structure and is checked against every upstream conformance fixture. Existing frontmatter/`## Ingredients` recipes remain readable during migration; new imports write RecipeMD.
 
 - Title: first level-one heading.
-- Description: ordinary Markdown; a cover is an ordinary Markdown image and provenance is a `Source: ...` paragraph. An optional `Added: YYYY-MM-DD` paragraph preserves existing catalogue dates. Neither is required by RecipeMD.
+- Description: ordinary Markdown; a cover is an ordinary Markdown image and provenance is a `Source: ...` paragraph. Browser imports record a missing `Added:` paragraph as a full ISO timestamp; existing date-only values and explicit metadata are preserved. Newest/Oldest compare parsed instants, not title or text order. Existing undated recipes stay undated; edits, sync and reload never invent or reset an added date. Source and Added are ordinary description prose, not RecipeMD requirements.
 - Tags: one wholly italic paragraph; yields: one wholly bold paragraph.
 - Ingredients: lists between thematic breaks, with headings for groups. Explicit amounts are italic. Shopping builds preserve the ingredient item text, including italic amounts and their original fraction spelling.
 - Instructions: Markdown after the second thematic break. Prose, groups and notes remain readable.
