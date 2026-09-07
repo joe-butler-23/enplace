@@ -95,7 +95,7 @@ export async function executeLiveCli(argv: string[]): Promise<boolean> {
       await writeFile(rest[0], zipSync(files), { flag: "wx", mode: 0o600 });
       process.stdout.write("Cookbook exported.\n");
     } else {
-      if (name === "shopping.build") {
+      if (command === "shop" && name === "shopping.build") {
         const plan = await session.execute("plan.read", {}) as { revision: string };
         const shopping = await session.execute("shopping.read", {}) as { revision: string };
         args = { operationId, week: options.get("--week"), expectedRevision: shopping.revision, planRevision: plan.revision };

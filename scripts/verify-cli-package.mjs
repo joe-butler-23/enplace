@@ -192,6 +192,10 @@ async function main() {
       await call("recipe.update", { operationId: "installed-amend-soup", path: added.path, base: original.markdown, markdown: amended });
       const plan = await call("plan.read", {});
       await call("plan.add", { operationId: "installed-plan-soup", path: added.path, date: "2026-09-09", expectedRevision: plan.revision });
+      const currentPlan = await call("plan.read", {});
+      const currentShopping = await call("shopping.read", {});
+      const generated = await call("shopping.build", { operationId: "installed-build-soup", week: "2026-09-07", expectedRevision: currentShopping.revision, planRevision: currentPlan.revision });
+      assert(generated.items.some(item => item.content.includes("onions")));
       const readback = await cli.successful(["show", added.path, "--config", config]);
       assert.match(readback.stdout, /Installed soup/);
       assert.match(readback.stdout, /Simmer for 20 minutes/);
