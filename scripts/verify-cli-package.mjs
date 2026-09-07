@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
 import { startRelay } from "./cookbook-relay.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -67,6 +68,28 @@ function installedCli(bin, consumer, env = {}) {
     run: (args) => run(bin, args, options),
     successful: (args) => successful(bin, args, options),
   };
+}
+
+async function interactiveSession(bin, consumer, config, work) {
+  const running = startProcess(bin, ["session", "--config", config], { cwd: consumer });
+  const lines = createInterface({ input: running.child.stdout, crlfDelay: Infinity });
+  const responses = lines[Symbol.asyncIterator]();
+  const deadline = setTimeout(() => killProcessTree(running, "SIGKILL"), COMMAND_DEADLINE_MS);
+  const call = async (operation, args) => {
+    running.child.stdin.write(JSON.stringify({ operation, args }) + "\n");
+    const response = await responses.next();
+    assert.equal(response.done, false, "session exited before responding while stdin was open");
+    return JSON.parse(response.value);
+  };
+  try {
+    await work(call, running.child.stdin);
+    running.child.stdin.end();
+    return await running.closed;
+  } finally {
+    clearTimeout(deadline);
+    lines.close();
+    if (!running.isClosed()) { killProcessTree(running, "SIGKILL"); await running.closed; }
+  }
 }
 
 async function main() {
@@ -219,6 +242,36 @@ async function main() {
       const built = await liveCli.successful(["shop", "--week", "2026-09-07"]);
       assert(JSON.parse(built.stdout).items.some(item => item.content.includes("onions")));
       assert.equal(await readFile(localShopping, "utf8"), "Local folder must remain untouched.\n");
+
+      const shared = await interactiveSession(bin, consumer, config, async session => {
+        const recipe = await session("recipe.get", { path: added.path });
+        await session("recipe.update", { operationId: "session-amend-soup", path: added.path, base: recipe.markdown, markdown: recipe.markdown.replace("20 minutes", "25 minutes") });
+        const plan = await session("plan.read", {});
+        const note = { operationId: "session-plan-note", date: "2026-09-09", note: "Session dinner", expectedRevision: plan.revision };
+        await session("plan.note", note);
+        assert.equal((await session("plan.note", note)).replayed, true);
+        const shopping = await session("shopping.add", { operationId: "session-shopping-add", content: "Session limes" });
+        const item = shopping.items.find(item => item.content === "Session limes");
+        const checked = await session("shopping.check", { operationId: "session-shopping-check", itemIds: [item.id], expectedRevision: shopping.revision });
+        assert(checked.items.find(candidate => candidate.content === item.content).checked);
+      });
+      assert.equal(shared.code, 0, shared.stderr);
+      assert.equal(shared.stderr, "");
+      assert.equal(shared.stdout.trim().split("\n").length, 7);
+      assert.match((await call("recipe.get", { path: added.path })).markdown, /25 minutes/);
+      assert((await call("shopping.read", {})).items.some(item => item.content === "Session limes" && item.checked));
+
+      const stopped = await interactiveSession(bin, consumer, config, async (session, stdin) => {
+        const before = await session("plan.read", {});
+        await session("plan.note", { operationId: "session-before-failure", date: "2026-09-10", note: "Saved before failure", expectedRevision: before.revision });
+        stdin.write(JSON.stringify({ operation: "plan.note", args: { operationId: "session-stale-note", date: "2026-09-11", note: "Stale must fail", expectedRevision: before.revision } }) + "\n");
+        stdin.write(JSON.stringify({ operation: "shopping.add", args: { operationId: "session-after-failure", content: "Must not be saved" } }) + "\n");
+      });
+      assert.equal(stopped.code, 1);
+      assert.match(stopped.stderr, /Plan.md changed/);
+      assert.equal(stopped.stdout.trim().split("\n").length, 2);
+      assert.match((await call("plan.read", {})).markdown, /Saved before failure/);
+      assert(!(await call("shopping.read", {})).items.some(item => item.content === "Must not be saved"));
     } finally { await relay.close(); }
     console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node production-only install.`);
     console.log("Installed folder commands and direct live recipe/plan/shopping calls passed; browser rendering dependencies absent.");

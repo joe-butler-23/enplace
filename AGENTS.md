@@ -51,7 +51,7 @@ npm run typecheck
 npm test -- <focused-test>
 ```
 
-Run `npm run prepush` before pushing a normal code tranche.
+For CLI-only changes (`cli/` and `src/agent/`, without changes to browser/shared runtime), run `npm run precommit`, the affected unit tests, and `npm run test:cli-package` (includes CLI typechecking and build). Verify changed live behavior through the installed CLI using a synthetic cookbook. After these pass, push with `SKIP_MEP_PREPUSH=1`; browser tests and site deployment are unnecessary. Other code tranches use `npm run prepush`.
 
 Browser smoke tests use synthetic data and an in-process relay. Never run two browser suites at once in one checkout: the suite rebuilds and serves the shared `dist-static`, so concurrent runs fail each other broadly (Beads bug filed 2026-09-05). Verify primary-surface changes against a real browser boot of the static PWA, including a fresh cookbook, edits surviving reload, two contexts converging through the relay, zip export, offline reload, and PWA installability.
 

@@ -3,10 +3,12 @@ import { readFile, writeFile } from "node:fs/promises";
 import { COOKING_OPERATIONS } from "../src/agent/operations";
 import { openCookingSession } from "../src/agent/session";
 import { associationPath, parseAssociation, readAssociation, readCookbookLink, saveAssociation } from "./association";
+import { executeSession } from "./session";
 
 const HELP = `mep cookbook use [--relay URL]  Connect once; paste the link at the hidden prompt
 mep tools                     Print the cooking operation schemas
 mep call <operation> [file|-]  Run an operation using JSON arguments (stdin by default)
+mep session [--config file]   Run JSONL operations through one connection until EOF
 mep list [--json]              List live recipes
 mep show <path>                Read one live recipe as Markdown
 mep add <file|->               Add RecipeMD to the live cookbook
@@ -61,8 +63,18 @@ export async function executeLiveCli(argv: string[]): Promise<boolean> {
     return true;
   }
   if (command === "tools") { process.stdout.write(JSON.stringify(COOKING_OPERATIONS, null, 2) + "\n"); return true; }
-  if (!["call", "list", "show", "add", "amend", "plan", "shop", "export"].includes(command)) return false;
+  if (!["call", "session", "list", "show", "add", "amend", "plan", "shop", "export"].includes(command)) return false;
+  if (command === "session" && (rest.length || [...options.keys()].some(key => key !== "--config"))) throw new Error("Use mep session [--config file] with JSONL requests on stdin.");
   const association = await readAssociation(config);
+  if (command === "session") {
+    const controller = new AbortController();
+    const interrupt = () => controller.abort(new Error("Session interrupted."));
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", interrupt);
+    try { await executeSession(association, process.stdin, process.stdout, controller.signal); }
+    finally { process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt); }
+    return true;
+  }
   let name: string;
   let args: Record<string, unknown>;
   const operationId = options.get("--operation-id") ?? randomUUID();
