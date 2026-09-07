@@ -113,6 +113,7 @@ async function main() {
     for (const required of [
       "package.json",
       "dist-cli/cli/index.js",
+      "dist-cli/cli/client.js",
       "dist-cli/src/core.js",
     ]) assert(packedPaths.has(required), `packed CLI is missing ${required}`);
     for (const packedPath of packedPaths) {
@@ -211,6 +212,12 @@ async function main() {
       const tools = JSON.parse((await cli.successful(["tools"])).stdout);
       assert.equal(tools.length, 24);
       assert(tools.some(tool => tool.name === "recipe.update"));
+      const selectedTools = await cli.successful(["tools", "plan.add", "recipe.search", "plan.read", "plan.add"]);
+      assert.deepEqual(JSON.parse(selectedTools.stdout), tools.filter(tool => ["recipe.search", "plan.read", "plan.add"].includes(tool.name)));
+      assert.equal(selectedTools.stdout, JSON.stringify(JSON.parse(selectedTools.stdout)) + "\n");
+      const unknownTool = await cli.run(["tools", "plan.read", "plan.unknown"]);
+      assert.equal(unknownTool.code, 1);
+      assert.equal(unknownTool.stdout, "");
       await assert.rejects(call("recipe.delete", { path: "../../secret" }), /arguments must have required property 'operationId'/);
       const added = await call("recipe.create", { operationId: "installed-create-soup", markdown: "# Installed soup\n\n*vegetarian, quick*\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" });
       const original = await call("recipe.get", { path: added.path });
@@ -243,9 +250,49 @@ async function main() {
       assert(JSON.parse(built.stdout).items.some(item => item.content.includes("onions")));
       assert.equal(await readFile(localShopping, "utf8"), "Local folder must remain untouched.\n");
 
+      const clientResult = await successful(process.execPath, ["--input-type=module", "-e", `
+        import assert from 'node:assert/strict';
+        import { withCookbook } from 'enplace/client';
+        import { openCookingSession } from 'enplace/dist-cli/src/agent/session.js';
+        assert.equal(typeof openCookingSession, 'function');
+        const result = await withCookbook(async call => {
+          const recipe = await call('recipe.get', { path: process.argv[1] });
+          await call('recipe.update', { operationId: 'client-amend-soup', path: process.argv[1], base: recipe.markdown, markdown: recipe.markdown.replace('20 minutes', '22 minutes') });
+          const before = await call('plan.read', {});
+          const plan = await call('plan.note', { operationId: 'client-plan-note', date: '2026-09-12', note: 'Client dinner', expectedRevision: before.revision });
+          const shopping = await call('shopping.add', { operationId: 'client-shopping-add', content: 'Client lemons' });
+          const item = shopping.items.find(item => item.content === 'Client lemons');
+          const checked = await call('shopping.check', { operationId: 'client-shopping-check', itemIds: [item.id], expectedRevision: shopping.revision });
+          return { plan, shopping: checked };
+        });
+        console.log(JSON.stringify(result));
+      `, added.path], { cwd: consumer, env: { ...process.env, NODE_PATH: "", XDG_CONFIG_HOME: configHome } });
+      const clientState = JSON.parse(clientResult.stdout);
+      assert.equal(clientResult.stderr, "");
+      assert.match(clientState.plan.markdown, /Client dinner/);
+      assert(clientState.shopping.items.some(item => item.content === "Client lemons" && item.checked));
+      assert.equal((await call("plan.read", {})).markdown, clientState.plan.markdown);
+      assert.equal((await call("shopping.read", {})).markdown, clientState.shopping.markdown);
+      assert.match((await call("recipe.get", { path: added.path })).markdown, /22 minutes/);
+
+      await successful(process.execPath, ["--input-type=module", "-e", `
+        import assert from 'node:assert/strict';
+        import { withCookbook } from 'enplace/client';
+        await assert.rejects(withCookbook(async call => {
+          const before = await call('plan.read', {});
+          await call('plan.note', { operationId: 'client-before-failure', date: '2026-09-13', note: 'Saved client note', expectedRevision: before.revision });
+          await Promise.all([
+            call('plan.note', { operationId: 'client-stale-note', date: '2026-09-11', note: 'Stale must fail', expectedRevision: before.revision }),
+            call('shopping.add', { operationId: 'client-after-failure', content: 'Client must not save this' }),
+          ]);
+        }, { config: process.argv[1] }), /Plan.md changed/);
+      `, config], { cwd: consumer });
+      assert.match((await call("plan.read", {})).markdown, /Saved client note/);
+      assert(!(await call("shopping.read", {})).items.some(item => item.content === "Client must not save this"));
+
       const shared = await interactiveSession(bin, consumer, config, async session => {
         const recipe = await session("recipe.get", { path: added.path });
-        await session("recipe.update", { operationId: "session-amend-soup", path: added.path, base: recipe.markdown, markdown: recipe.markdown.replace("20 minutes", "25 minutes") });
+        await session("recipe.update", { operationId: "session-amend-soup", path: added.path, base: recipe.markdown, markdown: recipe.markdown.replace("22 minutes", "25 minutes") });
         const plan = await session("plan.read", {});
         const note = { operationId: "session-plan-note", date: "2026-09-09", note: "Session dinner", expectedRevision: plan.revision };
         await session("plan.note", note);

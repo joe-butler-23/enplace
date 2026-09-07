@@ -14,6 +14,11 @@
     "node": "24.x"
   },
   "type": "module",
+  "exports": {
+    "./client": "./dist-cli/cli/client.js",
+    "./dist-cli/*": "./dist-cli/*",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run build:sample-pack && vite build --mode static",

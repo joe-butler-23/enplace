@@ -6,7 +6,7 @@ import { associationPath, parseAssociation, readAssociation, readCookbookLink, s
 import { executeSession } from "./session";
 
 const HELP = `mep cookbook use [--relay URL]  Connect once; paste the link at the hidden prompt
-mep tools                     Print the cooking operation schemas
+mep tools [operation ...]     Print compact schemas (all operations if omitted)
 mep call <operation> [file|-]  Run an operation using JSON arguments (stdin by default)
 mep session [--config file]   Run JSONL operations through one connection until EOF
 mep list [--json]              List live recipes
@@ -52,6 +52,14 @@ export async function executeLiveCli(argv: string[]): Promise<boolean> {
   }
   const [command, ...rest] = positional;
   if (options.has("--week") && command !== "shop") throw new Error("--week is only valid with shop");
+  if (command === "tools") {
+    for (const name of rest) {
+      if (!COOKING_OPERATIONS.some(operation => operation.name === name)) throw new Error(`Unknown cooking operation: ${name}`);
+    }
+    const selected = rest.length ? COOKING_OPERATIONS.filter(operation => rest.includes(operation.name)) : COOKING_OPERATIONS;
+    process.stdout.write(JSON.stringify(selected) + "\n");
+    return true;
+  }
   const config = options.get("--config") ?? associationPath();
   if (command === "cookbook") {
     if (rest.length !== 1 || rest[0] !== "use") throw new Error("Use mep cookbook use and paste the link at the hidden prompt; links are never command arguments.");
@@ -62,7 +70,6 @@ export async function executeLiveCli(argv: string[]): Promise<boolean> {
     process.stdout.write("Cookbook connected.\n");
     return true;
   }
-  if (command === "tools") { process.stdout.write(JSON.stringify(COOKING_OPERATIONS, null, 2) + "\n"); return true; }
   if (!["call", "session", "list", "show", "add", "amend", "plan", "shop", "export"].includes(command)) return false;
   if (command === "session" && (rest.length || [...options.keys()].some(key => key !== "--config"))) throw new Error("Use mep session [--config file] with JSONL requests on stdin.");
   const association = await readAssociation(config);
