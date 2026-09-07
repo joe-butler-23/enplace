@@ -36,15 +36,14 @@ async function servePages(page: Page, pages: Record<string, string>): Promise<st
 
 async function openImport(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
-  await page.getByRole("button", { name: "Import from a web page", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Import from a web page" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Add recipe" })).toBeVisible();
 }
 
 test("an address alone fetches the page through the relay, lists its recipes and adds the chosen ones", async ({ page }) => {
   await openFreshCookbook(page);
   const asked = await servePages(page, { "https://example.test/two-soups": twoSoups });
   await openImport(page);
-  const dialog = page.getByRole("dialog", { name: "Import from a web page" });
+  const dialog = page.getByRole("dialog", { name: "Add recipe" });
   await dialog.getByLabel("Page address").fill("https://example.test/two-soups");
   await dialog.getByRole("button", { name: "Fetch page" }).click();
   const found = dialog.getByRole("list", { name: "Recipes found" }).getByRole("listitem");
@@ -70,7 +69,7 @@ test("a page the relay cannot fetch reports the reason, and pasted HTML still wo
   await openFreshCookbook(page);
   await servePages(page, {});
   await openImport(page);
-  const dialog = page.getByRole("dialog", { name: "Import from a web page" });
+  const dialog = page.getByRole("dialog", { name: "Add recipe" });
   await dialog.getByLabel("Page address").fill("https://example.test/missing");
   await dialog.getByRole("button", { name: "Fetch page" }).click();
   await expect(dialog.getByRole("alert")).toContainText("The page answered with status 404.");
@@ -81,7 +80,7 @@ test("a page the relay cannot fetch reports the reason, and pasted HTML still wo
   await expect(page.getByText("13 recipes", { exact: true })).toBeVisible();
 
   await openImport(page);
-  const again = page.getByRole("dialog", { name: "Import from a web page" });
+  const again = page.getByRole("dialog", { name: "Add recipe" });
   await again.getByText("Page can't be fetched?").click();
   await again.getByLabel("Page HTML").fill(twoSoups);
   await again.getByRole("button", { name: "Add 2 recipes" }).click();
@@ -101,7 +100,7 @@ test("page import never swaps ingredient quantities when visible numerals appear
     <ul><li>400 g onions, 2</li><li>1 tbsp oil</li></ul><h2>Method</h2><p>Cook the onions.</p></article>`;
   await servePages(page, { "https://example.test/soup": html });
   await openImport(page);
-  const dialog = page.getByRole("dialog", { name: "Import from a web page" });
+  const dialog = page.getByRole("dialog", { name: "Add recipe" });
   await dialog.getByLabel("Page address").fill("https://example.test/soup");
   await dialog.getByRole("button", { name: "Fetch page" }).click();
   await expect(dialog.getByRole("list", { name: "Recipes found" })).toContainText("2 ingredients · 1 step");

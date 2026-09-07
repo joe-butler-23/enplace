@@ -63,7 +63,9 @@ test("a javascript Markdown link renders inert", async ({ page }) => {
 test("Add recipe accepts pasted RecipeMD from a seeded cookbook and syncs it", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Add recipe" })).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Add recipe" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Markdown", exact: true }).click();
   await page.getByLabel("Recipe Markdown", { exact: true }).fill(`# Relay Lentils
 
 A quick supper.
@@ -77,8 +79,8 @@ A quick supper.
 
 1. Simmer until tender.
 `);
-  await page.getByRole("button", { name: "Add recipe", exact: true }).last().click();
-  await expect(page.locator(".cooking-db__import-success")).toHaveText("Added Relay Lentils with 2 ingredients.");
+  await dialog.getByRole("button", { name: "Add recipe", exact: true }).click();
+  await expect(dialog).toBeHidden();
   await expect(page.getByText("Relay Lentils", { exact: true })).toBeVisible();
   await expect(page.getByText("12 recipes", { exact: true })).toBeVisible();
 

@@ -87,3 +87,12 @@ driver's Playwright import path needs local resolution; the project scripts
 above are the supported corpus interface. The three decisive negative/regression
 cases now run in the normal unit suite. Beads `mise-en-place-jrv` owns the work;
 `mise-en-place-jrv.1` owns the harness and `mise-en-place-jrv.2` records the trial.
+
+## Unfamiliar-page source audit — 2026-09-06
+
+[Eight recipes and four non-recipe controls](recipe-clipper-fresh-audit-2026-09-06.md)
+were independently annotated before testing the unchanged release. All required
+ingredient amounts and cooking steps survived, but commercial/page text crossed
+field boundaries, two ingredient groups were lost, and all six explicit overall
+serving counts were omitted. This is new baseline evidence, not an accuracy gain;
+field ownership is the highest-value next target. The rejected trial remains closed.

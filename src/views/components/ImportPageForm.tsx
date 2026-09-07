@@ -1,5 +1,4 @@
 import * as React from "react";
-import { setIcon } from "@/platform-primitives";
 import { configuredImageEndpoint, configuredPageEndpoint, fetchImageBlob, fetchPageHtml } from "../../recipe-import/page-fetch";
 import { importPageRecipes, readPageRecipes, type PageRecipe } from "../../recipe-import/page-import";
 
@@ -7,9 +6,7 @@ const notify = (message: string): void => { window.dispatchEvent(new CustomEvent
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Fetches a recipe page through the relay, or reads a pasted or opened page, and adds the chosen recipes as new cookbook files. */
-export function ImportPageDialog({ onClose, onImported }: { onClose: () => void; onImported: (paths: string[]) => void }): React.JSX.Element {
-  const ref = React.useRef<HTMLDialogElement>(null);
-  React.useEffect(() => { if (ref.current && !ref.current.open) ref.current.showModal(); }, []);
+export function ImportPageForm({ onClose }: { onClose: () => void }): React.JSX.Element {
   const endpoint = React.useMemo(configuredPageEndpoint, []);
   const [address, setAddress] = React.useState("");
   const [sourceUrl, setSourceUrl] = React.useState("");
@@ -55,6 +52,7 @@ export function ImportPageDialog({ onClose, onImported }: { onClose: () => void;
   };
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
+    if (busy) return;
     if (!recipes.length) { await fetchAddress(); return; }
     const chosen = recipes.filter((recipe) => selected.has(recipe.index));
     if (!chosen.length) return;
@@ -65,19 +63,14 @@ export function ImportPageDialog({ onClose, onImported }: { onClose: () => void;
       const added = results.filter((result) => result.path !== null);
       const failed = results.filter((result) => result.error !== null);
       const pictured = added.filter((result) => result.cover).length;
-      if (added.length) { notify(`Added ${plural(added.length, "recipe")}${pictured ? pictured === added.length ? (added.length === 1 ? " with its picture" : " with their pictures") : `, ${pictured} with a picture` : ""}${failed.length ? `; ${plural(failed.length, "recipe")} skipped` : ""}.`); onImported(added.map((result) => result.path!)); }
+      if (added.length) { notify(`Added ${plural(added.length, "recipe")}${pictured ? pictured === added.length ? (added.length === 1 ? " with its picture" : " with their pictures") : `, ${pictured} with a picture` : ""}${failed.length ? `; ${plural(failed.length, "recipe")} skipped` : ""}.`); }
       if (failed.length) setError(failed.map((result) => `${result.title}: ${result.error}`).join("\n"));
-      else ref.current?.close();
+      else onClose();
     } finally { setBusy(""); }
   };
 
   const count = selected.size;
-  return <dialog className="mep-dialog" ref={ref} aria-label="Import from a web page" onClose={onClose} onClick={(event) => { if (event.target === ref.current) ref.current?.close(); }}><div className="mep-dialog__body">
-    <div className="mep-dialog__header">
-      <h2>Import from a web page</h2>
-      <button className="mep-dialog__close" type="button" onClick={() => ref.current?.close()} title="Close import" ref={(element) => { if (element) setIcon(element, "x"); }} />
-    </div>
-    <form className="mep-import-page" onSubmit={(event) => void submit(event)}>
+  return <form className="mep-import-page" onSubmit={(event) => void submit(event)}>
       <label>Recipe page address<input type="url" aria-label="Page address" value={address} placeholder="https://" autoFocus onChange={(event) => setAddress(event.currentTarget.value)} /></label>
       {endpoint
         ? <div className="mep-settings__actions"><button type="button" className="mep-button" disabled={!!busy || !address.trim()} onClick={() => void fetchAddress()}>{busy === "fetching" ? "Fetching…" : "Fetch page"}</button></div>
@@ -95,7 +88,7 @@ export function ImportPageDialog({ onClose, onImported }: { onClose: () => void;
       {error ? <p className="mep-import-page__error" role="alert">{error}</p> : null}
       {recipes.length ? <div className="mep-settings__actions">
         <button type="submit" className="mep-button" disabled={!!busy || !count}>{busy === "adding" ? "Adding…" : count === 1 ? "Add recipe" : `Add ${count} recipes`}</button>
-        <button type="button" className="mep-button mep-button--ghost" disabled={!!busy} onClick={() => ref.current?.close()}>Cancel</button>
+        <button type="button" className="mep-button mep-button--ghost" disabled={!!busy} onClick={onClose}>Cancel</button>
       </div> : null}
       <details className="mep-import-page__fallback">
         <summary>Page can't be fetched? Paste its HTML or open a saved copy</summary>
@@ -103,6 +96,5 @@ export function ImportPageDialog({ onClose, onImported }: { onClose: () => void;
         <label>Saved page<input aria-label="Saved page file" type="file" accept=".html,.htm,text/html" onChange={(event) => { void readFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} /></label>
         <p className="mep-import-page__meta">The address above labels the source{sourceUrl && sourceUrl !== address.trim() ? ` (currently ${sourceUrl})` : ""}.</p>
       </details>
-    </form>
-  </div></dialog>;
+  </form>;
 }

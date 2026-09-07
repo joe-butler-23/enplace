@@ -181,11 +181,10 @@ button.organiser-column-note,
 .organiser-column-note.has-note { color: var(--ink); background-color: var(--surface); border: 1px solid var(--line); }
 .organiser-column-note.is-empty { opacity: 0.5; text-align: center; font-weight: bold; }
 .organiser-column-note.is-empty:hover { opacity: 1; }
-.cooking-db__paste-import { display: grid; gap: 0.75rem; margin: 1rem auto; max-width: 36rem; text-align: left; }
-.cooking-db__paste-import label { display: grid; gap: 0.25rem; }
-.mep-import-page { display: grid; gap: 12px; }
+.mep-import-page:not([hidden]) { display: grid; gap: 12px; }
 .mep-import-page > label { display: grid; gap: 4px; font-size: 0.9rem; }
-.mep-import-page textarea { min-height: 96px; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.mep-import-page :is(input:not([type="checkbox"]), textarea) { box-sizing: border-box; width: 100%; min-width: 0; padding: 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.mep-import-page textarea { min-height: 160px; resize: vertical; font-family: ui-monospace, monospace; font-size: 0.8rem; }
 .mep-import-page__recipes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .mep-import-page__recipe { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .mep-import-page__recipe input { margin-top: 3px; }
@@ -195,10 +194,6 @@ button.organiser-column-note,
 .mep-import-page__fallback { display: grid; gap: 8px; }
 .mep-import-page__fallback > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
 .mep-import-page__fallback label { display: grid; gap: 4px; font-size: 0.9rem; }
-.cooking-db__paste-import input,
-.cooking-db__paste-import textarea { font: inherit; padding: 0.6rem; }
-.cooking-db__paste-import textarea { min-height: 16rem; resize: vertical; }
-.cooking-db__import-success { margin: 0 0 8px; color: var(--success); font-size: 0.88rem; }
 
 .shopping-list-view__grouping { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1rem; }
 .shopping-list-view__grouping select { font: inherit; padding: 0.4rem; }

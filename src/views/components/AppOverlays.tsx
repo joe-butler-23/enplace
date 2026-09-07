@@ -1,6 +1,6 @@
 import * as React from "react";
 import { CookbookPanel } from "@/cookbook/CookbookPanel";
-import { setIcon } from "@/platform-primitives";
+import { Dialog } from "./Dialog";
 
 export type Command = { id: string; label: string; action: () => void };
 export function CommandPalette({ commands, query, onQuery, onClose }: { commands: Command[]; query: string; onQuery: (value: string) => void; onClose: () => void }): React.JSX.Element {
@@ -30,15 +30,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }): React.JSX.Elem
 }
 type SettingsProps = { routePath: string; onClose: () => void };
 export function SettingsDialog({ routePath, onClose }: SettingsProps): React.JSX.Element {
-  const ref = React.useRef<HTMLDialogElement>(null);
-  React.useEffect(() => { if (ref.current && !ref.current.open) ref.current.showModal(); }, []);
-  return <dialog className="mep-dialog" ref={ref} aria-label="Settings" onClose={onClose} onClick={(event) => { if (event.target === ref.current) ref.current?.close(); }}><div className="mep-dialog__body">
-    <div className="mep-dialog__header">
-      <h2>Settings</h2>
-      <button className="mep-dialog__close" type="button" onClick={() => ref.current?.close()} title="Close settings" ref={(element) => { if (element) setIcon(element, "x"); }} />
-    </div>
-    <CookbookPanel routePath={routePath} />
-  </div></dialog>;
+  return <Dialog title="Settings" onClose={onClose}><CookbookPanel routePath={routePath} /></Dialog>;
 }
 export function StartupFailure({ phase, error, events, onRetry }: { phase: string; error: string; events: string[]; onRetry: () => void }): React.JSX.Element {
   const copy = async () => navigator.clipboard.writeText(["Enplace startup diagnostics", `timestamp: ${new Date().toISOString()}`, `phase: ${phase}`, `error: ${error}`, "events:", ...events].join("\n"));

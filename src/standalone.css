@@ -74,7 +74,7 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .mep-dialog__close { flex: none; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .mep-dialog__close:hover { background: var(--hover-strong); color: var(--ink); }
 .mep-dialog__close svg { width: 16px; height: 16px; stroke-width: 2.2; }
-.mep-dialog__body :is(input, select, button, label):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mep-dialog__body :is(input, textarea, select, button, label):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mep-settings__section { display: flex; flex-direction: column; gap: 12px; }
 /* Section labels use the app's small-label voice, the same one the recipe view uses. */
 .mep-settings__section h3 { margin: 0; font-family: var(--font-sans); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
@@ -116,10 +116,10 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .shopping-list-view__header h2 { flex: 1 1 auto; margin: 0; font-family: var(--font-serif); font-weight: 600; font-size: 1.31rem; line-height: 1.2; letter-spacing: -0.01em; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shopping-icon-toggle { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
 .shopping-icon-toggle svg { width: 15px; height: 15px; }
-.shopping-seg { flex: 0 0 auto; display: flex; padding: 2px; background: var(--surface-sunk); border-radius: 999px; }
-.shopping-seg__option { padding: 5px 12px; border: none; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 500; cursor: pointer; }
+.mep-segmented { flex: 0 0 auto; display: flex; padding: 2px; background: var(--surface-sunk); border-radius: 999px; }
+.mep-segmented > button { padding: 5px 12px; border: none; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 500; cursor: pointer; }
 .shopping-icon-toggle.is-active,
-.shopping-seg__option.is-active { background: var(--ink); border-color: var(--ink); color: var(--on-accent); }
+.mep-segmented > button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-accent); }
 .shopping-menu { position: relative; flex: 0 0 auto; }
 .shopping-menu__trigger { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; list-style: none; color: var(--muted); }
 .shopping-menu__trigger::-webkit-details-marker { display: none; }
@@ -288,8 +288,8 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 /* Title on its own line: the three controls do not share 375px with a serif title. */
 .shopping-list-view__header { flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .shopping-list-view__header h2 { flex-basis: 100%; }
-.shopping-seg { margin-right: auto; }
-.shopping-seg__option { padding: 9px 12px; }
+.shopping-list-view__header .mep-segmented { margin-right: auto; }
+.mep-segmented > button { padding: 9px 12px; }
 .shopping-item__aisle { padding: 8px 10px; font-size: 0.8rem; }
 .shopping-list-view__header h2 { font-size: 1.2rem; }
 .shopping-icon-toggle,

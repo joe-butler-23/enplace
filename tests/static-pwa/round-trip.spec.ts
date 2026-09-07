@@ -145,8 +145,6 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     await right.goto(`/#k=${id}`);
     expect(await collectVisibleCookbookState(right)).toEqual(beforeOffline);
     await page.goto(`/#k=${id}`);
-    await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
-    await expect(page.getByLabel("Recipe Markdown", { exact: true })).toBeVisible();
     const documentToken = await page.evaluate(() => (document.documentElement.dataset.testToken = crypto.randomUUID()));
     await page.context().setOffline(true);
     await rightContext.setOffline(true);
@@ -160,6 +158,9 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
       name: "existing.zip", mimeType: "application/zip",
       buffer: Buffer.from(zipSync({ "images/blocked.webp": new Uint8Array([9]) })),
     }, 1, 0);
+    await page.getByRole("button", { name: "Add recipe", exact: true }).first().click();
+    const addDialog = page.getByRole("dialog", { name: "Add recipe" });
+    await addDialog.getByRole("button", { name: "Markdown", exact: true }).click();
     await page.getByLabel("Recipe Markdown", { exact: true }).fill(`# Blocked
 
 ---

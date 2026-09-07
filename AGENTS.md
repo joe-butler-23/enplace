@@ -63,4 +63,4 @@ clai validate skill recipe-qa --scope project --project-root .
 clai validate all --scope project --project-root .
 ```
 
-For a release boundary under the pinned Node 24, run `npm run preflight:release`; this is the clean-checkout app/CLI/relay gate. Complete the static-PWA checks printed by that script. A release is not finished until `scripts/publish-public.sh` has pushed the snapshot to the public repository (`joe-butler-23/enplace`, a squashed projection of this private repository) and the static site has been redeployed.
+For maintainer-requested app changes, completion includes deployment and real-browser verification at the live origin unless the user explicitly asks to hold deployment. Run `npm run preflight:release` under the pinned Node 24, publish the certified commit with `scripts/publish-public.sh` to `joe-butler-23/enplace` (the public squashed projection), and deploy with `scripts/deploy-site.sh`. Complete the installed-PWA checks printed by preflight and verify the changed surface on the live site with a throwaway cookbook. A private push or local test pass alone is not completion; report any deployment blocker explicitly.
