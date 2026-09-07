@@ -105,8 +105,7 @@ export async function cookingTextRevision(text: string): Promise<string> {
 const validator = new Ajv({ strict: false, allErrors: false, ownProperties: true });
 const validators = new Map<CookingOperationDefinition, ValidateFunction>();
 
-/** Shared by the executor and MCP's pre-connection argument check. */
-export function validateCookingOperationArguments(name: string, input: unknown): CookingOperationDefinition {
+function validateCookingOperationArguments(name: string, input: unknown): CookingOperationDefinition {
   const definition = COOKING_OPERATIONS.find(operation => operation.name === name);
   if (!definition) fail("unknown_operation", `Unknown cooking operation: ${name}`);
   let validate = validators.get(definition);

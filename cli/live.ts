@@ -1,16 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { access, readFile, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { COOKING_OPERATIONS } from "../src/agent/operations";
 import { openCookingSession } from "../src/agent/session";
 import { associationPath, parseAssociation, readAssociation, readCookbookLink, saveAssociation } from "./association";
-import { serveCookingMcp } from "./mcp";
-import { chatCookingAgent, runCookingAgent } from "./cooking-agent";
 
 const HELP = `mep cookbook use [--relay URL]  Connect once; paste the link at the hidden prompt
-mep mcp                       Cooking tools over stdio, one live encrypted session
-mep agent <request>           Delegate using only cooking tools; return trusted counts
-mep chat                      Talk directly with the restricted cooking agent
 mep tools                     Print the cooking operation schemas
 mep call <operation> [file|-]  Run an operation using JSON arguments (stdin by default)
 mep list [--json]              List live recipes
@@ -38,7 +32,7 @@ async function stdinText(): Promise<string> {
 const inputText = (file: string): Promise<string> => file === "-" ? stdinText() : readFile(file, "utf8");
 
 /** Returns false only for the existing explicit folder/formatting CLI. */
-export async function executeLiveCli(argv: string[], cliPath: string): Promise<boolean> {
+export async function executeLiveCli(argv: string[]): Promise<boolean> {
   if (argv.includes("--help") || argv[0] === "help") { process.stdout.write(HELP); return true; }
   if (argv.includes("--folder") || ["check", "convert"].includes(argv[0])) return false;
   const positional: string[] = [];
@@ -67,24 +61,6 @@ export async function executeLiveCli(argv: string[], cliPath: string): Promise<b
     return true;
   }
   if (command === "tools") { process.stdout.write(JSON.stringify(COOKING_OPERATIONS, null, 2) + "\n"); return true; }
-  if (command === "mcp") {
-    if (rest.length) throw new Error("mep mcp takes no positional arguments.");
-    await serveCookingMcp(config); return true;
-  }
-  if (command === "agent") {
-    if (!rest.length) throw new Error("Give a cooking request, or - to read it from stdin.");
-    await readAssociation(config);
-    const prompt = rest.length === 1 && rest[0] === "-" ? await stdinText() : rest.join(" ");
-    const result = await runCookingAgent({ prompt, cliPath, associationPath: config });
-    process.stdout.write(JSON.stringify(result) + "\n"); return true;
-  }
-  if (command === "chat") {
-    if (rest.length) throw new Error("mep chat takes no positional arguments.");
-    await readAssociation(config);
-    await chatCookingAgent({ cliPath, associationPath: config }); return true;
-  }
-  const explicit = ["call", "show", "amend", "plan", "export"].includes(command);
-  if (!explicit && !options.has("--config") && !(await access(config, constants.F_OK).then(() => true, () => false))) return false;
   if (!["call", "list", "show", "add", "amend", "plan", "shop", "export"].includes(command)) return false;
   const association = await readAssociation(config);
   let name: string;

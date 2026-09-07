@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startRelay } from "./cookbook-relay.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -68,7 +66,6 @@ function installedCli(bin, consumer, env = {}) {
   return {
     run: (args) => run(bin, args, options),
     successful: (args) => successful(bin, args, options),
-    start: (args) => startProcess(bin, args, options),
   };
 }
 
@@ -119,6 +116,16 @@ async function main() {
     const recipe = "# Soup\n\n## Ingredients\n- 2 onions\n";
     const input = path.join(scratch, "soup.md");
     await writeFile(input, recipe);
+    const unassociated = path.join(scratch, "unassociated");
+    await mkdir(unassociated);
+    const disconnectedCli = installedCli(bin, unassociated, { XDG_CONFIG_HOME: path.join(scratch, "empty-config") });
+    for (const args of [["add", input], ["shop"]]) {
+      const result = await disconnectedCli.run(args);
+      assert.equal(result.code, 1);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /Connect a cookbook first/);
+    }
+    assert.deepEqual(await readdir(unassociated), []);
     const inputFromConsumer = path.relative(consumer, input);
     const fixtureFromConsumer = path.relative(consumer, fixture);
 
@@ -168,25 +175,26 @@ async function main() {
       const session = await openCookingSession({ ...association, create: true });
       try { await session.cookbook.commit(); } finally { await session.close(); }
     `, config], { cwd: consumer });
-    const transport = new StdioClientTransport({ command: bin, args: ["mcp", "--config", config], cwd: consumer, stderr: "pipe" });
-    const client = new Client({ name: "installed-package-check", version: "1" });
+    const call = async (operation, args) => {
+      const input = path.join(scratch, "operation.json");
+      await writeFile(input, JSON.stringify(args));
+      return JSON.parse((await cli.successful(["call", operation, input, "--config", config])).stdout);
+    };
     try {
-      await client.connect(transport);
-      const { tools } = await client.listTools();
+      const tools = JSON.parse((await cli.successful(["tools"])).stdout);
       assert.equal(tools.length, 24);
-      assert(tools.some(tool => tool.name === "recipe_update"));
-      const invalid = await client.callTool({ name: "recipe_delete", arguments: { path: "../../secret" } });
-      assert.equal(invalid.isError, true);
-      const created = await client.callTool({ name: "recipe_create", arguments: { operationId: "installed-create-soup", markdown: "# Installed soup\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" } });
-      assert.notEqual(created.isError, true, JSON.stringify(created));
-      const added = JSON.parse(created.content[0].text);
-      const planResponse = await client.callTool({ name: "plan_read", arguments: {} });
-      const plan = JSON.parse(planResponse.content[0].text);
-      const planned = await client.callTool({ name: "plan_add", arguments: { operationId: "installed-plan-soup", path: added.path, date: "2026-09-09", expectedRevision: plan.revision } });
-      assert.notEqual(planned.isError, true);
-      await client.close();
+      assert(tools.some(tool => tool.name === "recipe.update"));
+      await assert.rejects(call("recipe.delete", { path: "../../secret" }), /arguments must have required property 'operationId'/);
+      const added = await call("recipe.create", { operationId: "installed-create-soup", markdown: "# Installed soup\n\n---\n\n- *2* onions\n\n---\n\n1. Simmer.\n" });
+      const original = await call("recipe.get", { path: added.path });
+      assert.match(original.markdown, /2.*onions/);
+      const amended = original.markdown.replace("Simmer.", "Simmer for 20 minutes.");
+      await call("recipe.update", { operationId: "installed-amend-soup", path: added.path, base: original.markdown, markdown: amended });
+      const plan = await call("plan.read", {});
+      await call("plan.add", { operationId: "installed-plan-soup", path: added.path, date: "2026-09-09", expectedRevision: plan.revision });
       const readback = await cli.successful(["show", added.path, "--config", config]);
       assert.match(readback.stdout, /Installed soup/);
+      assert.match(readback.stdout, /Simmer for 20 minutes/);
       const listed = await cli.successful(["list", "--config", config, "--json"]);
       assert.equal(JSON.parse(listed.stdout).recipes.length, 1);
       const configHome = path.join(scratch, "config");
@@ -198,9 +206,9 @@ async function main() {
       const built = await liveCli.successful(["shop", "--week", "2026-09-07"]);
       assert(JSON.parse(built.stdout).items.some(item => item.content.includes("onions")));
       assert.equal(await readFile(localShopping, "utf8"), "Local folder must remain untouched.\n");
-    } finally { await client.close(); await relay.close(); }
+    } finally { await relay.close(); }
     console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node production-only install.`);
-    console.log("Installed folder commands and live MCP create/readback passed; browser rendering dependencies absent.");
+    console.log("Installed folder commands and direct live recipe/plan/shopping calls passed; browser rendering dependencies absent.");
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

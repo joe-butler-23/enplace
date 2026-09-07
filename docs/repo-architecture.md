@@ -19,7 +19,7 @@ Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs d
 - `src/App.tsx` is routing, planner wiring, settings, the command palette, and view composition; views under `src/views/` render from the store.
 - `src/pwa/` owns the offline app shell.
 - `src/agent/operations.ts` owns structured recipe, planning, shopping and recovery operations over the same cookbook. Local mutations and compact retry receipts share one transaction. `src/agent/session.ts` serializes operations, rechecks authenticated connection readiness and waits for durable relay acknowledgement after mutations.
-- `cli/` provides the optional Node CLI, private cookbook association, MCP stdio transport and restricted existing-agent launcher. A conversation holds one live encrypted peer. Explicit folder commands remain available with `--folder`; files cross the live cookbook boundary only through explicit input/export. See [agent integration](agent-integration.md).
+- `cli/` provides direct cookbook commands and private connection setup. Each command holds one in-memory encrypted peer. Explicit folder commands remain available with `--folder`; files cross the live cookbook boundary only through explicit input/export. See [agent integration](agent-integration.md).
 - `tests/static-pwa/` is the primary browser contract: fresh cookbook, persistence across reload, two contexts converging through a relay, import and export, offline reload, and installability.
 
 ## Layering rules
@@ -28,7 +28,7 @@ Enplace is one static PWA over a shared cookbook document. A cookbook is a Yjs d
 2. Browser-private storage holds the cookbook's persisted copy, the current cookbook id, and UI preferences. The relay URL comes from the build-time environment.
 3. Domain transformations stay pure and independent of React and storage.
 4. All storage access goes through the adapter contract; the app never touches Yjs or the filesystem directly.
-5. The encrypted relay is the only ongoing cookbook network transport. The optional MCP process listens on stdio, not a network port. The app needs no account or model provider. Plain cookbook content is not persisted by the CLI.
+5. The encrypted relay is the only ongoing cookbook network transport. The CLI opens no listening port and persists no cookbook cache. The app needs no account or model provider.
 
 ## Placement checks
 

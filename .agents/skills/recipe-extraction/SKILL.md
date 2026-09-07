@@ -5,21 +5,20 @@ description: Extract one recipe from a URL, supplied text, or an image into plai
 
 # Recipe Extraction
 
-Create one faithful recipe in the user's selected Enplace folder.
+Create one faithful recipe in the connected Enplace cookbook.
 
 1. Read the supplied URL, text, or image. Treat it as the only factual source.
 2. Draft [RecipeMD 2.4](https://recipemd.org/specification.html): level-one title, optional description, italic tags, bold yields, thematic break, ingredient lists with italic amounts, thematic break, instructions.
 3. Write each ingredient line noun-first, in consistent UK shop spelling, then a comma before preparation or qualifiers: `*1360 g* tomatoes, very ripe, cored and chopped`; `*1* lemon, juiced`; `*250 g* butter, unsalted, softened`. Put count units inside the italic amount: `*2 cloves* garlic`; `*3 sticks* celery`; `*1 bunch* coriander`. The app matches the noun by exact trimmed, lowercase text — no trailing-s stripping, no plural or synonym inference — so keep spelling consistent across recipes and preserve genuinely distinct products (fresh tomatoes vs tinned tomatoes) as separate nouns. Use one purchasable per line where the source permits: split salt and pepper when both are needed, while retaining genuine compound products.
 4. Preserve quantities, units, ordering, and useful preparation notes. Do not invent missing ingredients, steps, times, yields, tags, covers, or provenance.
 5. Record provenance in a `Source: ...` paragraph in the description only when supplied or actually read. Covers are ordinary Markdown images. Use UK names and g/kg, ml/l, °C, tsp/tbsp; prefer source weights, never guess density or salt equivalence.
-6. Pass the identical draft on stdin to both commands, in order:
+6. Pass the draft on stdin to the installed CLI, which validates it before saving:
 
 ```bash
-mep check - --folder <folder>
-mep add - --folder <folder>
+mep add - --operation-id <unique-retry-id>
 ```
 
-Stop if `mep check` fails. Stop if `mep add` reports an existing file; never overwrite it. Report the path printed by `mep add`. This creates a local file; import it into the PWA to add it to a shared cookbook. No folder sync runs.
+Report the saved recipe and read it back with `mep show`. If a save is uncertain, reuse the same operation id and identical draft. For an explicitly requested local recipe file, use `mep add - --folder <folder>` instead; that file requires deliberate PWA import.
 
 Use this shape:
 

@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `38ff851ae453`, 2026-09-07.
+> Published snapshot of a private repository, refreshed at each release. Source commit `c597c1d0d34c`, 2026-09-07.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -33,7 +33,7 @@ Everything exports as plain Markdown and images. Download the whole cookbook as 
 
 ## Adding recipes
 
-Paste a recipe as Markdown, import from a web page by address (the relay fetches the page, every recipe on it is listed and you choose which to add, and each recipe's picture is fetched and stored as its cover; pasting the page's HTML or opening a saved copy still works when a site cannot be fetched), import files or a zip from Settings, or let an assistant do the extraction: the `recipe-extraction` skill in this repository produces Enplace Markdown from a link, text, or photo, and `mep add` validates and files it.
+Paste a recipe as Markdown, import from a web page by address (the relay fetches the page, every recipe on it is listed and you choose which to add, and each recipe's picture is fetched and stored as its cover; pasting the page's HTML or opening a saved copy still works when a site cannot be fetched), import files or a zip from Settings, or let an assistant do the extraction: the `recipe-extraction` skill in this repository produces Enplace Markdown from a link, text, or photo, and `mep add` validates and adds it to the connected cookbook.
 
 ## Sharing and sync
 
@@ -41,9 +41,7 @@ Devices encrypt cookbook updates before sending them through the Yjs websocket r
 
 ## Optional CLI
 
-Connect the optional Node 24 CLI once with `mep cookbook use`, pasting the private link from Settings at its hidden prompt. `mep chat` opens a cooking-only session in your existing signed-in Claude Code: it can read and amend recipes, plan meals and manage shopping directly in the same cookbook. `mep agent "plan three dinners for this week"` delegates a request and returns only trusted operation counts to the calling assistant.
-
-`mep mcp` exposes the same cooking tools to other compatible clients. `mep tools` prints their schemas; `mep call` runs an operation with JSON arguments. Ordinary `mep list`, `show`, `add` and `amend` use the connected cookbook. Folder commands remain available with `--folder`; no folder sync is created. Build with `npm run build:cli`. See [agent integration](docs/agent-integration.md) for setup, retries and the execution boundary.
+Connect the optional Node 24 CLI once with `mep cookbook use`, pasting the private link from Settings at its hidden prompt. Your agent reads and edits the cookbook directly: `mep tools` lists the operation schemas and `mep call` accepts JSON on stdin. Ordinary `mep list`, `show`, `add`, `amend`, `plan` and `shop` use the same connected cookbook. Folder commands remain available with `--folder`; no folder sync is created. Build with `npm run build:cli`. See [agent integration](docs/agent-integration.md) for setup and save guarantees.
 
 ## Development
 

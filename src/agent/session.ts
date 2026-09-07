@@ -9,7 +9,7 @@ export type CookingSessionOptions = {
   create?: boolean;
 };
 
-/** One encrypted peer per conversation. Every successful mutation includes a durable relay receipt. */
+/** One in-memory encrypted peer. Successful mutations wait for durable relay persistence. */
 export async function openCookingSession(options: CookingSessionOptions) {
   const cookbook: CookbookConnection = await openCookbook({
     id: options.id, relayUrl: options.relayUrl, persist: false,
