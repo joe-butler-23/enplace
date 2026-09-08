@@ -210,3 +210,24 @@ it('keeps coconut and olive product heads distinct', () => {
   expect(core.inferAisle('olive oil')).toBe('Herbs, spices & oils');
   expect(core.inferAisle('olive bread')).toBe('Bakery');
 });
+
+it.each([
+  ['green olives finely chopped', 'Tins & jars'],
+  ['green olives drained and chopped', 'Tins & jars'],
+  ['black olives stoned and roughly chopped', 'Tins & jars'],
+  ['tomatoes finely chopped', 'Fruit & vegetables'],
+  ['water or vegetable stock', null],
+  ['vegetable stock or water', null],
+  ['water or milk', null],
+  ['milk or water', null],
+  ['lemon zest & juice', null],
+  ['lemon zest and juice', null],
+  ['dried cherries soaked in olive oil', null],
+  ['dried cherries soaked in milk', null],
+  ['dried cherries soaked in lemon juice', null],
+  ['soy sauce or tamari', 'Tins & jars'],
+  ['tamari or soy sauce', 'Tins & jars'],
+  ['red wine & white wine', 'Drinks'],
+])('uses product identity consistently for %s', (name, aisle) => {
+  expect(core.inferAisle(name!)).toBe(aisle);
+});

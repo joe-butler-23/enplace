@@ -53,8 +53,12 @@ export function singularize(word: string): string {
   return word;
 }
 
-const operation = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly)\\s+)?(?:diced|sliced|chopped|cubed|grated|peeled|crushed|rinsed|washed|deseeded|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|cut\\s+into\\s+[a-z\\s]+|half\\s+juiced[a-z\\s]+|to\\s+serve|for\\s+serving|to\\s+taste|for\\s+(?:dusting|frying|greasing|garnish|garnishing|drizzling)|zest\\s+only|fine|minced|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?))";
-const operationTail = new RegExp("^\\s*" + operation + "(?:(?:\\s+and\\s+|,\\s*(?:and\\s+)?)" + operation + ")*\\s*$", "i");
+const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|crushed|rinsed|washed|deseeded|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked";
+const preparationModifier = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly)\\s+)?";
+const operation = preparationModifier + "(?:" + preparationVerbs + "|cut\\s+into\\s+[a-z\\s]+|half\\s+juiced[a-z\\s]+|to\\s+serve|for\\s+serving|to\\s+taste|for\\s+(?:dusting|frying|greasing|garnish|garnishing|drizzling)|zest\\s+only|fine|minced|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?))";
+const operationSequence = (operation: string) => operation + "(?:(?:\\s+and\\s+|,\\s*(?:and\\s+)?)" + operation + ")*\\s*$";
+const operationTail = new RegExp("^\\s*" + operationSequence(operation), "i");
+const aislePreparationTail = new RegExp("\\s+" + operationSequence(preparationModifier + "(?:" + preparationVerbs + "|minced|pitted|stoned|drained)"), "i");
 
 export function preparedName(name: string): string {
   const comma = name.indexOf(",");
@@ -260,7 +264,6 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     row: ShoppingRow;
     amounts: Map<string | null, Rational>;
     unquantified: Map<string, string>;
-    displayName: string;
     sources: Set<string>;
   };
   const groups = new Map<string, GroupData>();
@@ -284,7 +287,6 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
         sources: new Set(),
         amounts: new Map(),
         unquantified: new Map(),
-        displayName: preparedName(name),
       };
       groups.set(groupKey, group);
     }
@@ -313,9 +315,9 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     }
   }
 
-  return [...groups.values()].map(({ row, amounts, unquantified, displayName, sources }) => {
+  return [...groups.values()].map(({ row, amounts, unquantified, sources }) => {
     const quantities = [...amounts].map(([unit, factor]) => `${formatRational(factor)}${unit ? ` ${unit}` : ""}`);
-    const quantified = quantities.length ? `${displayName} ${quantities.join(" + ")}` : "";
+    const quantified = quantities.length ? `${row.content} ${quantities.join(" + ")}` : "";
     const content = [quantified, ...unquantified.values()].filter(Boolean).join(" + ");
     const totalMembers = row.memberIds.length;
     const checkedCount = row.checkedCount ?? 0;
@@ -335,23 +337,19 @@ export type ShoppingIngredientInput = {
   amount?: RecipeAmount | null;
 };
 
-const PHRASE_RULES: ReadonlyArray<[string, RegExp]> = [
+const AISLE_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Frozen", /^frozen\b/i],
   ["Tins & jars", /^(?:can|tin|jar|cans|tins|jars|canned|tinned|jarred)\b/i],
   ["Fruit & vegetables", /\bfresh\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
   ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
   ["Tins & jars", /\b(?:peanut|groundnut|almond|cashew|seed|nut)\s+butter$/i],
   ["Tins & jars", /\bcoconut\s+(?:milk|cream)$/i],
-  ["Tins & jars", /\bolives?(?:\s+(?:pitted|stoned|chopped)(?:\s+and\s+(?:pitted|stoned|chopped))*)?$/i],
   ["Baking", /\b(?:cocoa|cacao|shea)\s+butter$/i],
   ["Herbs, spices & oils", /\b(?:black|white|cracked|cayenne|ground)\s+pepp?er(?:corn)?s?$/i],
   ["Fruit & vegetables", /\b(?:bell|sweet|green|red|yellow|poblano|serrano)\s+peppers?$/i],
-];
-
-const SUFFIX_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Baking", /(?:^|\s)(?:flours?|sugars?|yeasts?|syrups?|treacles?|molasses|nectars?|baking powder|bicarbonate|cornstarch|cornflour|starches?|icings?|chocolates?|pastr(?:y|ies)|extracts?|essences?|malt powder|nuts?|walnuts?|pecans?|almonds?|cashews?|pistachios?|hazelnuts?|pine nuts?|peanuts?)$/i],
   ["Herbs, spices & oils", /(?:^|\s)(?:oils?|vinegars?|powders?|peppercorns?|chilli flakes|chili flakes|seasonings?|spices?|rubs?|masalas?|seeds?|salts?|cumins?|corianders?|cinnamons?|paprikas?|turmerics?|cardamoms?|nutmegs?|cloves?|saffrons?|cayennes?|oreganos?|basils?|thymes?|rosemarys?|sages?|dills?|tarragons?|parsleys?|mints?|cilantros?|bay leaves?|bay leaf|chives?|curry leaves?|marjoram|za['’]?atar|seaweed|nori|amchur|achiote|gochugaru)$/i],
-  ["Tins & jars", /(?:^|\s)(?:sauces?|pastes?|chutneys?|pickles?|jams?|marmalades?|mustards?|ketchups?|mayos?|mayonnaises?|relishes?|stocks?|broths?|misos?|harissas?|srirachas?|sambals?|gochujang|tamaris?|aminos?|capers?|passatas?|purees?|pestos?|tahinis?|honeys?)$/i],
+  ["Tins & jars", /(?:^|\s)(?:sauces?|pastes?|chutneys?|pickles?|jams?|marmalades?|mustards?|ketchups?|mayos?|mayonnaises?|relishes?|stocks?|broths?|misos?|harissas?|srirachas?|sambals?|gochujang|tamaris?|aminos?|olives?|capers?|passatas?|purees?|pestos?|tahinis?|honeys?)$/i],
   ["Dairy & eggs", /(?:^|\s)(?:cheeses?|milks?|creams?|yoghurts?|yogurts?|butters?|eggs?|ghees?|cheddar|parmesan|mozzarella|ricotta|feta|halloumi|brie|gouda|camembert|gruyere|mascarpone|paneer|pecorino|grana padano|quark)$/i],
   ["Meat & fish", /(?:^|\s)(?:steaks?|fillets?|minces?|sausages?|chops?|breasts?|thighs?|wings?|bacons?|pancetta|hams?|prosciutto|salami|chorizo|salmons?|tunas?|cods?|haddocks?|prawns?|shrimps?|crabs?|lobsters?|mussels?|clams?|scallops?|anchov(?:y|ies)|sardines?|mackerels?|trouts?|beefs?|lambs?|porks?|chickens?|turkeys?|ducks?|lards?|suets?|speck)$/i],
   ["Bakery", /(?:^|\s)(?:breads?|loaf|loaves|bagels?|croissants?|rolls?|buns?|tortillas?|wraps?|pitas?|pittas?|naans?|rotis?|flatbreads?|scones?|brioches?|ciabattas?|baguettes?|crumpets?|muffins?|breadcrumbs?|panko|toasts?|biscuits?|starters?)$/i],
@@ -377,29 +375,19 @@ export function inferAisle(
     return null;
   }
 
-  if (/^(?:cans?|tins?|jars?)$/i.test(parsed.amount?.unit?.trim() ?? "")) return "Tins & jars";
-
   // Base noun without connector prefix, preparation commas, or parentheticals
   const base = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/^[,\s;:-]+(?:plus\s+more\s+for\s+\w+\s+|plus\s+for\s+\w+\s+|plus\s+more\s+)?/i, "")
     .split(",")[0]
     .replace(/\([^)]*\)/g, "")
+    .replace(aislePreparationTail, "")
     .trim();
 
-  // Only product identity participates; preparation tails cannot override its aisle.
-  for (const [aisle, rx] of PHRASE_RULES) {
-    if (rx.test(base)) return aisle;
-  }
-
-  // Match the complete product head, never a prefix within another word.
-  for (const [aisle, rx] of SUFFIX_RULES) {
-    if (rx.test(base)) {
-      if (aisle === "Drinks" && /\b(?:or|and|soaked)\b/i.test(base)) return null;
-      return aisle;
-    }
-  }
-
-  return null;
+  if (/\bsoaked\b/i.test(clean)) return null;
+  const alternatives = base.split(/\s+(?:or|and)\s+|\s*&\s*/i);
+  if (alternatives.length === 1 && /^(?:cans?|tins?|jars?)$/i.test(parsed.amount?.unit?.trim() ?? "")) return "Tins & jars";
+  const aisles = alternatives.map(name => AISLE_RULES.find(([, rx]) => rx.test(name.trim()))?.[0]);
+  return aisles[0] && aisles.every(aisle => aisle === aisles[0]) ? aisles[0] : null;
 }
 
 /**
