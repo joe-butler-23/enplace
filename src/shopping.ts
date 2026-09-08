@@ -53,13 +53,15 @@ export function singularize(word: string): string {
   return word;
 }
 
-const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|unpeeled|crushed|smashed|bashed|rinsed|washed|seeded|deseeded|cored|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|warmed|minced|pitted|stoned|drained|pressed|softened|shucked|unmelted|cut|split\\s+(?:in|into|down|lengthways|widthways)|thawed|squeezed";
+const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|unpeeled|crushed|smashed|bashed|rinsed|washed|seeded|deseeded|cored|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|warmed|minced|pitted|stoned|drained|pressed|softened|shucked|unmelted|cut|slit|split\\s+(?:in|into|down|lengthways|widthways)|thawed|squeezed";
 const preparationModifier = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly|freshly)\\s+)?";
 const preparationStart = new RegExp("^(?:" + preparationModifier + "(?:" + preparationVerbs + ")\\b|left\\s+whole\\b|(?:(?:tough|woody)\\s+)?(?:crusts?|skins?|seeds?|stems?|stalks?|cores?|pith|leaves?)\\s+(?:removed|picked)\\b|(?:plus\\s+more\\s+)?(?:to\\s+(?:taste|serve)|for\\s+\\w+)\\b|to\\s+get\\b|frozen\\s+for\\s+storage$|soaked(?:\\s+overnight)?$|zest\\s+only$|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?)$)", "i");
 const inlinePreparation = new RegExp("\\s+" + preparationModifier + "(?:" + preparationVerbs + ")\\b", "i");
 const countPart = /^(cloves?|heads?|bulbs?|stalks?|stems?|ears?|sprigs?|bunches?)\s+(?:of\s+)?(.+)$|^(.+?)\s+(cloves?|heads?|bulbs?|stalks?|stems?|ears?|sprigs?|bunches?)$/i;
 
+const preparationOnly = new RegExp("^" + preparationModifier + "(?:" + preparationVerbs + ")$", "i");
 function isPreparation(text: string): boolean {
+  if (/\bor\b/i.test(text)) return text.split(/\s+or\s+/i).every(part => preparationOnly.test(part.trim()));
   return text.split(/\s*,\s*/).every(part => {
     const clause = part.trim().replace(/^(?:and\s+|(?:the\s+)?rest\s+|(?:[¼-¾⅐-⅞]|\d+(?:\/\d+)?|half)\s+(?:of\s+it\s+)?)/i, "");
     return !/\bor\b|\b(?:and|then)\s+(?:dried|frozen|tinned|canned|smoked|salted)\b/i.test(clause)
@@ -69,9 +71,21 @@ function isPreparation(text: string): boolean {
 
 export function preparedName(name: string): string {
   // Remove quantity hints, never parenthesised product forms or alternatives.
-  let product = name.replace(/\s+/g, " ").replace(/\(\s*(?:about\s+)?\d+(?:[./]\d+)?\s*(?:g|kg|ml|l|tsp|tbsp|small|medium|large|slices?|cloves?|leaves?|tins?|cans?)\s*\)/gi, " ").trim()
-    .replace(/^[,\s]*(?:plus\s+(?:more\s+)?for\s+(?:dusting|oiling|greasing|frying)\s+)/i, "");
-  product = product.replace(/\(([^()]*)\)|\(([^()]*)$/g, (whole, closed, open) => isPreparation(closed ?? open) ? " " : whole);
+  let product = name.replace(/\s+/g, " ").replace(/\(\s*(?:about\s+)?\d+(?:[./]\d+)?\s*(?:small|medium|large|slices?|cloves?|leaves?|tins?|cans?)\s*\)/gi, " ").trim();
+  product = product.replace(/\(([^()]*)\)|\(([^()]*)$/g, (whole, closed, open) => {
+    const measurements = closed?.split(/\s+\/\s+/).map((part: string) => {
+      try { return parseAmount(part.replace(/^about\s+/i, ""), true); } catch { return null; }
+    });
+    const quantityHint = measurements?.every((amount: RecipeAmount | null) => amount && /^(?:g|kg|ml|l|oz|fl oz|lb|lbs|pounds?|cups?|tsp|tbsp)$/i.test(amount.unit ?? ""));
+    return quantityHint || isPreparation(closed ?? open) ? " " : whole;
+  });
+  product = product.replace(/^[,\s]*(?:plus\s+(?:more\s+)?for\s+(?:dusting|oiling|greasing|frying)\s+)/i, "");
+  product = product.replace(/^([^()]+?)\s*\(([^()]*)\)$/, (whole, head: string, annotation: string) => {
+    const parts = annotation.split(/\s*(?:,|\band\b|&)\s*/i);
+    const forms = parts.filter(part => /^(?:fresh|frozen|canned|tinned|jarred|dried)$/i.test(part));
+    return forms.length === 1 && parts.every(part => forms.includes(part) || isPreparation(part))
+      ? `${forms[0]} ${head.trim()}` : whole;
+  });
   product = product.replace(/^(?:a\s+(?:handful|little|few|small\s+bunch)|some)(?:\s+(?:sprigs?|bunches?))?\s+(?:of\s+)?/i, "");
   product = product.replace(/^(.+),\s*(bone[- ]in|skin[- ]on|boneless|skinless)$/i, "$2 $1");
   product = product.replace(/^(.+?)(?:,\s*|\s+\()(fine|coarse|flaky)\)?$/i, "$2 $1");
@@ -82,7 +96,7 @@ export function preparedName(name: string): string {
   const inline = inlinePreparation.exec(product);
   if (inline) {
     const head = product.slice(0, inline.index);
-    if (AISLE_RULES.some(([, rx]) => rx.test(head)) && !/[,]|\bor\b/i.test(product.slice(inline.index))) product = head;
+    if (AISLE_RULES.some(([, rx]) => rx.test(head)) && isPreparation(product.slice(inline.index))) product = head;
   }
   return product.replace(/,?\s+to\s+(?:taste|serve)$/i, "").replace(/\s+/g, " ").trim() || name;
 }
@@ -222,18 +236,23 @@ export function shoppingIngredient(text: string): {
     let name = ingredient.name;
     let amount = ingredient.amount;
     // Reuse RecipeMD amount parsing for additive measurements, retaining exact arithmetic.
-    const extraTail = /^(.+?),?\s+plus\s+(?:another\s+)?(.+?)\s+(g|kg|ml|l|tsp|tbsp)(?:\s+for\s+.+)?$/i.exec(name);
-    const sum = amount && (/^(g|kg|ml|l|tsp|tbsp)\s+plus\s+(.+?)\s+(g|kg|ml|l|tsp|tbsp)\s+(.+)$/i.exec(`${amount.unit} ${name}`) ?? (extraTail ? [extraTail[0], amount.unit ?? "", extraTail[2], extraTail[3], extraTail[1].replace(/,$/, "")] : null));
-    if (sum) {
-      const units = new Map<string, [string, bigint]>([["g", ["g", 1n]], ["kg", ["g", 1000n]], ["ml", ["ml", 1n]], ["l", ["ml", 1000n]], ["tsp", ["tsp", 1n]], ["tbsp", ["tsp", 3n]]]);
-      const left = units.get(sum[1].toLowerCase()), right = units.get(sum[3].toLowerCase());
-      const extra = parseAmount(sum[2], true);
-      if (extra && !extra.unit && left && right && left[0] === right[0]) {
-        const a = parseRational(amount!.factor), b = parseRational(extra.factor);
-        amount = { factor: formatRational(addRational(rational(a[0] * left[1], a[1]), rational(b[0] * right[1], b[1]))), unit: left[0] };
-        name = sum[4];
+    while (amount) {
+      const extraTail = /^(.+),?\s+plus\s+(?:another\s+)?(.+?)\s+(g|kg|ml|l|tsp|tbsp)(?:\s+for\s+.+)?$/i.exec(name);
+      const sum = (/^(g|kg|ml|l|tsp|tbsp)\s+plus\s+(.+?)\s+(g|kg|ml|l|tsp|tbsp)\s+(.+)$/i.exec(`${amount.unit} ${name}`) ?? (extraTail ? [extraTail[0], amount.unit ?? "", extraTail[2], extraTail[3], extraTail[1].replace(/,$/, "")] : null));
+      if (sum) {
+        const units = new Map<string, [string, bigint]>([["g", ["g", 1n]], ["kg", ["g", 1000n]], ["ml", ["ml", 1n]], ["l", ["ml", 1000n]], ["tsp", ["tsp", 1n]], ["tbsp", ["tsp", 3n]]]);
+        const left = units.get(sum[1].toLowerCase()), right = units.get(sum[3].toLowerCase());
+        const extra = parseAmount(sum[2], true);
+        if (extra && !extra.unit && left && right && left[0] === right[0]) {
+          const a = parseRational(amount.factor), b = parseRational(extra.factor);
+          amount = { factor: formatRational(addRational(rational(a[0] * left[1], a[1]), rational(b[0] * right[1], b[1]))), unit: left[0] };
+          name = sum[4];
+          continue;
+        }
       }
+      break;
     }
+    if (amount) name = name.replace(/^of\s+/i, "");
     name = preparedName(name);
     const counted = countedProduct(name);
     if (counted.unit) {
@@ -422,13 +441,13 @@ const AISLE_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Baking", /\b(?:(?:cocoa|cacao)\s+(?:butter|powder)|shea\s+butter)$/i],
   ["Herbs, spices & oils", /\b(?:black|white|cracked|cayenne|ground)\s+pepp?er(?:corn)?s?$/i],
   ["Fruit & vegetables", /\b(?:bell|sweet|green|red|yellow|poblano|serrano)\s+peppers?$/i],
-  ["Baking", /(?:^|\s)(?:flours?|sugars?|yeasts?|syrups?|treacles?|molasses|nectars?|baking powder|bicarbonate|cornstarch|cornflour|starches?|icings?|chocolates?|pastr(?:y|ies)|extracts?|essences?|malt powder|nuts?|walnuts?|pecans?|almonds?|cashews?|pistachios?|hazelnuts?|pine nuts?|peanuts?)$/i],
-  ["Herbs, spices & oils", /(?:^|\s)(?:oils?|vinegars?|powders?|peppercorns?|chilli flakes|chili flakes|seasonings?|spices?|rubs?|masalas?|seeds?|salts?|cumins?|corianders?|cinnamons?|paprikas?|turmerics?|cardamoms?|nutmegs?|cloves?|saffrons?|cayennes?|oreganos?|basils?|thymes?|rosemarys?|sages?|dills?|tarragons?|parsleys?|mints?|cilantros?|bay leaves?|bay leaf|chives?|curry leaves?|marjoram|za['’]?atar|seaweed|nori|amchur|achiote|gochugaru)$/i],
+  ["Baking", /(?:^|\s)(?:flours?|sugars?|yeasts?|syrups?|treacles?|molasses|nectars?|baking powder|baking soda|bicarbonate|cornstarch|cornflour|starches?|icings?|chocolates?|pastr(?:y|ies)|extracts?|essences?|malt powder|nuts?|walnuts?|pecans?|almonds?|cashews?|pistachios?|hazelnuts?|pine nuts?|peanuts?)$/i],
+  ["Herbs, spices & oils", /(?:^|\s)(?:oils?|vinegars?|powders?|peppercorns?|chilli flakes|chili flakes|seasonings?|spices?|rubs?|masalas?|seeds?|salts?|cumins?|corianders?|cinnamons?|paprikas?|turmerics?|cardamoms?|nutmegs?|cloves?|saffrons?|cayennes?|oreganos?|basils?|thymes?|rosemarys?|sages?|dills?|tarragons?|parsleys?|mints?|cilantros?|bay leaves?|bay leaf|chives?|curry leaves?|marjoram|za['’]?atar|seaweed|nori|asafoetida|amchur|achiote|gochugaru)$/i],
   ["Tins & jars", /(?:^|\s)(?:sauces?|pastes?|chutneys?|pickles?|jams?|marmalades?|mustards?|ketchups?|mayos?|mayonnaises?|relishes?|stocks?|broths?|misos?|harissas?|srirachas?|sambals?|gochujang|tamaris?|aminos?|olives?|capers?|passatas?|purees?|pestos?|tahinis?|honeys?)$/i],
-  ["Dairy & eggs", /(?:^|\s)(?:cheeses?|milks?|creams?|yoghurts?|yogurts?|butters?|eggs?|ghees?|cheddar|parmesan|mozzarella|ricotta|feta|halloumi|brie|gouda|camembert|gruyere|mascarpone|paneer|pecorino|grana padano|quark)$/i],
-  ["Meat & fish", /(?:^|\s)(?:steaks?|fillets?|minces?|sausages?|chops?|breasts?|thighs?|wings?|bacons?|pancetta|hams?|prosciutto|salami|chorizo|salmons?|tunas?|cods?|haddocks?|prawns?|shrimps?|crabs?|lobsters?|mussels?|clams?|scallops?|anchov(?:y|ies)|sardines?|mackerels?|trouts?|beefs?|lambs?|porks?|chickens?|turkeys?|ducks?|lards?|suets?|speck)$/i],
+  ["Dairy & eggs", /(?:^|\s)(?:cheeses?|milks?|creams?|yoghurts?|yogurts?|butters?|eggs?|egg (?:yolks?|whites?)|ghees?|cheddar|parmesan|mozzarella|ricotta|feta|halloumi|brie|gouda|camembert|gruyere|mascarpone|paneer|pecorino|grana padano|quark)$/i],
+  ["Meat & fish", /(?:^|\s)(?:steaks?|fillets?|minces?|sausages?|chops?|breasts?|thighs?|wings?|bacons?|guanciale|pancetta|hams?|prosciutto|salami|chorizo|salmons?|tunas?|cods?|haddocks?|prawns?|shrimps?|crabs?|lobsters?|mussels?|clams?|scallops?|anchov(?:y|ies)|sardines?|mackerels?|trouts?|beefs?|lambs?|porks?|chickens?|turkeys?|ducks?|lards?|suets?|speck)$/i],
   ["Bakery", /(?:^|\s)(?:breads?|loaf|loaves|bagels?|croissants?|rolls?|buns?|tortillas?|wraps?|pitas?|pittas?|naans?|rotis?|flatbreads?|scones?|brioches?|ciabattas?|baguettes?|crumpets?|muffins?|breadcrumbs?|panko|toasts?|biscuits?|starters?)$/i],
-  ["Rice, pasta & grains", /(?:^|\s)(?:split peas?|pasta shells?|rices?|pastas?|noodles?|spaghetti|fusilli|penne|linguine|macaroni|couscous|quinoas?|lentils?|chickpeas?|oats?|barleys?|bulgurs?|farros?|orzos?|polentas?|buckwheats?|millets?|cornmeals?)$/i],
+  ["Rice, pasta & grains", /(?:^|\s)(?:split peas?|pasta shells?|rices?|pastas?|noodles?|spaghetti|fusilli|penne|linguine|macaroni|couscous|quinoas?|dals?|dhals?|lentils?|chickpeas?|oats?|barleys?|bulgurs?|farros?|orzos?|polentas?|buckwheats?|millets?|cornmeals?)$/i],
   ["Chilled", /(?:^|\s)(?:tofus?|tempehs?|hummuses?|hummus|dips?|seitans?|sauerkrauts?|kimchis?)$/i],
   ["Drinks", /(?:^|\s)(?:teas?|coffees?|wines?|beers?|ciders?|juices?|sodas?|colas?|lagers?|rieslings?|burgund(?:y|ies)|kirsch|moscatels?|waters?|espressos?)$/i],
   ["Fruit & vegetables", /(?:^|\s)(?:onions?|garlics?|tomatoes?|potatoes?|carrots?|celerys?|courgettes?|zucchinis?|aubergines?|eggplants?|broccolis?|cauliflowers?|cabbages?|spinachs?|kales?|lettuces?|rockets?|arugulas?|cucumbers?|peppers?|chill(?:i|is|ies)|chilis?|jalapenos?|jalapeños?|mushrooms?|avocados?|apples?|bananas?|lemons?|limes?|oranges?|pears?|berr(?:y|ies)|strawberr(?:y|ies)|raspberr(?:y|ies)|blueberr(?:y|ies)|blackberr(?:y|ies)|mangos?|mangoes?|pineapples?|peaches?|plums?|gingers?|squash(?:es)?|pumpkins?|beetroots?|radishes?|parsnips?|asparagus|artichokes?|corns?|scallions?|spring onions?|shallots?|peas?|beans?|fennels?|leeks?|swedes?|turnips?|sweet potatoes?|watermelons?|melons?|grapefruits?|pomegranates?|figs?|dates?|cherr(?:y|ies)|apricots?|kiwis?|papayas?|brussels sprouts?|rhubarbs?|radicchios?|chards?|lemongrass|plantains?|yucas?|sprouts?|endives?|alfalfa|watercress)$/i],

@@ -14,8 +14,8 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   today.setDate(today.getDate() - (today.getDay() + 6) % 7);
   const date = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const recipes = {
-    'a.md': ['*2* green or red peppers (seeded and cut into 2 cm chunks)', '*85 ml* plus 5 ml extra-virgin olive oil, plus more for serving', '*1 tsp* kosher salt'],
-    'b.md': ['*30 ml* olive oil', 'fine sea salt', '*10 g* fresh dill leaves (roughly chopped)', '*80 g* ice cubes'],
+    'a.md': ['*2* green or red peppers (seeded and cut into 2 cm chunks)', '*40 ml* plus 45 ml plus 5 ml extra-virgin olive oil, plus more for serving', '*1 tsp* kosher salt'],
+    'b.md': ['*30 ml* olive oil', 'fine sea salt', '*10 g* fresh dill leaves (roughly chopped)', '*80 g* ice cubes', '*100 g* spinach (chopped, frozen)', '*50 g* frozen spinach', '*25 g* spinach'],
     'c.md': ['*180 ml* water, warmed to 40 °c', '*10 ml* (2 tsp), plus more for oiling extra-virgin olive oil', '*12 g* granulated sugar', '*250 g* , plus more for dusting plain flour', '*2 g* salt'],
   };
   const files = { ...Object.fromEntries(Object.entries(recipes).map(([path, ingredients]) => [path, `# ${path}\n\n---\n\n${ingredients.map(text => `- ${text}`).join('\n')}\n\n---\n\nCook.\n`])), 'Plan.md': `## ${date}\n- [[a]]\n- [[b]]\n- [[c]]\n` };
@@ -25,7 +25,7 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
   await page.getByRole('button', { name: 'Build shopping list' }).click();
   await grouping(page, 'Aisle').click();
-  const names = ['2 green or red peppers', '130 ml olive oil', '≈8 g salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour'];
+  const names = ['2 green or red peppers', '130 ml olive oil', '≈8 g salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour', '150 g frozen spinach', '25 g spinach'];
   await expect(page.getByRole('checkbox')).toHaveCount(names.length);
   for (const name of names) await expect(page.getByRole('checkbox', { name, exact: true })).toBeAttached();
   await expect(page.locator('.shopping-group__label', { hasText: /^Other$/ })).toHaveCount(0);
@@ -38,7 +38,7 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   await page.reload();
   await expect(page.getByRole('checkbox', { name: '130 ml olive oil', exact: true })).toBeChecked();
   const markdown = await exportedCookbookText(page, 'Shopping.md');
-  expect(markdown).toContain('- [x] *85 ml* plus 5 ml extra-virgin olive oil, plus more for serving');
+  expect(markdown).toContain('- [x] *40 ml* plus 45 ml plus 5 ml extra-virgin olive oil, plus more for serving');
   expect(markdown).toContain('- [x] *10 ml* (2 tsp), plus more for oiling extra-virgin olive oil');
   expect(markdown).toContain('*250 g* , plus more for dusting plain flour');
   expect(markdown).not.toContain('ice cubes');

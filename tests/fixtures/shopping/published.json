@@ -1,0 +1,610 @@
+{
+  "provenance": {
+    "publisher": "Wikibooks contributors",
+    "license": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "attribution": "Wikibooks contributors; per-recipe source links provide attribution and revision history. Adapted by an AI agent with amount markup and expected shopping labels.",
+    "selection": "Nine convenience-selected published English-language Wikibooks ingredient lists across Indian, Japanese, Greek, Mexican, Middle Eastern, French, Italian and British dishes plus a beverage. Selection was independent of repository implementation, tests and existing cases.",
+    "limitations": [
+      "One publisher; not random or representative of all recipe sites.",
+      "Labels are agent judgments, not human-audited ground truth. Ambiguity fields identify uncertain aisle assumptions and composites.",
+      "No parser or application was run against these cases by the acquiring agent.",
+      "Exact original wording retained except added RecipeMD amount emphasis and normalised hyperlink/HTML whitespace. Difficult ranges, dual units and quantities embedded in prose remain verbatim.",
+      "Only ingredient sections are captured; preparation-only extras and notes are omitted. Optional listed ingredients are retained.",
+      "Purchase is a semantic shopping identity expectation, not a claimed exact implementation slug."
+    ]
+  },
+  "recipes": [
+    {
+      "title": "Tadka Dhal (Spiced Lentil Curry) II",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Tadka_Dhal_(Spiced_Lentil_Curry)_II&oldid=4615201",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "*½ cup* moong dhal, washed",
+          "aisle": "Rice, pasta & grains",
+          "purchase": "moong dhal",
+          "include": true
+        },
+        {
+          "text": "*2 cups* water",
+          "aisle": "Other",
+          "purchase": "water",
+          "include": false
+        },
+        {
+          "text": "2–3 tablespoon cooking oil",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "cooking oil",
+          "include": true
+        },
+        {
+          "text": "3–4 tablespoon finely diced onion",
+          "aisle": "Fruit & vegetables",
+          "purchase": "onion",
+          "include": true
+        },
+        {
+          "text": "*2 cloves* garlic, chopped",
+          "aisle": "Fruit & vegetables",
+          "purchase": "garlic",
+          "include": true
+        },
+        {
+          "text": "1 small sliver of ginger, chopped, or ¼ teaspoon ginger paste",
+          "aisle": "Other",
+          "purchase": "ginger or ginger paste",
+          "include": true,
+          "ambiguity": "Fresh root or jarred paste; cross-aisle alternative."
+        },
+        {
+          "text": "4–5 curry leaves",
+          "aisle": "Other",
+          "purchase": "curry leaves",
+          "include": true,
+          "ambiguity": "Fresh or dried unspecified."
+        },
+        {
+          "text": "*¼ teaspoon* mustard seed",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "mustard seed",
+          "include": true
+        },
+        {
+          "text": "*¼ teaspoon* cumin seed",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "cumin seed",
+          "include": true
+        },
+        {
+          "text": "*¼ teaspoon* fenugreek seed",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "fenugreek seed",
+          "include": true
+        },
+        {
+          "text": "*¼ teaspoon* of asafoetida (optional)",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "asafoetida",
+          "include": true
+        },
+        {
+          "text": "1–2 tomatoes, cut into eighths",
+          "aisle": "Fruit & vegetables",
+          "purchase": "tomatoes",
+          "include": true
+        },
+        {
+          "text": "1–2 green chillies, slit lengthwise",
+          "aisle": "Fruit & vegetables",
+          "purchase": "green chillies",
+          "include": true
+        },
+        {
+          "text": "*¼ teaspoon* turmeric powder",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "turmeric powder",
+          "include": true
+        },
+        {
+          "text": "*¼ teaspoon* red chilli (hot pepper) powder",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "red chilli powder",
+          "include": true
+        },
+        {
+          "text": "*1 pinch* of salt (to taste)",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        }
+      ]
+    },
+    {
+      "title": "Miso Soup",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Miso_Soup&oldid=4610543",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "*½ tsp* sesame oil",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "sesame oil",
+          "include": true
+        },
+        {
+          "text": "*3 cups* water",
+          "aisle": "Other",
+          "purchase": "water",
+          "include": false
+        },
+        {
+          "text": "*2 tbsp* miso",
+          "aisle": "Other",
+          "purchase": "miso",
+          "include": true,
+          "ambiguity": "Refrigerated paste or ambient jar; packaging unspecified."
+        },
+        {
+          "text": "*2* green onions (optional), finely minced",
+          "aisle": "Fruit & vegetables",
+          "purchase": "green onions",
+          "include": true
+        },
+        {
+          "text": "½ cake tofu (optional), cut into ½-inch cubes",
+          "aisle": "Chilled",
+          "purchase": "tofu",
+          "include": true,
+          "ambiguity": "Assumes refrigerated tofu; shelf-stable tofu exists."
+        },
+        {
+          "text": "2–3 fresh mushrooms (optional), thinly sliced",
+          "aisle": "Fruit & vegetables",
+          "purchase": "mushrooms",
+          "include": true
+        },
+        {
+          "text": "5–6 shrimp (optional), cubed or shredded",
+          "aisle": "Meat & fish",
+          "purchase": "shrimp",
+          "include": true
+        },
+        {
+          "text": "Some pieces of seaweed (optional)",
+          "aisle": "Other",
+          "purchase": "seaweed",
+          "include": true,
+          "ambiguity": "Form unspecified: fresh, dried or prepared."
+        }
+      ]
+    },
+    {
+      "title": "Greek Salad",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Greek_Salad&oldid=4518144",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "Red tomatoes, chopped",
+          "aisle": "Fruit & vegetables",
+          "purchase": "red tomatoes",
+          "include": true
+        },
+        {
+          "text": "Cucumber, sliced into rounds",
+          "aisle": "Fruit & vegetables",
+          "purchase": "cucumber",
+          "include": true
+        },
+        {
+          "text": "Red or white onions, sliced into half-moons",
+          "aisle": "Fruit & vegetables",
+          "purchase": "red or white onions",
+          "include": true
+        },
+        {
+          "text": "Green bell peppers, cut into small pieces",
+          "aisle": "Fruit & vegetables",
+          "purchase": "green bell peppers",
+          "include": true
+        },
+        {
+          "text": "Greek olives",
+          "aisle": "Tins & jars",
+          "purchase": "Greek olives",
+          "include": true,
+          "ambiguity": "Assumes preserved olives; deli alternatives exist."
+        },
+        {
+          "text": "Extra-virgin or virgin olive oil",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "olive oil",
+          "include": true
+        },
+        {
+          "text": "Vinegar or lemon juice",
+          "aisle": "Other",
+          "purchase": "vinegar or lemon juice",
+          "include": true,
+          "ambiguity": "Cooking vinegar versus fruit juice or fresh lemon; unresolved alternative."
+        },
+        {
+          "text": "Salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        },
+        {
+          "text": "Feta cheese",
+          "aisle": "Dairy & eggs",
+          "purchase": "feta cheese",
+          "include": true
+        },
+        {
+          "text": "Oregano",
+          "aisle": "Other",
+          "purchase": "oregano",
+          "include": true,
+          "ambiguity": "Ingredient line does not specify fresh or dried; procedure mentions a sprig, but text-only classification cannot know that."
+        }
+      ]
+    },
+    {
+      "title": "Hot Chocolate",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Hot_Chocolate&oldid=4524021",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "1 cup (240 ml / 8.1 oz) milk or water",
+          "aisle": "Other",
+          "purchase": "milk or water",
+          "include": true,
+          "ambiguity": "Purchase milk or use home water; retain unresolved alternative."
+        },
+        {
+          "text": "*1 teaspoon* cocoa powder",
+          "aisle": "Baking",
+          "purchase": "cocoa powder",
+          "include": true
+        },
+        {
+          "text": "*1 teaspoon* sugar",
+          "aisle": "Baking",
+          "purchase": "sugar",
+          "include": true
+        }
+      ]
+    },
+    {
+      "title": "Hummus I",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Hummus_I&oldid=4515548",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "*1 cup* dry chickpeas",
+          "aisle": "Rice, pasta & grains",
+          "purchase": "dry chickpeas",
+          "include": true
+        },
+        {
+          "text": "Water",
+          "aisle": "Other",
+          "purchase": "water",
+          "include": false
+        },
+        {
+          "text": "*1 teaspoon* baking soda",
+          "aisle": "Baking",
+          "purchase": "baking soda",
+          "include": true
+        },
+        {
+          "text": "2–3 cloves of garlic",
+          "aisle": "Fruit & vegetables",
+          "purchase": "garlic",
+          "include": true
+        },
+        {
+          "text": "*1 teaspoon* salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        },
+        {
+          "text": "Tahini and water, to make a paste",
+          "aisle": "Tins & jars",
+          "purchase": "tahini",
+          "include": true,
+          "ambiguity": "Combined line: tahini purchased, home water excluded from purchase."
+        },
+        {
+          "text": "Ground cumin",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "ground cumin",
+          "include": true
+        },
+        {
+          "text": "Fresh, coarsely-cut coriander leaves",
+          "aisle": "Fruit & vegetables",
+          "purchase": "coriander leaves",
+          "include": true
+        },
+        {
+          "text": "Salt to taste",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        }
+      ]
+    },
+    {
+      "title": "Guacamole I",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Guacamole_I&oldid=4636788",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "*4* avocados",
+          "aisle": "Fruit & vegetables",
+          "purchase": "avocados",
+          "include": true
+        },
+        {
+          "text": "*2 tablespoons* pico de gallo",
+          "aisle": "Chilled",
+          "purchase": "pico de gallo",
+          "include": true,
+          "ambiguity": "Assumes prepared fresh salsa; homemade subrecipe possible."
+        },
+        {
+          "text": "Juice of ½ lime",
+          "aisle": "Fruit & vegetables",
+          "purchase": "lime",
+          "include": true
+        },
+        {
+          "text": "2 chopped Jalapeño OR 2 tablespoons of crushed red pepper OR 1 tablespoon of cayenne pepper",
+          "aisle": "Other",
+          "purchase": "Jalapeño or crushed red pepper or cayenne pepper",
+          "include": true,
+          "ambiguity": "Fresh or dried alternatives cross aisles."
+        },
+        {
+          "text": "*1 teaspoon* salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        },
+        {
+          "text": "*4 teaspoons* olive oil",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "olive oil",
+          "include": true
+        },
+        {
+          "text": "*1 ½ teaspoon* minced garlic",
+          "aisle": "Fruit & vegetables",
+          "purchase": "garlic",
+          "include": true,
+          "ambiguity": "Assumes fresh garlic; jarred minced garlic exists."
+        },
+        {
+          "text": "*½ teaspoon* of ground black pepper",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "black pepper",
+          "include": true
+        },
+        {
+          "text": "1 minced jalapeño OR 2 minced serrano chiles OR 2 tablespoon minced of any chile pepper like (adjust for spiciness)",
+          "aisle": "Fruit & vegetables",
+          "purchase": "jalapeño or serrano chiles or chile pepper",
+          "include": true
+        }
+      ]
+    },
+    {
+      "title": "Crêpes I",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Crêpes_I&oldid=4443403",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "220 g (1 cup / 8 oz) plain flour",
+          "aisle": "Baking",
+          "purchase": "plain flour",
+          "include": true
+        },
+        {
+          "text": "345 ml (1 ½ cup / 12 fl oz) milk",
+          "aisle": "Dairy & eggs",
+          "purchase": "milk",
+          "include": true
+        },
+        {
+          "text": "*2* eggs",
+          "aisle": "Dairy & eggs",
+          "purchase": "eggs",
+          "include": true
+        },
+        {
+          "text": "*2 tbsp* oil or melted butter",
+          "aisle": "Other",
+          "purchase": "oil or butter",
+          "include": true,
+          "ambiguity": "Cross-aisle alternative."
+        },
+        {
+          "text": "*1 pinch* of salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        },
+        {
+          "text": "Sugar and lemon",
+          "aisle": "Other",
+          "purchase": "sugar and lemon",
+          "include": true,
+          "ambiguity": "Two products in different aisles."
+        },
+        {
+          "text": "Raspberry jam and chocolate sauce",
+          "aisle": "Other",
+          "purchase": "raspberry jam and chocolate sauce",
+          "include": true,
+          "ambiguity": "Two products: preserve and dessert sauce."
+        },
+        {
+          "text": "Nutella and sliced banana",
+          "aisle": "Other",
+          "purchase": "Nutella and banana",
+          "include": true,
+          "ambiguity": "Two products in different aisles."
+        },
+        {
+          "text": "Nutella and chopped hazelnuts",
+          "aisle": "Other",
+          "purchase": "Nutella and hazelnuts",
+          "include": true,
+          "ambiguity": "Two products in potentially different aisles."
+        },
+        {
+          "text": "Whipped cream",
+          "aisle": "Dairy & eggs",
+          "purchase": "whipped cream",
+          "include": true
+        },
+        {
+          "text": "Chocolate, caramel, or butterscotch sauce",
+          "aisle": "Baking",
+          "purchase": "chocolate or caramel or butterscotch sauce",
+          "include": true
+        },
+        {
+          "text": "Frangipane",
+          "aisle": "Other",
+          "purchase": "frangipane",
+          "include": true,
+          "ambiguity": "Prepared filling or homemade subrecipe, storage unspecified."
+        },
+        {
+          "text": "Peanut butter",
+          "aisle": "Tins & jars",
+          "purchase": "peanut butter",
+          "include": true
+        },
+        {
+          "text": "Sugar and butter, possibly with lemon or cinnamon",
+          "aisle": "Other",
+          "purchase": "sugar and butter with lemon or cinnamon",
+          "include": true,
+          "ambiguity": "Composite ingredients across aisles."
+        },
+        {
+          "text": "Strawberries (fresh or frozen)",
+          "aisle": "Other",
+          "purchase": "strawberries fresh or frozen",
+          "include": true,
+          "ambiguity": "Explicit cross-aisle alternative."
+        },
+        {
+          "text": "Cream cheese and brown sugar",
+          "aisle": "Other",
+          "purchase": "cream cheese and brown sugar",
+          "include": true,
+          "ambiguity": "Two products in different aisles."
+        },
+        {
+          "text": "Slivers of chicken, broccoli, and cheese sauce",
+          "aisle": "Other",
+          "purchase": "chicken broccoli and cheese sauce",
+          "include": true,
+          "ambiguity": "Three products in different aisles."
+        }
+      ],
+      "selection_note": "Complete Ingredients section, including optional fillings; optional entries retained."
+    },
+    {
+      "title": "Spaghetti alla Carbonara",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Spaghetti_alla_Carbonara&oldid=4640105",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "450 g (1 pound) spaghetti",
+          "aisle": "Rice, pasta & grains",
+          "purchase": "spaghetti",
+          "include": true
+        },
+        {
+          "text": "225–500 g (½–1 pound) guanciale or pancetta",
+          "aisle": "Meat & fish",
+          "purchase": "guanciale or pancetta",
+          "include": true
+        },
+        {
+          "text": "*5* egg yolks",
+          "aisle": "Dairy & eggs",
+          "purchase": "eggs",
+          "include": true
+        },
+        {
+          "text": "178 ml (¾ cup) grated Pecorino Romano cheese",
+          "aisle": "Dairy & eggs",
+          "purchase": "Pecorino Romano cheese",
+          "include": true
+        },
+        {
+          "text": "178 ml (¾ cup) grated Parmigiano-Reggiano cheese",
+          "aisle": "Dairy & eggs",
+          "purchase": "Parmigiano-Reggiano cheese",
+          "include": true
+        },
+        {
+          "text": "3–4 tablespoons extra-virgin olive oil",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "olive oil",
+          "include": true
+        },
+        {
+          "text": "*½ tablespoon* freshly-ground pepper",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "black pepper",
+          "include": true
+        },
+        {
+          "text": "Salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        }
+      ]
+    },
+    {
+      "title": "Shortbread",
+      "source": "https://en.wikibooks.org/w/index.php?title=Cookbook:Shortbread&oldid=4515326",
+      "license": "CC-BY-SA-4.0",
+      "ingredients": [
+        {
+          "text": "380 g (1 ½ cup / 13 ½ oz) all-purpose flour",
+          "aisle": "Baking",
+          "purchase": "all-purpose flour",
+          "include": true
+        },
+        {
+          "text": "*¼ tsp* salt",
+          "aisle": "Herbs, spices & oils",
+          "purchase": "salt",
+          "include": true
+        },
+        {
+          "text": "220 g (1 cup / 8 oz) butter",
+          "aisle": "Dairy & eggs",
+          "purchase": "butter",
+          "include": true
+        },
+        {
+          "text": "110 g (½ cup / 4 oz) white granulated sugar",
+          "aisle": "Baking",
+          "purchase": "white granulated sugar",
+          "include": true
+        }
+      ]
+    }
+  ]
+}
