@@ -22,8 +22,8 @@ describe('shopping nouns', () => {
     for (const grouping of ['none', 'section'] as const) {
       const rows = groupShoppingItems(items, grouping).flatMap(group => group.items);
       expect(rows).toHaveLength(2);
-      expect(rows[0]).toMatchObject({ content: 'Aubergine 2', checked: false, memberIds: ['1', '2'], sources: ['Pie', 'Soup'] });
-      expect(rows[1]).toMatchObject({ content: 'salt 1 tsp + 2 g + salt, to taste', memberIds: ['3', '4', '5', '6'] });
+      expect(rows[0]).toMatchObject({ content: '2 Aubergine', checked: false, memberIds: ['1', '2'], sources: ['Pie', 'Soup'] });
+      expect(rows[1]).toMatchObject({ content: '0.5 tsp salt + 0.5 tsp fine salt + 2 g salt + salt, to taste', memberIds: ['3', '4', '5', '6'] });
     }
     const recipeRows = groupShoppingItems(items, 'recipe').flatMap(group => group.items);
     expect(recipeRows).toHaveLength(6);
@@ -35,7 +35,7 @@ describe('shopping nouns', () => {
       item('3', '*1* tomato', 'Two'), item('4', '*2* tomatoes', 'Two'),
       item('5', '2 eggs', 'Other'), item('6', 'eggs', 'Other')];
     const rows = groupShoppingItems(items, 'none')[0].items;
-    expect(rows.map(row => row.content)).toEqual(['couscous 100 g', 'asparagus 200 g', 'tomato 3', '2 eggs', 'eggs']);
+    expect(rows.map(row => row.content)).toEqual(['100 g couscous', '200 g asparagus', '3 tomato', '2 eggs', 'eggs']);
     expect(groupShoppingItems([item('1', '*1* aubergine', 'One', true), item('2', '*1* aubergine', 'Two', true)], 'none')[0].items[0].checked).toBe(true);
   });
 
@@ -43,7 +43,7 @@ describe('shopping nouns', () => {
     const items = [item('1', '*1* aubergine', 'Pie'), item('2', '*2* eggplants', 'Curry')];
     const rows = groupShoppingItems(items, 'none')[0].items;
     expect(rows).toHaveLength(1);
-    expect(rows[0].content).toBe('aubergine 3');
+    expect(rows[0].content).toBe('3 aubergine');
     expect(rows[0].sources).toEqual(['Pie', 'Curry']);
   });
 });
@@ -53,7 +53,7 @@ it('retains unquantified range text and first-seen noun spelling without interpr
   const alone = groupShoppingItems([range], 'none')[0].items[0];
   expect(alone.content).toBe('garlic, 5-6 cloves');
   const mixed = groupShoppingItems([item('amount', '*2 cloves* Garlic, minced', 'Pie'), range, item('range2', 'garlic, 1-2 heads', 'Stew')], 'none')[0].items[0];
-  expect(mixed.content).toBe('Garlic 2 cloves + garlic, 5-6 cloves + garlic, 1-2 heads');
+  expect(mixed.content).toBe('2 cloves Garlic + garlic, 5-6 cloves + garlic, 1-2 heads');
   expect(mixed.memberIds).toEqual(['amount', 'range', 'range2']);
-  expect(groupShoppingItems([item('1', '*1* Aubergine, sliced', 'Pie'), item('2', '*1* aubergine, diced', 'Soup')], 'none')[0].items[0].content).toBe('Aubergine 2');
+  expect(groupShoppingItems([item('1', '*1* Aubergine, sliced', 'Pie'), item('2', '*1* aubergine, diced', 'Soup')], 'none')[0].items[0].content).toBe('2 Aubergine');
 });

@@ -137,14 +137,14 @@ describe("heldout whole shopping list deduplication scenarios", () => {
     const merged = mergeShoppingItems(list);
     expect(merged).toHaveLength(2);
 
-    const aubergineRow = merged.find(r => r.content.startsWith("aubergine"));
+    const aubergineRow = merged.find(r => r.content.endsWith("aubergine"));
     expect(aubergineRow).toBeDefined();
-    expect(aubergineRow!.content).toBe("aubergine 3");
+    expect(aubergineRow!.content).toBe("3 aubergine");
     expect(aubergineRow!.sources).toEqual(["Ratatouille", "Moussaka"]);
 
-    const rocketRow = merged.find(r => r.content.startsWith("rocket"));
+    const rocketRow = merged.find(r => r.content.endsWith("rocket"));
     expect(rocketRow).toBeDefined();
-    expect(rocketRow!.content).toBe("rocket 200 g");
+    expect(rocketRow!.content).toBe("200 g rocket");
     expect(rocketRow!.sources).toEqual(["Salad", "Pizza"]);
     expect(rocketRow!.partial).toBe(true); // 1 checked, 1 unchecked
   });

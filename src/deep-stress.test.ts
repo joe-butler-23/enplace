@@ -32,7 +32,7 @@ describe("deep mathematical and fractional arithmetic invariants", () => {
     ];
     const merged = mergeShoppingItems(items);
     expect(merged).toHaveLength(1);
-    expect(merged[0].content).toBe("aubergine 2");
+    expect(merged[0].content).toBe("2 aubergine");
   });
 
   it("handles standard culinary fractional sums exactly", () => {
@@ -63,7 +63,7 @@ describe("deep mathematical and fractional arithmetic invariants", () => {
 
     const merged = mergeShoppingItems(items);
     expect(merged).toHaveLength(1);
-    expect(merged[0].content).toBe("plain flour 300 g + 1 cup + plain flour, for dusting");
+    expect(merged[0].content).toBe("300 g + 1 cup plain flour + plain flour, for dusting");
     expect(merged[0].memberIds).toEqual(["1", "2", "3", "4"]);
   });
 
@@ -74,7 +74,7 @@ describe("deep mathematical and fractional arithmetic invariants", () => {
     ];
     const merged = mergeShoppingItems(items);
     expect(merged).toHaveLength(1);
-    expect(merged[0].content).toBe("chickpeas 3 cans");
+    expect(merged[0].content).toBe("3 cans chickpeas");
     expect(merged[0].sources).toEqual(["Curry", "Salad"]);
   });
 });

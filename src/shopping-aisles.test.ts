@@ -200,7 +200,7 @@ it.each(['coconut cream', 'light coconut milk', 'tomato purée', 'tomato pure\u0
   expect(core.inferAisle(name)).toBe('Tins & jars');
 });
 
-it.each(['lemon finely grated zest and juice', 'vegetable stock or water', 'dried sour cherries soaked in lemon juice'])('does not infer a drink from %s', name => {
+it.each(['vegetable stock or water', 'dried sour cherries soaked in lemon juice'])('does not infer a drink from %s', name => {
   expect(core.inferAisle(name)).toBeNull();
   expect(core.resolveShoppingAisle(name, new Map([[core.normalizeShoppingNoun(name), 'Fruit & vegetables']]))).toBe('Fruit & vegetables');
 });
@@ -220,8 +220,8 @@ it.each([
   ['vegetable stock or water', null],
   ['water or milk', null],
   ['milk or water', null],
-  ['lemon zest & juice', null],
-  ['lemon zest and juice', null],
+  ['lemon zest & juice', 'Fruit & vegetables'],
+  ['lemon zest and juice', 'Fruit & vegetables'],
   ['dried cherries soaked in olive oil', null],
   ['dried cherries soaked in milk', null],
   ['dried cherries soaked in lemon juice', null],

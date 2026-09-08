@@ -4,6 +4,49 @@ import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook,
 
 const grouping = (page: Page, name: string) => page.getByRole('group', { name: 'Group shopping list' }).getByRole('button', { name, exact: true });
 
+test('preparation-heavy planned recipes produce clean purchase rows with original requirements', async ({ page }) => {
+  await openFreshCookbook(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove sample recipes' }).click();
+  await expect(page.locator('.mep-notices')).toContainText('Removed sample recipes.');
+  const today = new Date();
+  today.setDate(today.getDate() - (today.getDay() + 6) % 7);
+  const date = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+  const recipes = {
+    'a.md': ['*2* green or red peppers, seeded and cut into 2 cm chunks', '*90 ml* extra-virgin olive oil, plus more for serving', '*1 tsp* kosher salt'],
+    'b.md': ['*30 ml* olive oil', 'fine sea salt', '*10 g* fresh dill leaves', '*80 g* ice cubes'],
+    'c.md': ['*180 ml* water, warmed to 40 °c', '*10 ml* (2 tsp), plus more for oiling extra-virgin olive oil', '*12 g* granulated sugar', '*250 g* , plus more for dusting plain flour', '*2 g* salt'],
+  };
+  const files = { ...Object.fromEntries(Object.entries(recipes).map(([path, ingredients]) => [path, `# ${path}\n\n---\n\n${ingredients.map(text => `- ${text}`).join('\n')}\n\n---\n\nCook.\n`])), 'Plan.md': `## ${date}\n- [[a]]\n- [[b]]\n- [[c]]\n` };
+  await page.locator('.mep-settings__file-button', { hasText: 'Import files' }).locator('input').setInputFiles(Object.entries(files).map(([name, text]) => ({ name, mimeType: 'text/markdown', buffer: Buffer.from(text) })));
+  await expect(page.locator('.mep-notices')).toContainText('3 recipes recognised.');
+  await page.getByTitle('Close settings').click();
+  await page.getByRole('button', { name: 'Planner', exact: true }).click();
+  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  await grouping(page, 'Aisle').click();
+  const names = ['2 green or red peppers', '130 ml olive oil', '1 tsp kosher salt + 2 g salt + fine sea salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour'];
+  await expect(page.getByRole('checkbox')).toHaveCount(names.length);
+  for (const name of names) await expect(page.getByRole('checkbox', { name, exact: true })).toBeAttached();
+  await expect(page.locator('.shopping-group__label', { hasText: /^Other$/ })).toHaveCount(0);
+  const oil = page.locator('.shopping-item').filter({ has: page.getByRole('checkbox', { name: '130 ml olive oil', exact: true }) });
+  await oil.getByText('Recipe requirements', { exact: true }).click();
+  await expect(oil.locator('details')).toContainText('90 ml extra-virgin olive oil, plus more for serving');
+  await expect(oil.getByRole('checkbox')).not.toBeChecked();
+  await oil.getByText('130 ml olive oil', { exact: true }).click();
+  await expect(oil.getByRole('checkbox')).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('checkbox', { name: '130 ml olive oil', exact: true })).toBeChecked();
+  const markdown = await exportedCookbookText(page, 'Shopping.md');
+  expect(markdown).toContain('- [x] *90 ml* extra-virgin olive oil, plus more for serving');
+  expect(markdown).toContain('- [x] *10 ml* (2 tsp), plus more for oiling extra-virgin olive oil');
+  expect(markdown).toContain('*250 g* , plus more for dusting plain flour');
+  expect(markdown).not.toContain('ice cubes');
+  expect(markdown).not.toContain('water, warmed');
+});
+
 test('merged shopping rows retain raw recipe blocks and synced aisle memory through reset and ZIP', async ({ page, browser }) => {
   await openFreshCookbook(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -29,10 +72,10 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
   await page.getByText('1 aubergine, diced', { exact: true }).click();
   await grouping(page, 'Aisle').click();
   await expect(page.getByRole('checkbox')).toHaveCount(2);
-  const aubergine = page.getByRole('checkbox', { name: 'aubergine 2', exact: true });
+  const aubergine = page.getByRole('checkbox', { name: '2 aubergine', exact: true });
   await expect(aubergine).not.toBeChecked();
-  await expect(page.getByLabel('Aisle for salt 1 tsp', { exact: true })).toHaveValue('Herbs, spices & oils');
-  await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Aisle for 1 tsp salt', { exact: true })).toHaveValue('Herbs, spices & oils');
+  await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('');
   await expect(page.locator('.shopping-item').filter({ has: aubergine }).locator('.shopping-item__sources')).toHaveText('Pie, Soup');
   const secondContext = await browser.newContext();
   const second = await secondContext.newPage();
@@ -42,16 +85,16 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await second.goto(page.url());
     await expect(second.getByRole('checkbox')).toHaveCount(4);
     await grouping(second, 'Aisle').click();
-    await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('Fruit & vegetables');
-    await expect(second.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Fruit & vegetables');
-    await second.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('Chilled');
-    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Chilled');
-    await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('');
-    await expect(second.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('');
-    await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('Other');
-    await page.getByText('aubergine 2', { exact: true }).click();
+    await page.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('Fruit & vegetables');
+    await expect(second.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Fruit & vegetables');
+    await second.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('Chilled');
+    await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Chilled');
+    await page.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('');
+    await expect(second.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('');
+    await page.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('Other');
+    await page.getByText('2 aubergine', { exact: true }).click();
     await expect(aubergine).toBeChecked();
-    await expect(second.getByRole('checkbox', { name: 'aubergine 2', exact: true })).toBeChecked();
+    await expect(second.getByRole('checkbox', { name: '2 aubergine', exact: true })).toBeChecked();
     await grouping(page, 'None').click();
     await expect(page.getByRole('checkbox')).toHaveCount(2);
     await grouping(page, 'Recipe').click();
@@ -69,9 +112,9 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await page.getByRole('button', { name: 'Planner', exact: true }).click();
     await page.getByRole('button', { name: 'Build shopping list' }).click();
     await grouping(page, 'Aisle').click();
-    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
+    await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Other');
     await page.reload();
-    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
+    await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Other');
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: '/tmp/mep-s9k/shopping-merged-phone.png' });
@@ -88,7 +131,7 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await restored.getByTitle('Close settings').click();
     await openShopping(restored);
     await grouping(restored, 'Aisle').click();
-    await expect(restored.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
+    await expect(restored.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Other');
     expect(await exportedCookbookText(restored, 'Aisles.md')).toBe(aisles);
   } finally {
     await secondContext.close();

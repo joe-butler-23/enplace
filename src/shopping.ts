@@ -13,6 +13,7 @@ export type ShoppingRow = ShoppingItem & {
   memberIds: string[];
   partial?: boolean;
   checkedCount?: number;
+  requirements?: string[];
 };
 
 const PLURALS_TO_SINGULAR = new Map([
@@ -53,16 +54,40 @@ export function singularize(word: string): string {
   return word;
 }
 
-const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|crushed|rinsed|washed|deseeded|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked";
+const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|unpeeled|crushed|smashed|bashed|rinsed|washed|seeded|deseeded|cored|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|warmed|minced|pitted|stoned|drained";
 const preparationModifier = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly)\\s+)?";
-const operation = preparationModifier + "(?:" + preparationVerbs + "|cut\\s+into\\s+[a-z\\s]+|half\\s+juiced[a-z\\s]+|to\\s+serve|for\\s+serving|to\\s+taste|for\\s+(?:dusting|frying|greasing|garnish|garnishing|drizzling)|zest\\s+only|fine|minced|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?))";
-const operationSequence = (operation: string) => operation + "(?:(?:\\s+and\\s+|,\\s*(?:and\\s+)?)" + operation + ")*\\s*$";
-const operationTail = new RegExp("^\\s*" + operationSequence(operation), "i");
-const aislePreparationTail = new RegExp("\\s+" + operationSequence(preparationModifier + "(?:" + preparationVerbs + "|minced|pitted|stoned|drained)"), "i");
+const preparationStart = new RegExp("^(?:" + preparationModifier + "(?:" + preparationVerbs + ")\\b|cut\\s+into\\b|(?:crusts?|skins?|seeds?|stems?|stalks?|cores?|pith)\\s+removed\\b|(?:plus\\s+more\\s+)?(?:to\\s+(?:taste|serve)|for\\s+\\w+)\\b|to\\s+get\\b|frozen\\s+for\\s+storage$|zest\\s+only$|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?)$)", "i");
+const inlinePreparation = new RegExp("\\s+" + preparationModifier + "(?:" + preparationVerbs + "|cut\\s+into)\\b", "i");
+const countPart = /^(cloves?|heads?|bulbs?|stalks?|sprigs?|bunches?)\s+(?:of\s+)?(.+)$|^(.+?)\s+(cloves?|heads?|bulbs?|stalks?|sprigs?|bunches?)$/i;
 
 export function preparedName(name: string): string {
-  const comma = name.indexOf(",");
-  return comma >= 0 && operationTail.test(name.slice(comma + 1)) ? name.slice(0, comma).trim() : name;
+  // Remove quantity hints, never parenthesised product forms or alternatives.
+  let product = name.replace(/\(\s*(?:about\s+)?\d+(?:[./]\d+)?\s*(?:g|kg|ml|l|tsp|tbsp|small|medium|large|slices?|cloves?)\s*\)/gi, " ").trim()
+    .replace(/^[,\s]*(?:plus\s+(?:more\s+)?for\s+(?:dusting|oiling|greasing|frying)\s+)/i, "");
+  product = product.replace(/^(.+),\s*(fine|coarse|flaky)$/i, "$2 $1");
+  product = product.replace(/\b(lemon|lime|orange|grapefruit)(?:s)?\s+finely grated zest\b/gi, "$1 zest");
+  const clauses = product.split(/,\s*/);
+  const preparation = clauses.findIndex((clause, i) => i > 0 && preparationStart.test(clause));
+  if (preparation >= 0 && clauses.slice(preparation).every(clause => !/\bor\b/i.test(clause) && preparationStart.test(clause.replace(/^(?:and\s+|(?:the\s+)?rest\s+|(?:[¼-¾⅐-⅞]|\d+(?:\/\d+)?|half)\s+(?:of\s+it\s+)?)/i, "")))) product = clauses.slice(0, preparation).join(", ");
+  const inline = inlinePreparation.exec(product);
+  if (inline) {
+    const head = product.slice(0, inline.index);
+    if (AISLE_RULES.some(([, rx]) => rx.test(head)) && !/[,]|\bor\b/i.test(product.slice(inline.index))) product = head;
+  }
+  return product.replace(/\s+/g, " ").trim() || name;
+}
+
+function countedProduct(name: string): { name: string; unit: string | null } {
+  const match = countPart.exec(name);
+  if (match && !AISLE_RULES.some(([, rx]) => rx.test(match[2] ?? match[3]))) return { name, unit: null };
+  return match ? { name: match[2] ?? match[3], unit: singularize((match[1] ?? match[4]).toLowerCase()) + "s" } : { name, unit: null };
+}
+
+// Purchase families are not quantity equivalences: salt varieties keep their own totals.
+function purchaseFamily(noun: string): string {
+  if (/^(?:(?:extra )?virgin )?olive oil$/.test(noun)) return "olive oil";
+  if (/^(?:(?:fine|coarse|flaky) )?(?:(?:sea|kosher|table) )?salt$/.test(noun)) return "salt";
+  return noun;
 }
 
 export const PHRASE_EQUIVALENCES: Array<[string, string]> = [
@@ -152,7 +177,7 @@ const CANONICAL_REGEX = new RegExp("\\b(?:" + [...CANONICAL.keys()]
 
 export function normalizeShoppingNoun(text: string): string {
   if (typeof text !== "string") return "";
-  let s = preparedName(text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim());
+  let s = countedProduct(preparedName(text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim())).name;
   s = s.replace(/['\u2019]s\b/g, "");
   s = s.replace(/(?<=[a-z])-(?=[a-z])/g, " ");
   s = s.replace(/\s+/g, " ").trim();
@@ -184,11 +209,20 @@ export function shoppingIngredient(text: string): {
   const clean = text.replace(/<!--[\s\S]*?-->/g, "").trim();
   try {
     const ingredient = parseRecipeIngredient(clean, true);
+    let name = preparedName(ingredient.name);
+    let amount = ingredient.amount;
+    const counted = countedProduct(name);
+    if (counted.unit) {
+      name = counted.name;
+      if (amount && !amount.unit) amount = { ...amount, unit: counted.unit };
+    }
+    // A counted citrus fruit can supply zest/juice; a mass of zest is not fruit mass.
+    if (amount && !amount.unit) name = name.replace(/^(.*?\b(?:lemon|lime|orange|grapefruit)s?)\s+(?:zest|finely grated zest)\b.*$/i, "$1");
     return {
-      noun: normalizeShoppingNoun(ingredient.name),
-      name: ingredient.name,
+      noun: normalizeShoppingNoun(name),
+      name,
       display: ingredient.display,
-      amount: ingredient.amount,
+      amount,
     };
   } catch {
     return {
@@ -262,7 +296,8 @@ function normalizeUnit(unit: string | null): string | null {
 export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[] {
   type GroupData = {
     row: ShoppingRow;
-    amounts: Map<string | null, Rational>;
+    amounts: Map<string, { unit: string | null; name: string; factor: Rational }>;
+    requirements: Set<string>;
     unquantified: Map<string, string>;
     sources: Set<string>;
   };
@@ -271,26 +306,29 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
   for (const item of items) {
     const { noun, name, display, amount } = shoppingIngredient(item.content);
     const unit = normalizeUnit(amount?.unit ?? null);
-    const isPackaged = unit === "cans" || unit === "tins";
-    const groupKey = isPackaged ? `${noun}:package` : noun;
+    const isPackaged = /^(?:cans?|tins?|jars?)$/.test(unit ?? "");
+    const family = purchaseFamily(noun);
+    const groupKey = JSON.stringify([family, isPackaged, item.aisle ?? item.labels[0] ?? ""]);
 
     let group = groups.get(groupKey);
     if (!group) {
       group = {
         row: {
           ...item,
-          content: preparedName(name),
+          content: family !== noun ? family : name,
           memberIds: [],
           checked: true,
           checkedCount: 0,
         },
         sources: new Set(),
+        requirements: new Set(),
         amounts: new Map(),
         unquantified: new Map(),
       };
       groups.set(groupKey, group);
     }
     group.row.memberIds.push(item.id);
+    group.requirements.add(display);
     for (const source of item.sources ?? []) group.sources.add(source);
     if (item.labels?.length && !group.row.labels?.length) group.row.labels = item.labels;
     if (item.aisle && !group.row.aisle) group.row.aisle = item.aisle;
@@ -303,8 +341,9 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     if (amount) {
       try {
         const factor = parseRational(amount.factor);
-        const current = group.amounts.get(unit);
-        group.amounts.set(unit, current ? addRational(current, factor) : factor);
+        const key = JSON.stringify([unit, family === "salt" ? noun : ""]);
+        const current = group.amounts.get(key);
+        group.amounts.set(key, { unit, name: family === "salt" ? name : group.row.content, factor: current ? addRational(current.factor, factor) : factor });
       } catch {
         const key = display.toLowerCase();
         if (!group.unquantified.has(key)) group.unquantified.set(key, display);
@@ -315,9 +354,13 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     }
   }
 
-  return [...groups.values()].map(({ row, amounts, unquantified, sources }) => {
-    const quantities = [...amounts].map(([unit, factor]) => `${formatRational(factor)}${unit ? ` ${unit}` : ""}`);
-    const quantified = quantities.length ? `${row.content} ${quantities.join(" + ")}` : "";
+  return [...groups.values()].map(({ row, amounts, unquantified, sources, requirements }) => {
+    const totals = [...amounts.values()];
+    const quantity = ({ unit, factor }: typeof totals[number]) => `${formatRational(factor)}${unit ? ` ${unit}` : ""}`;
+    const sameName = totals.every(total => total.name === totals[0]?.name);
+    const quantified = sameName && totals.length
+      ? `${totals.map(quantity).join(" + ")} ${totals[0].name}`
+      : totals.map(total => `${quantity(total)} ${total.name}`).join(" + ");
     const content = [quantified, ...unquantified.values()].filter(Boolean).join(" + ");
     const totalMembers = row.memberIds.length;
     const checkedCount = row.checkedCount ?? 0;
@@ -326,6 +369,7 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
       ...row,
       sources: [...sources],
       content,
+      requirements: [...requirements],
       partial,
     };
   });
@@ -340,8 +384,8 @@ export type ShoppingIngredientInput = {
 const AISLE_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Frozen", /^frozen\b/i],
   ["Tins & jars", /^(?:can|tin|jar|cans|tins|jars|canned|tinned|jarred)\b/i],
-  ["Fruit & vegetables", /\bfresh\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
-  ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
+  ["Fruit & vegetables", /\bfresh\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)(?:\s+(?:leaf|leaves))?$/i],
+  ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)(?:\s+(?:leaf|leaves))?$/i],
   ["Tins & jars", /\b(?:peanut|groundnut|almond|cashew|seed|nut)\s+butter$/i],
   ["Tins & jars", /\bcoconut\s+(?:milk|cream)$/i],
   ["Baking", /\b(?:cocoa|cacao|shea)\s+butter$/i],
@@ -375,18 +419,16 @@ export function inferAisle(
     return null;
   }
 
-  // Base noun without connector prefix, preparation commas, or parentheticals
-  const base = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/^[,\s;:-]+(?:plus\s+more\s+for\s+\w+\s+|plus\s+for\s+\w+\s+|plus\s+more\s+)?/i, "")
-    .split(",")[0]
-    .replace(/\([^)]*\)/g, "")
-    .replace(aislePreparationTail, "")
-    .trim();
+  const base = preparedName(clean).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   if (/\bsoaked\b/i.test(clean)) return null;
-  const alternatives = base.split(/\s+(?:or|and)\s+|\s*&\s*/i);
+  if (/^(?:lemon|lime|orange|grapefruit)s?\s+zest(?:\s*(?:and|&)\s*juice)?$/i.test(base)) return "Fruit & vegetables";
+  const alternatives = base.split(/,\s*(?:(?:or|and)\s+)?|\s+(?:or|and)\s+|\s*&\s*/i);
+  const classify = (name: string) => AISLE_RULES.find(([, rx]) => rx.test(name.trim()))?.[0];
+  const head = alternatives[alternatives.length - 1]?.trim().split(/\s+/).pop() ?? "";
   if (alternatives.length === 1 && /^(?:cans?|tins?|jars?)$/i.test(parsed.amount?.unit?.trim() ?? "")) return "Tins & jars";
-  const aisles = alternatives.map(name => AISLE_RULES.find(([, rx]) => rx.test(name.trim()))?.[0]);
+  // Only adjective alternatives inherit a shared head; known nouns keep their own aisle.
+  const aisles = alternatives.map(name => classify(name) ?? (/^(?:white|brown|green|red|yellow|orange|black|french|italian|white sandwich)$/i.test(name.trim()) ? classify(`${name} ${head}`) : undefined));
   return aisles[0] && aisles.every(aisle => aisle === aisles[0]) ? aisles[0] : null;
 }
 

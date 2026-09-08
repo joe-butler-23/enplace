@@ -109,7 +109,7 @@ describe("mergeShoppingItems", () => {
     const items = [makeItem("a", `*${left} tsp* salt`, "A"), makeItem("b", `*${right} tsp* salt`, "B")];
     const original = structuredClone(items);
     const [row] = mergeShoppingItems(items);
-    expect(row.content).toBe(`salt ${total} tsp`);
+    expect(row.content).toBe(`${total} tsp salt`);
     expect(row.memberIds).toEqual(["a", "b"]);
     expect(row.sources).toEqual(["A", "B"]);
     expect(items).toEqual(original);
@@ -122,7 +122,7 @@ describe("mergeShoppingItems", () => {
     ];
     const rows = mergeShoppingItems(items);
     expect(rows).toHaveLength(1);
-    expect(rows[0].content).toBe("aubergine 3");
+    expect(rows[0].content).toBe("3 aubergine");
     expect(rows[0].memberIds).toEqual(["1", "2"]);
     expect(rows[0].sources).toEqual(["Pie", "Curry"]);
   });
@@ -155,8 +155,8 @@ describe("mergeShoppingItems", () => {
     const rows = mergeShoppingItems(items);
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r.content)).toEqual([
-      "chopped tomatoes 2 cans",
-      "chopped tomatoes 400 g",
+      "2 cans chopped tomatoes",
+      "400 g chopped tomatoes",
     ]);
   });
 
@@ -169,7 +169,7 @@ describe("mergeShoppingItems", () => {
     ];
     const rows = mergeShoppingItems(items);
     expect(rows).toHaveLength(1);
-    expect(rows[0].content).toBe("salt 1 tsp + 2 g + salt, to taste");
+    expect(rows[0].content).toBe("0.5 tsp salt + 0.5 tsp fine salt + 2 g salt + salt, to taste");
     expect(rows[0].memberIds).toEqual(["1", "2", "3", "4"]);
   });
 });

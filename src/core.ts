@@ -282,7 +282,7 @@ export function buildShoppingMarkdown(
     for (const ingredient of recipe.ingredients) {
       const text = ingredient.trim();
       const ingredientKey = text.toLowerCase();
-      if (!text || seenIngredients.has(ingredientKey)) continue;
+      if (!text || seenIngredients.has(ingredientKey) || /^(?:(?:tap|cold|hot|warm|boiling) )?water$|^ice(?: cube)?s?$/.test(shoppingIngredient(text).noun)) continue;
       seenIngredients.add(ingredientKey);
       const key = `${blockKey}\0${ingredientKey}`;
       lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}`);
