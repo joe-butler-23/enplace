@@ -136,7 +136,7 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .shopping-items { margin: 0; padding: 0; list-style: none; }
 .shopping-item { display: flex; flex-wrap: wrap; align-items: center; margin-left: -4px; border-radius: 7px; }
 .shopping-item:hover { background: var(--hover); }
-.shopping-item__label { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 7px 4px 7px 8px; cursor: pointer; }
+.shopping-item__label { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 7px 4px 7px 8px; cursor: pointer; }
 .shopping-item__input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
 .shopping-item__box,
 .checkbox-box { flex: none; margin-top: 2px; width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 5px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
