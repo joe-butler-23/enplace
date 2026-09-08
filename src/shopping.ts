@@ -141,10 +141,10 @@ for (const [left, right] of PHRASE_EQUIVALENCES) {
   CANONICAL.set(normR, canon);
 }
 
-const CANONICAL_REGEXES: ReadonlyArray<[RegExp, string]> = Array.from(CANONICAL.entries()).map(([variant, canon]) => [
-  new RegExp("\\b" + variant.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\b", "g"),
-  canon,
-]);
+const CANONICAL_REGEX = new RegExp("\\b(?:" + [...CANONICAL.keys()]
+  .sort((a, b) => b.length - a.length)
+  .map(variant => variant.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"))
+  .join("|") + ")\\b", "g");
 
 export function normalizeShoppingNoun(text: string): string {
   if (typeof text !== "string") return "";
@@ -158,11 +158,7 @@ export function normalizeShoppingNoun(text: string): string {
 
   if (CANONICAL.has(s)) return CANONICAL.get(s)!;
 
-  for (const [regex, canon] of CANONICAL_REGEXES) {
-    if (regex.test(s)) {
-      s = s.replace(regex, canon);
-    }
-  }
+  s = s.replace(CANONICAL_REGEX, match => CANONICAL.get(match)!);
 
   return s.replace(/\s+/g, " ").trim();
 }
@@ -259,14 +255,13 @@ function normalizeUnit(unit: string | null): string | null {
   return unit;
 }
 
-const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
-
 export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[] {
   type GroupData = {
     row: ShoppingRow;
     amounts: Map<string | null, Rational>;
     unquantified: Map<string, string>;
     displayName: string;
+    sources: Set<string>;
   };
   const groups = new Map<string, GroupData>();
 
@@ -282,11 +277,11 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
         row: {
           ...item,
           content: preparedName(name),
-          sources: [],
           memberIds: [],
           checked: true,
           checkedCount: 0,
         },
+        sources: new Set(),
         amounts: new Map(),
         unquantified: new Map(),
         displayName: preparedName(name),
@@ -294,7 +289,7 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
       groups.set(groupKey, group);
     }
     group.row.memberIds.push(item.id);
-    group.row.sources = unique([...group.row.sources ?? [], ...item.sources ?? []]);
+    for (const source of item.sources ?? []) group.sources.add(source);
     if (item.labels?.length && !group.row.labels?.length) group.row.labels = item.labels;
     if (item.aisle && !group.row.aisle) group.row.aisle = item.aisle;
     if (item.checked) {
@@ -318,7 +313,7 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     }
   }
 
-  return [...groups.values()].map(({ row, amounts, unquantified, displayName }) => {
+  return [...groups.values()].map(({ row, amounts, unquantified, displayName, sources }) => {
     const quantities = [...amounts].map(([unit, factor]) => `${formatRational(factor)}${unit ? ` ${unit}` : ""}`);
     const quantified = quantities.length ? `${displayName} ${quantities.join(" + ")}` : "";
     const content = [quantified, ...unquantified.values()].filter(Boolean).join(" + ");
@@ -327,6 +322,7 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     const partial = checkedCount > 0 && checkedCount < totalMembers;
     return {
       ...row,
+      sources: [...sources],
       content,
       partial,
     };
@@ -345,6 +341,8 @@ const PHRASE_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Fruit & vegetables", /\bfresh\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
   ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)$/i],
   ["Tins & jars", /\b(?:peanut|groundnut|almond|cashew|seed|nut)\s+butter$/i],
+  ["Tins & jars", /\bcoconut\s+(?:milk|cream)$/i],
+  ["Tins & jars", /\bolives?(?:\s+(?:pitted|stoned|chopped)(?:\s+and\s+(?:pitted|stoned|chopped))*)?$/i],
   ["Baking", /\b(?:cocoa|cacao|shea)\s+butter$/i],
   ["Herbs, spices & oils", /\b(?:black|white|cracked|cayenne|ground)\s+pepp?er(?:corn)?s?$/i],
   ["Fruit & vegetables", /\b(?:bell|sweet|green|red|yellow|poblano|serrano)\s+peppers?$/i],
@@ -382,7 +380,7 @@ export function inferAisle(
   if (/^(?:cans?|tins?|jars?)$/i.test(parsed.amount?.unit?.trim() ?? "")) return "Tins & jars";
 
   // Base noun without connector prefix, preparation commas, or parentheticals
-  const base = clean
+  const base = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/^[,\s;:-]+(?:plus\s+more\s+for\s+\w+\s+|plus\s+for\s+\w+\s+|plus\s+more\s+)?/i, "")
     .split(",")[0]
     .replace(/\([^)]*\)/g, "")
@@ -395,7 +393,10 @@ export function inferAisle(
 
   // Match the complete product head, never a prefix within another word.
   for (const [aisle, rx] of SUFFIX_RULES) {
-    if (rx.test(base)) return aisle;
+    if (rx.test(base)) {
+      if (aisle === "Drinks" && /\b(?:or|and|soaked)\b/i.test(base)) return null;
+      return aisle;
+    }
   }
 
   return null;

@@ -196,3 +196,17 @@ it('correctly classifies widened culinary ingredients and handles alternatives',
 });
 
 
+it.each(['coconut cream', 'light coconut milk', 'tomato purée', 'tomato pure\u0301e', 'green olives', 'black olives pitted and chopped'])('places %s in Tins & jars', name => {
+  expect(core.inferAisle(name)).toBe('Tins & jars');
+});
+
+it.each(['lemon finely grated zest and juice', 'vegetable stock or water', 'dried sour cherries soaked in lemon juice'])('does not infer a drink from %s', name => {
+  expect(core.inferAisle(name)).toBeNull();
+  expect(core.resolveShoppingAisle(name, new Map([[core.normalizeShoppingNoun(name), 'Fruit & vegetables']]))).toBe('Fruit & vegetables');
+});
+
+it('keeps coconut and olive product heads distinct', () => {
+  expect(core.inferAisle('coconut cream powder')).toBe('Herbs, spices & oils');
+  expect(core.inferAisle('olive oil')).toBe('Herbs, spices & oils');
+  expect(core.inferAisle('olive bread')).toBe('Bakery');
+});

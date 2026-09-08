@@ -173,3 +173,10 @@ describe("mergeShoppingItems", () => {
     expect(rows[0].memberIds).toEqual(["1", "2", "3", "4"]);
   });
 });
+
+it('replaces overlapping synonyms once without duplicating descriptors', () => {
+  expect(normalizeShoppingNoun('organic chinese napa cabbage')).toBe('organic chinese napa cabbage');
+  expect(normalizeShoppingNoun('organic napa cabbage')).toBe('organic chinese napa cabbage');
+  expect(normalizeShoppingNoun('fresh chinese napa cabbage')).toBe('fresh chinese napa cabbage');
+  expect(normalizeShoppingNoun('organic napa cabbage and napa cabbage')).toBe('organic chinese napa cabbage and chinese napa cabbage');
+});
