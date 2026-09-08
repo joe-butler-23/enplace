@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
-import { constants, realpathSync } from "node:fs";
-import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { text } from "node:stream/consumers";
+import { parseArguments } from "./arguments";
 import {
   buildShoppingMarkdown,
   parsePlan,
@@ -20,7 +21,6 @@ export type ExecuteOptions = {
   now?: Date;
 };
 
-const valueOptions = new Set(["--folder", "--week"]);
 const recipeCommands = new Set(["check", "add", "convert"]);
 
 function validateArguments(command: string, positional: string[], options: ReadonlyMap<string, string>): void {
@@ -34,23 +34,7 @@ function validateArguments(command: string, positional: string[], options: Reado
 }
 
 function argumentsFor(argv: string[], cwd: string) {
-  const positional: string[] = [];
-  const options = new Map<string, string>();
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value === "--json") {
-      options.set(value, "");
-      continue;
-    }
-    if (!value.startsWith("--")) {
-      positional.push(value);
-      continue;
-    }
-    if (!valueOptions.has(value)) throw new Error(`unknown option: ${value}`);
-    const next = argv[++index];
-    if (!next || next.startsWith("--")) throw new Error(`${value} needs a value`);
-    options.set(value, next);
-  }
+  const { positional, options } = parseArguments(argv, ["--json"], ["--folder", "--week"]);
   const [command = "", ...rest] = positional;
   validateArguments(command, rest, options);
   const folder = options.get("--folder");
@@ -64,10 +48,6 @@ function argumentsFor(argv: string[], cwd: string) {
 }
 
 type Arguments = ReturnType<typeof argumentsFor>;
-
-async function exists(candidate: string): Promise<boolean> {
-  try { await access(candidate, constants.F_OK); return true; } catch { return false; }
-}
 
 async function recipeFiles(folder: string): Promise<Array<{ path: string; text: string }>> {
   const files: Array<{ path: string; text: string }> = [];
@@ -90,13 +70,7 @@ const slugify = (title: string): string => title.toLowerCase()
 
 async function recipeInput(file: string, stdin: string | undefined): Promise<{ sourcePath: string; markdown: string }> {
   if (file === "-") {
-    const markdown = stdin ?? await new Promise<string>((resolve, reject) => {
-      let value = "";
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", (chunk: string) => { value += chunk; });
-      process.stdin.on("end", () => resolve(value));
-      process.stdin.on("error", reject);
-    });
+    const markdown = stdin ?? await text(process.stdin.setEncoding("utf8"));
     return { sourcePath: "-", markdown };
   }
   return { sourcePath: file, markdown: await readFile(file, "utf8") };
@@ -108,7 +82,7 @@ async function checkedRecipe(folder: string, file: string, stdin: string | undef
   if (!recipe) throw new Error("recipe needs valid RecipeMD (https://recipemd.org/specification.html) or an existing ## Ingredients section");
   if (file === "-" && recipe.title === "-") throw new Error("recipe needs a frontmatter title or # heading");
   const recipes = path.join(folder, "recipes");
-  const prefix = await exists(recipes) && (await stat(recipes)).isDirectory() ? "recipes/" : "";
+  const prefix = (await stat(recipes).catch(() => null))?.isDirectory() ? "recipes/" : "";
   return { recipe, markdown: input.markdown, destination: `${prefix}${slugify(recipe.title)}.md` };
 }
 
@@ -126,8 +100,6 @@ function mondayFor(value: string | undefined, now: Date): Date {
   return date;
 }
 
-const hash = (value: Buffer | null): string | null => value === null ? null : createHash("sha256").update(value).digest("hex");
-
 async function readOptional(file: string): Promise<Buffer | null> {
   try { return await readFile(file); }
   catch (error) {
@@ -137,7 +109,8 @@ async function readOptional(file: string): Promise<Buffer | null> {
 }
 
 async function saveShopping(file: string, initial: Buffer | null, markdown: string, now: Date): Promise<void> {
-  if (hash(await readOptional(file)) !== hash(initial)) {
+  const current = await readOptional(file);
+  if (initial === null ? current !== null : current === null || !initial.equals(current)) {
     const stamp = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
     const conflict = file.replace(/\.md$/i, "") + `.conflict-${stamp}.md`;
     await writeFile(conflict, markdown, { flag: "wx" });

@@ -54,7 +54,7 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
     await grouping(page, 'Aisle').click();
     await page.getByLabel('Aisle for tomatoes').selectOption('Fruit & vegetables');
     await page.getByLabel('Aisle for flour').selectOption('Baking');
-    await expect(page.locator('.shopping-group__label')).toHaveText(['Baking', 'Fruit & vegetables', 'Other']);
+    await expect(page.locator('.shopping-group__label')).toHaveText(['Baking', 'Fruit & vegetables', 'Herbs, spices & oils']);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: '/tmp/enplace-shopping-aisles.png' });

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import {
-  canonicalShoppingMarkdown, finalizeRecipes, isRecipePath, parseAisles, shoppingIngredient, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe,
+  canonicalShoppingMarkdown, finalizeRecipes, isRecipePath, parseAisles, shoppingIngredient, resolveShoppingAisle, parsePlan, parseRecipe, parseShopping, scanRecipes, type Plan, type Recipe,
 } from "../core";
 import {
   hasCookbookFile, isTextPath, listCookbookPaths, observeCookbook, readCookbookBytes, readCookbookText,
@@ -8,7 +8,7 @@ import {
 import { currentCookbookConnection, onCurrentCookbookConnection } from "./current";
 
 export type CookbookFile = { path: string };
-export type ShoppingList = { items: { id: string; content: string; labels: string[]; sources: string[]; checked: boolean }[] };
+export type ShoppingList = { items: { id: string; content: string; labels: string[]; aisle?: string; sources: string[]; checked: boolean }[] };
 export type CookbookSnapshot = {
   recipes: Recipe[]; plan: Plan; shopping: ShoppingList; files: CookbookFile[];
   texts: ReadonlyMap<string, string>; imageUrls: ReadonlyMap<string, string>;
@@ -27,9 +27,11 @@ const emit = (): void => listeners.forEach((listener) => listener());
 const shoppingList = (text: string, aisleText: string): ShoppingList => {
   const aisles = parseAisles(aisleText);
   return { items: parseShopping(text).map((item) => {
-    const aisle = aisles.get(shoppingIngredient(item.text).noun);
-    return { id: `line:${item.line}`, content: item.text, labels: aisle ? [aisle] : [],
-      sources: item.heading ? [item.heading] : [], checked: item.checked };
+    const ingredient = shoppingIngredient(item.text);
+    const explicit = aisles.get(ingredient.noun);
+    const aisle = resolveShoppingAisle(ingredient, aisles);
+    return { id: `line:${item.line}`, content: item.text, labels: explicit ? [explicit] : [],
+      aisle, sources: item.heading ? [item.heading] : [], checked: item.checked };
   }) };
 };
 const sameReferences = <T,>(left: readonly T[], right: readonly T[]): boolean =>

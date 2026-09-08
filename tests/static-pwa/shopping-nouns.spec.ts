@@ -14,8 +14,8 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
   today.setDate(today.getDate() - (today.getDay() + 6) % 7);
   const date = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const files = {
-    'pie.md': '# Pie\n\n---\n\n- *1* aubergine, diced\n- *1/2 tsp* salt\n\n---\n\nBake.\n',
-    'soup.md': '# Soup\n\n---\n\n- *1* aubergine, sliced\n- *1/2 tsp* salt\n\n---\n\nSimmer.\n',
+    'pie.md': '# Pie\n\n---\n\n- *1* aubergine, diced\n- *1/3 tsp* salt\n\n---\n\nBake.\n',
+    'soup.md': '# Soup\n\n---\n\n- *1* aubergine, sliced\n- *2/3 tsp* salt\n\n---\n\nSimmer.\n',
     'Aisles.md': '## Herbs, spices & oils\n- salt\n',
     'Plan.md': `## Marked\n\n## ${date}\n- [[pie]]\n- [[soup]]\n`,
   };
@@ -48,7 +48,7 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Chilled');
     await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('');
     await expect(second.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('');
-    await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('Fruit & vegetables');
+    await page.getByLabel('Aisle for aubergine 2', { exact: true }).selectOption('Other');
     await page.getByText('aubergine 2', { exact: true }).click();
     await expect(aubergine).toBeChecked();
     await expect(second.getByRole('checkbox', { name: 'aubergine 2', exact: true })).toBeChecked();
@@ -57,9 +57,9 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await grouping(page, 'Recipe').click();
     await expect(page.getByRole('checkbox', { name: '1 aubergine, diced', exact: true })).toBeChecked();
     await expect(page.getByRole('checkbox', { name: '1 aubergine, sliced', exact: true })).toBeChecked();
-    expect(await exportedCookbookText(page, 'Shopping.md')).toBe('## Pie\n- [x] *1* aubergine, diced\n- [ ] *1/2 tsp* salt\n\n## Soup\n- [x] *1* aubergine, sliced\n- [ ] *1/2 tsp* salt\n');
+    expect(await exportedCookbookText(page, 'Shopping.md')).toBe('## Pie\n- [x] *1* aubergine, diced\n- [ ] *1/3 tsp* salt\n\n## Soup\n- [x] *1* aubergine, sliced\n- [ ] *2/3 tsp* salt\n');
     const aisles = await exportedCookbookText(page, 'Aisles.md');
-    expect(aisles).toContain('## Fruit & vegetables\n- aubergine');
+    expect(aisles).toContain('## Other\n- aubergine');
     await page.getByLabel('More actions').click();
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Reset shopping list', exact: true }).click();
@@ -69,9 +69,9 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await page.getByRole('button', { name: 'Planner', exact: true }).click();
     await page.getByRole('button', { name: 'Build shopping list' }).click();
     await grouping(page, 'Aisle').click();
-    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Fruit & vegetables');
+    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
     await page.reload();
-    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Fruit & vegetables');
+    await expect(page.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: '/tmp/mep-s9k/shopping-merged-phone.png' });
@@ -88,7 +88,7 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await restored.getByTitle('Close settings').click();
     await openShopping(restored);
     await grouping(restored, 'Aisle').click();
-    await expect(restored.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Fruit & vegetables');
+    await expect(restored.getByLabel('Aisle for aubergine 2', { exact: true })).toHaveValue('Other');
     expect(await exportedCookbookText(restored, 'Aisles.md')).toBe(aisles);
   } finally {
     await secondContext.close();

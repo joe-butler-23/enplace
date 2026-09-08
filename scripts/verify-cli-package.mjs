@@ -172,7 +172,7 @@ async function main() {
       [["--"], "mep: unknown option: --\n"],
       [["list", "--folder"], "mep: --folder needs a value\n"],
       [["check", "--folder", fixtureFromConsumer], "mep: check needs one <file|->\n"],
-      [["list", "--week", "2026-09-07"], "mep: --week is only valid with shop\n"],
+      [["list", "--week", "2026-09-07"], "mep: --week is only valid with plan or shop\n"],
     ];
     for (const [args, stderr] of invalidRoutes) {
       const invalidRoute = await cli.run(args);
@@ -210,7 +210,7 @@ async function main() {
     };
     try {
       const tools = JSON.parse((await cli.successful(["tools"])).stdout);
-      assert.equal(tools.length, 24);
+      assert.equal(tools.length, 26);
       assert(tools.some(tool => tool.name === "recipe.update"));
       const selectedTools = await cli.successful(["tools", "plan.add", "recipe.search", "plan.read", "plan.add"]);
       assert.deepEqual(JSON.parse(selectedTools.stdout), tools.filter(tool => ["recipe.search", "plan.read", "plan.add"].includes(tool.name)));
@@ -269,10 +269,10 @@ async function main() {
       `, added.path], { cwd: consumer, env: { ...process.env, NODE_PATH: "", XDG_CONFIG_HOME: configHome } });
       const clientState = JSON.parse(clientResult.stdout);
       assert.equal(clientResult.stderr, "");
-      assert.match(clientState.plan.markdown, /Client dinner/);
+      assert(clientState.plan.days.some(day => day.note === "Client dinner"));
       assert(clientState.shopping.items.some(item => item.content === "Client lemons" && item.checked));
-      assert.equal((await call("plan.read", {})).markdown, clientState.plan.markdown);
-      assert.equal((await call("shopping.read", {})).markdown, clientState.shopping.markdown);
+      assert.deepEqual((await call("plan.read", { week: "2026-09-07" })).days, clientState.plan.days);
+      assert.deepEqual((await call("shopping.read", {})).items, clientState.shopping.items);
       assert.match((await call("recipe.get", { path: added.path })).markdown, /22 minutes/);
 
       await successful(process.execPath, ["--input-type=module", "-e", `
@@ -287,7 +287,7 @@ async function main() {
           ]);
         }, { config: process.argv[1] }), /Plan.md changed/);
       `, config], { cwd: consumer });
-      assert.match((await call("plan.read", {})).markdown, /Saved client note/);
+      assert((await call("plan.read", {})).days.some(day => day.note === "Saved client note"));
       assert(!(await call("shopping.read", {})).items.some(item => item.content === "Client must not save this"));
 
       const shared = await interactiveSession(bin, consumer, config, async session => {
@@ -308,6 +308,44 @@ async function main() {
       assert.match((await call("recipe.get", { path: added.path })).markdown, /25 minutes/);
       assert((await call("shopping.read", {})).items.some(item => item.content === "Session limes" && item.checked));
 
+      // Exercise the reduced-exposure contract through the installed package and relay.
+      const guardedText = "# Guarded soup\n\nDESCRIPTION_INSTRUCTION\n\n**2 servings**\n\n---\n\n- *20 g* chickpeas\n\n---\n\nMETHOD_INSTRUCTION\n";
+      const guarded = await call("recipe.create", { operationId: "installed-guarded-create", markdown: guardedText });
+      const ingredientRead = JSON.parse((await cli.successful(["show", guarded.path, "--ingredients", "--config", config])).stdout);
+      assert(!/DESCRIPTION_INSTRUCTION|METHOD_INSTRUCTION|markdown/.test(JSON.stringify(ingredientRead)));
+      assert.equal(ingredientRead.items[0].content, "*20 g* chickpeas");
+      const correction = { operationId: "installed-ingredient-edit", path: guarded.path, expectedRevision: ingredientRead.revision,
+        edits: [{ ingredientId: ingredientRead.items[0].id, content: "*200 g* chickpeas" }] };
+      const corrected = await call("recipe.ingredients.edit", correction);
+      assert(!/DESCRIPTION_INSTRUCTION|METHOD_INSTRUCTION|markdown/.test(JSON.stringify(corrected)));
+      assert.equal(corrected.items[0].content, "*200 g* chickpeas");
+      assert.equal((await call("recipe.get", { path: guarded.path })).markdown, guarded.markdown.replace("*20 g*", "*200 g*"));
+      assert.equal((await call("recipe.ingredients.edit", correction)).replayed, true);
+      await assert.rejects(call("recipe.ingredients.edit", { ...correction, operationId: "installed-ingredient-stale" }), /changed/);
+      const fullPlan = await call("plan.read", {});
+      await call("plan.note", { date: "2026-10-05", note: "OUTSIDE_WEEK_INSTRUCTION", expectedRevision: fullPlan.revision, operationId: "installed-outside-note" });
+      const scoped = JSON.parse((await cli.successful(["plan", "--week", "2026-09-07", "--config", config])).stdout);
+      assert(!JSON.stringify(scoped).includes("OUTSIDE_WEEK_INSTRUCTION"));
+      assert(!("markdown" in scoped));
+      const planned = await call("plan.add", { path: guarded.path, date: "2026-09-08", expectedRevision: scoped.revision, operationId: "installed-scoped-plan" });
+      assert(!JSON.stringify(planned).includes("OUTSIDE_WEEK_INSTRUCTION"));
+      assert(!("markdown" in planned));
+      const scopedRaw = JSON.parse((await cli.successful(["plan", "--week", "2026-09-07", "--markdown", "--config", config])).stdout);
+      assert(!JSON.stringify(scopedRaw).includes("OUTSIDE_WEEK_INSTRUCTION"));
+      assert(scopedRaw.markdown.includes("2026-09-08"));
+      assert((await call("plan.read", { includeMarkdown: true })).markdown.includes("OUTSIDE_WEEK_INSTRUCTION"));
+      const withComment = await call("shopping.add", { content: "trial apples <!-- HIDDEN_SHOPPING_INSTRUCTION -->", operationId: "installed-comment-item" });
+      assert(!JSON.stringify(withComment).includes("HIDDEN_SHOPPING_INSTRUCTION"));
+      assert(!("markdown" in withComment));
+      const visibleItem = withComment.items.find(item => item.content === "trial apples");
+      assert(visibleItem);
+      const ticked = await call("shopping.check", { itemIds: [visibleItem.id], expectedRevision: withComment.revision, operationId: "installed-visible-check" });
+      assert(ticked.items.find(item => item.id === visibleItem.id).checked);
+      assert(!JSON.stringify(ticked).includes("HIDDEN_SHOPPING_INSTRUCTION"));
+      const shoppingRaw = JSON.parse((await cli.successful(["shop", "--markdown", "--config", config])).stdout);
+      assert(shoppingRaw.markdown.includes("HIDDEN_SHOPPING_INSTRUCTION"));
+      console.log("Installed scoped plan reads/acknowledgements, visible shopping, ingredient correction, preservation, stale rejection and retry passed.");
+
       const stopped = await interactiveSession(bin, consumer, config, async (session, stdin) => {
         const before = await session("plan.read", {});
         await session("plan.note", { operationId: "session-before-failure", date: "2026-09-10", note: "Saved before failure", expectedRevision: before.revision });
@@ -317,7 +355,7 @@ async function main() {
       assert.equal(stopped.code, 1);
       assert.match(stopped.stderr, /Plan.md changed/);
       assert.equal(stopped.stdout.trim().split("\n").length, 2);
-      assert.match((await call("plan.read", {})).markdown, /Saved before failure/);
+      assert((await call("plan.read", {})).days.some(day => day.note === "Saved before failure"));
       assert(!(await call("shopping.read", {})).items.some(item => item.content === "Must not be saved"));
     } finally { await relay.close(); }
     console.log(`Verified ${manifest.filename} (${manifest.size} packed bytes) with a Node production-only install.`);

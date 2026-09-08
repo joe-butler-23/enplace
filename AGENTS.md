@@ -33,13 +33,16 @@ Success means the cookbook document remains the sole authority; recipe provenanc
 
 - Use the exact Node 24 release pinned in `.nvmrc`. Run `npm ci` only at the repository root; that one workspace install owns the app, optional CLI, and production relay. `npm run typecheck` checks the app and relay, while `npm run build:release` builds the static app, CLI, and relay dry-run bundle. Use the configured Playwright command for browser work.
 - Never use the live vault as a test fixture. Use isolated data for importer, browser, and file-write tests.
-- Use `docs/repo-architecture.md` for module ownership, `docs/cooking-domain-contract.md` for cooking semantics, `docs/weekly-planner-behaviour.md` for planner work, and `docs/engineering-guardrails.md` for verification.
+- Keep docs to current usage, contracts and concise retention decisions. Record implementation progress and verification in Beads or commit messages; do not add completion reports or raw run logs to `docs/`.
+- Use `docs/repo-architecture.md` for module ownership and `docs/cooking-domain-contract.md` for cooking and planner semantics. Verification requirements are below.
 
 The vault note referenced above, Beads issue references, and the `clai validate skill` commands below are the maintainer's own optional tooling, with no public equivalent; skip them if you don't have access. The contributor-facing gate — `nix develop`, `npm ci`, `npm run typecheck`, `npm test`, and `npm run prepush` — is self-contained and requires none of them.
 
 ## Measured Retentions
 
 - **RecipeClipper printed-prose path (2026-09-06):** retain pending a mechanism that proves recipe admission and method ownership. The shared-reader trial replaced steps with notes/nutrition and promoted non-recipes. Read `docs/recipe-clipper.md` before retrying; its negative tests and executable-size evidence govern reopening.
+
+- **Database card containment (2026-09-04):** retain `contain: layout paint style`. Adding `content-visibility: auto` reduced cold-load work but increased full-range scroll work in all 20 paired trials at 112 and 500 cards. Revisit only with new scroll evidence; historical measurements: `git show cf267104:docs/engineering-guardrails.md` (Bead `mise-en-place-avl`).
 
 ## Verification
 

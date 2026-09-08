@@ -41,7 +41,7 @@ export function groupShoppingItems(
   for (const item of rows) {
     const sources = [...new Set((item.sources ?? []).map((source) => source.trim()).filter(Boolean))];
     const label = grouping === "section"
-      ? item.labels[0]?.trim() || OTHER_GROUP
+      ? item.labels[0]?.trim() || item.aisle || OTHER_GROUP
       : sources[0] || OTHER_GROUP;
     const group = groups.get(label) ?? [];
     group.push(item);
@@ -106,7 +106,7 @@ function ShoppingItemRow({
         </span>
       </label>
       {onAisle ? <select className="shopping-item__aisle" aria-label={`Aisle for ${item.content}`} value={item.labels[0] ?? ''} disabled={busy} onChange={(event) => onAisle(item.id, event.currentTarget.value)}>
-        <option value="">Other</option>
+        <option value="">Automatic{!item.labels[0] && item.aisle ? ` (${item.aisle})` : ''}</option>
         {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
       </select> : null}
       {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button> : null}

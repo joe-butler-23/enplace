@@ -5,6 +5,7 @@ import { openCookbook, type CookbookConnection } from "../host-client/cookbook-s
 import { deleteCookbookPath, readCookbookText, writeCookbookBytes, writeCookbookText } from "./doc";
 import { setCurrentCookbookConnection } from "./current";
 import { getCookbookSnapshot, subscribeCookbook, type CookbookSnapshot } from "./store";
+import { setAisle } from "../core";
 
 type CatalogRevisionAbsent = "catalogRevision" extends keyof CookbookSnapshot ? never : true;
 const catalogRevisionAbsent: CatalogRevisionAbsent = true;
@@ -30,6 +31,17 @@ async function open(files: Record<string, string | Uint8Array>): Promise<Cookboo
 }
 
 const slices = ["recipes", "plan", "shopping", "files", "texts", "imageUrls"] as const;
+it("keeps explicit Other separate from automatic aisle allocation", async () => {
+  const opened = await open({ "Shopping.md": "- [ ] onion\n- [ ] *1 can* chickpeas\n" });
+  expect(getCookbookSnapshot().shopping.items.map(item => item.aisle)).toEqual(["Fruit & vegetables", "Tins & jars"]);
+  writeCookbookText(opened.doc, "Aisles.md", setAisle("", "onion", "Other"));
+  expect(getCookbookSnapshot().shopping.items[0]).toMatchObject({ aisle: "Other", labels: ["Other"] });
+  const saved = readCookbookText(opened.doc, "Aisles.md")!;
+  expect(saved).toContain("## Other\n- onion");
+  writeCookbookText(opened.doc, "Aisles.md", setAisle(saved, "onion", ""));
+  expect(getCookbookSnapshot().shopping.items[0]).toMatchObject({ aisle: "Fruit & vegetables", labels: [] });
+});
+
 const operations: Array<{
   name: string;
   mutate: (doc: CookbookConnection["doc"]) => void;
@@ -49,7 +61,7 @@ const operations: Array<{
   { name: "Shopping edit", mutate: (doc) => writeCookbookText(doc, "Shopping.md", "- [x] milk\n"),
     same: { recipes: true, plan: true, shopping: false, files: true, texts: false, imageUrls: true },
     assertValue: (value) => expect([value.shopping.items, value.texts.get("Shopping.md")]).toEqual([[
-      { id: "line:0", content: "milk", labels: [], sources: [], checked: true },
+      { id: "line:0", content: "milk", labels: [], aisle: "Dairy & eggs", sources: [], checked: true },
     ], "- [x] milk\n"]) },
   { name: "file add", mutate: (doc) => writeCookbookBytes(doc, "notes.bin", new Uint8Array([1])),
     same: { recipes: true, plan: true, shopping: true, files: false, texts: true, imageUrls: true },
@@ -134,7 +146,7 @@ describe("cookbook app store", () => {
       ]);
       expect(value.plan).toEqual({ marked: ["a/foo"], days: new Map(), notes: new Map() });
       expect(value.shopping.items).toEqual([
-        { id: "line:1", content: "apple", labels: [], sources: ["Shared"], checked: true },
+        { id: "line:1", content: "apple", labels: [], aisle: "Fruit & vegetables", sources: ["Shared"], checked: true },
       ]);
       expect(value.files.map(({ path }) => path)).toEqual(["a/foo.md", "b/FOO.MD", "dish.webp", "Plan.md", "Shopping.md"]);
       expect(value.texts.size).toBe(4);
@@ -208,7 +220,7 @@ describe("cookbook app store", () => {
     expect(changed).toHaveBeenCalledOnce();
     expect(getCookbookSnapshot()).toEqual({
       recipes: [], plan: { marked: [], days: new Map(), notes: new Map() },
-      shopping: { items: [{ id: "line:0", content: "second", labels: [], sources: [], checked: false }] },
+      shopping: { items: [{ id: "line:0", content: "second", labels: [], aisle: "Other", sources: [], checked: false }] },
       files: [{ path: "Shopping.md" }], texts: new Map([["Shopping.md", "- [ ] second\n"]]),
       imageUrls: new Map(), revision: 1,
     });

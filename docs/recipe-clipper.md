@@ -15,9 +15,6 @@ renders `400 g onions, 2`. Row identity no longer rounds amounts to hundredths.
 
 This is deliberately conservative. `0.333` and `⅓` are not exactly the same value;
 that ambiguity leaves the serialized list untouched rather than rewriting it.
-The 2026-09-06 corpus replay changed only EatingWell and Martha Stewart ingredient
-arrays and their extraction-method provenance for this reason. Legacy agreement
-rose by two fields, **not** two newly recovered recipes or proof of semantic gain.
 
 ## Repeatable checks
 
@@ -54,45 +51,19 @@ eligible leftovers, all on domains subsequently observed. Their exposure history
 is not fully established. They remain unopened here; fresh-domain validation and
 independent comparisons are still needed for any world-leading accuracy claim.
 
-## Rejected shared prose-reader trial — 2026-09-06
+## Retained printed-prose reader
 
-**Retain the existing printed-prose path.** A shared shape reader replaced the
-separate printed reader with heading-owned rows and prose. The frozen 24-case
-pilot improved from 16 to 21 matches and retained every baseline passing gate.
-The broader oracle rejected it:
+Retain the separate printed-prose path until a replacement proves both recipe
+admission and method ownership without site/phrase patches. The rejected shared
+reader replaced valid card steps with notes/nutrition, admitted product and
+shopping pages as recipes, and grew executable code despite a smaller whole file.
+The three decisive cases run in the normal unit suite. Reopening requires passing
+those cases and reducing executable machinery; a narrower pilot is insufficient.
 
-- Historical browser behavior tests: safety baseline **117/117**, candidate
-  **116/117**. Blank structured fields caused valid card steps to be replaced
-  with `Freeze leftovers.` and `120 kcal`.
-- Two independent recipe-like negatives: baseline **2/2**, candidate **0/2**.
-  Product specifications plus sales prose, and a shopping list plus an errand,
-  became complete recipes. The baseline's explicit incomplete candidates did not.
-- Whole-file size fell 129 bytes/3 lines, but removing blank lines and full-line
-  comments exposed growth of **737 bytes/5 executable lines**. This was not a
-  demonstrated reduction in implementation complexity.
+Historical decision and frozen candidate evidence are in commit
+`ea3016393f8d5d0f71e3eda5114403ec55e002d4` (Bead `mise-en-place-jrv.2`):
 
-One candidate and two corrections exhausted the registered budget. The safety
-stop rule ended the trial before a full corpus or timing campaign for that
-candidate; those gates are **not** claimed to pass. No candidate code entered
-production. Reopen only with a mechanism that resolves both recipe admission and
-method ownership without phrase/site patches, passes these negatives and the
-card-enrichment regression, and reduces executable machinery rather than comments.
-
-[Evidence](evidence/recipe-clipper-2026-09-06/summary.json) records source identities,
-publication copies of logs and the two-field corpus difference. Local repository
-paths are redacted as `<repo>`; original raw hashes are recorded in the summary.
-`rejected-trial.tar.gz` preserves the frozen sources, fixtures, driver and
-pilot/adversarial results with the same path-only redaction. Its scratch
-driver's Playwright import path needs local resolution; the project scripts
-above are the supported corpus interface. The three decisive negative/regression
-cases now run in the normal unit suite. Beads `mise-en-place-jrv` owns the work;
-`mise-en-place-jrv.1` owns the harness and `mise-en-place-jrv.2` records the trial.
-
-## Unfamiliar-page source audit — 2026-09-06
-
-[Eight recipes and four non-recipe controls](recipe-clipper-fresh-audit-2026-09-06.md)
-were independently annotated before testing the unchanged release. All required
-ingredient amounts and cooking steps survived, but commercial/page text crossed
-field boundaries, two ingredient groups were lost, and all six explicit overall
-serving counts were omitted. This is new baseline evidence, not an accuracy gain;
-field ownership is the highest-value next target. The rejected trial remains closed.
+```sh
+git show ea3016393f8d5d0f71e3eda5114403ec55e002d4:docs/recipe-clipper.md
+git show ea3016393f8d5d0f71e3eda5114403ec55e002d4:docs/evidence/recipe-clipper-2026-09-06/rejected-trial.tar.gz > /tmp/clipper-rejected-trial.tar.gz
+```

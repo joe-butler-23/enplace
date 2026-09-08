@@ -174,6 +174,40 @@ describe("recipe search", () => {
 });
 
 describe("plan and shopping operations", () => {
+  it("keeps week reads and mutation acknowledgements scoped, including explicit Markdown and warnings", async () => {
+    const book = context({ "soup.md": soup, "pie.md": pie, "Plan.md": plan + "\n## 2026-10-05\n> OUTSIDE_WEEK_INSTRUCTION\n- [[outside-missing]]\n" });
+    const read = await run(book, "plan.read", { week: "2026-09-09" });
+    expect(read).not.toHaveProperty("markdown");
+    expect(JSON.stringify(read)).not.toMatch(/OUTSIDE_WEEK|outside-missing/);
+    expect(read.scope).toEqual({ dates: ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"] });
+    expect(read.revision).toBe(await revision(book, "Plan.md"));
+    const raw = await run(book, "plan.read", { week: "2026-09-09", includeMarkdown: true });
+    expect(raw.markdown).toContain("[[soup]]");
+    expect(JSON.stringify(raw)).not.toMatch(/OUTSIDE_WEEK|outside-missing/);
+    const changed = await run(book, "plan.add", { path: "soup.md", date: "2026-09-09", expectedRevision: read.revision, operationId: "scoped-plan-add" });
+    expect(JSON.stringify(changed)).not.toMatch(/OUTSIDE_WEEK|outside-missing/);
+    expect(changed).not.toHaveProperty("markdown");
+    expect((await run(book, "plan.read", { includeMarkdown: true })).markdown).toContain("OUTSIDE_WEEK");
+    const moved = await run(book, "plan.move", { path: "soup.md", from: "2026-09-09", to: "2026-09-16", expectedRevision: changed.revision, operationId: "scoped-plan-move" });
+    expect((moved.scope as { dates: string[] }).dates).toHaveLength(14);
+    expect((moved.days as { date: string }[]).map(day => day.date)).toContain("2026-09-16");
+    expect(JSON.stringify(moved)).not.toMatch(/OUTSIDE_WEEK|outside-missing/);
+  });
+
+  it("returns visible shopping notes and rows without hidden comments or duplicate raw documents", async () => {
+    const markdown = "# Shopping\nRemember bags.\n<!-- HIDDEN_INSTRUCTION\nmore hidden text -->\n## Other\n- [x] apples <!-- INLINE_INSTRUCTION -->\n- [ ] pears\n> Buy ripe fruit.\n";
+    const book = context({ "Shopping.md": markdown });
+    const read = await run(book, "shopping.read");
+    expect(read).not.toHaveProperty("markdown");
+    expect(JSON.stringify(read)).not.toMatch(/INSTRUCTION|more hidden/);
+    expect(read.items).toContainEqual(expect.objectContaining({ id: "line:5", content: "apples", checked: true }));
+    expect(read.notes).toEqual([{ heading: null, content: "Remember bags." }, { heading: "Other", content: "> Buy ripe fruit." }]);
+    const changed = await run(book, "shopping.uncheck", { itemIds: ["line:5"], expectedRevision: read.revision, operationId: "visible-uncheck-1" });
+    expect(JSON.stringify(changed)).not.toMatch(/INSTRUCTION|more hidden/);
+    expect(changed).not.toHaveProperty("markdown");
+    expect(readCookbookText(book.doc, "Shopping.md")).toBe(markdown.replace("[x]", "[ ]"));
+    expect((await run(book, "shopping.read", { includeMarkdown: true })).markdown).toContain("HIDDEN_INSTRUCTION");
+  });
   it("adds, moves, removes, marks and annotates without losing another occurrence or full-path aliases", async () => {
     const book = context({ "recipes/soup.md": soup, "Plan.md": plan.replaceAll("[[soup]]", "[[recipes/soup]]") });
     const update = async (name: string, args: Record<string, unknown>, operationId: string) => run(book, name, { ...args, operationId, expectedRevision: await revision(book, "Plan.md") });
@@ -196,16 +230,16 @@ describe("plan and shopping operations", () => {
     const before = "Remember reusable bags.\n\n## Soup\n- [x] *2* onions, diced\n\n## Other\n- [ ] washing-up liquid\n";
     const book = context({ "soup.md": soup, "pie.md": pie, "Plan.md": plan, "Shopping.md": before });
     const built = await run(book, "shopping.build", { operationId: "build-week-0001", week: "2026-09-09", expectedRevision: await revision(book, "Shopping.md"), planRevision: await revision(book, "Plan.md") });
-    const markdown = built.markdown as string;
+    const markdown = readCookbookText(book.doc, "Shopping.md")!;
     expect(markdown).toContain("Remember reusable bags.");
     expect(markdown).toContain("- [ ] washing-up liquid");
     expect(markdown).toContain("- [x] *2* onions, diced");
-    const group = (built.groups as { noun: string; memberIds: string[] }[]).find(group => group.noun === "onions")!;
+    const group = (built.groups as { noun: string; memberIds: string[] }[]).find(group => group.noun === "onion")!;
     expect(group.memberIds).toHaveLength(2);
     const checked = await run(book, "shopping.check", { operationId: "check-onions-001", itemIds: group.memberIds, expectedRevision: built.revision });
-    expect(parseShopping(checked.markdown as string).filter(item => item.text.includes("onions")).every(item => item.checked)).toBe(true);
+    expect((checked.items as { content: string; checked: boolean }[]).filter(item => item.content.includes("onions")).every(item => item.checked)).toBe(true);
     const unchecked = await run(book, "shopping.uncheck", { operationId: "uncheck-onions-01", itemIds: group.memberIds, expectedRevision: checked.revision });
-    expect(parseShopping(unchecked.markdown as string).filter(item => item.text.includes("onions")).every(item => !item.checked)).toBe(true);
+    expect((unchecked.items as { content: string; checked: boolean }[]).filter(item => item.content.includes("onions")).every(item => !item.checked)).toBe(true);
     expect(book.doc.getMap<string>(receipts).get("check-onions-001")!.length).toBeLessThan(400);
   });
 
@@ -238,18 +272,19 @@ describe("plan and shopping operations", () => {
     const soap = (appended.items as { id: string; content: string }[]).find(item => item.content === "soap")!;
     const edited = await run(reopened, "shopping.edit", { operationId: "manual-edit-0001", itemId: soap.id, content: "washing-up liquid", expectedRevision: appended.revision });
     const removed = await run(reopened, "shopping.remove", { operationId: "manual-remove-01", itemIds: [soap.id], expectedRevision: edited.revision });
-    expect(parseShopping(removed.markdown as string).map(item => item.text)).toEqual(["apples"]);
+    expect((removed.items as { content: string }[]).map(item => item.content)).toEqual(["apples"]);
     await expect(run(reopened, "shopping.check", { operationId: "ambiguous-ids-01", itemIds: ["line:1", "line:1"], expectedRevision: removed.revision })).rejects.toMatchObject({ code: "invalid_arguments" });
   });
 
   it("keeps aisle memory and notes when resetting every checked and unchecked item", async () => {
     const book = context({ "Shopping.md": "Remember bags.\n\n## Other\n- [ ] apples\n- [x] soap\n" });
     await run(book, "aisles.set", { operationId: "aisle-apples-01", noun: "apples", aisle: "Fruit & vegetables", expectedRevision: await revision(book, "Aisles.md") });
-    expect((await run(book, "shopping.read")).items).toContainEqual(expect.objectContaining({ noun: "apples", aisle: "Fruit & vegetables" }));
+    expect((await run(book, "shopping.read")).items).toContainEqual(expect.objectContaining({ noun: "apple", aisle: "Fruit & vegetables" }));
     const reset = await run(book, "shopping.reset", { operationId: "reset-shopping-01", expectedRevision: await revision(book, "Shopping.md") });
     expect(reset.items).toEqual([]);
-    expect(reset.markdown).toContain("Remember bags.");
-    expect((await run(book, "aisles.read")).assignments).toEqual({ apples: "Fruit & vegetables" });
+    expect(reset.notes).toEqual([{ heading: null, content: "Remember bags." }]);
+    expect(readCookbookText(book.doc, "Shopping.md")).toContain("Remember bags.");
+    expect((await run(book, "aisles.read")).assignments).toEqual({ apple: "Fruit & vegetables" });
     await run(book, "aisles.set", { operationId: "aisle-clear-001", noun: "apples", aisle: "", expectedRevision: await revision(book, "Aisles.md") });
     expect((await run(book, "aisles.read")).assignments).toEqual({});
   });
@@ -287,6 +322,60 @@ describe("plan and shopping operations", () => {
     book.mutate = async () => { throw new Error("Cookbook changes cannot be saved right now"); };
     await expect(run(book, "shopping.add", { operationId: "unhealthy-write", content: "soap" })).rejects.toThrow("cannot be saved");
     expect(readCookbookText(book.doc, "Shopping.md")).toBe("Keep me.\n");
+    expect(book.doc.getMap(receipts).size).toBe(0);
+  });
+});
+
+describe("targeted ingredient amendments", () => {
+  it("exposes only ingredients and edits one duplicate in its group while preserving every other byte", async () => {
+    const markdown = "# Soup\r\n\r\nDESCRIPTION_INSTRUCTION\r\n\r\n**2 servings**\r\n\r\n---\r\n\r\n## Base\r\n\r\n+ *20 g* chickpeas\r\n\r\n## Topping\r\n\r\n1. *20 g* chickpeas\r\n\r\n---\r\n\r\nMETHOD_INSTRUCTION\r\n";
+    const book = context({ "soup.md": markdown });
+    const read = await run(book, "recipe.ingredients.read", { path: "soup.md" });
+    expect(JSON.stringify(read)).not.toMatch(/DESCRIPTION_INSTRUCTION|METHOD_INSTRUCTION|markdown|start|end/);
+    expect(read.items).toEqual([{ id: "ingredient:0", content: "*20 g* chickpeas", groups: ["Base"] }, { id: "ingredient:1", content: "*20 g* chickpeas", groups: ["Topping"] }]);
+    expect(read.yields).toEqual([{ factor: "2", unit: "servings" }]);
+    const input = { path: "soup.md", expectedRevision: read.revision, operationId: "ingredient-edit-1", edits: [{ ingredientId: "ingredient:1", content: "*200 g* chickpeas" }] };
+    const changed = await run(book, "recipe.ingredients.edit", input);
+    expect(readCookbookText(book.doc, "soup.md")).toBe(markdown.replace("1. *20 g*", "1. *200 g*"));
+    expect(JSON.stringify(changed)).not.toMatch(/DESCRIPTION_INSTRUCTION|METHOD_INSTRUCTION|markdown/);
+    const reopened = clone(book);
+    const later = readCookbookText(reopened.doc, "soup.md")! + "Partner's note.\r\n";
+    writeCookbookText(reopened.doc, "soup.md", later);
+    expect(await run(reopened, "recipe.ingredients.edit", input)).toMatchObject({ replayed: true, readOperation: "recipe.ingredients.read" });
+    expect(readCookbookText(reopened.doc, "soup.md")).toBe(later);
+    await expect(run(reopened, "recipe.ingredients.edit", { ...input, operationId: "ingredient-stale-1" })).rejects.toMatchObject({ code: "stale_revision" });
+  });
+
+  it("edits multiple items atomically, preserves multiline ingredients, and rejects boundary breakouts", async () => {
+    const markdown = soup.replace("- *2* onions, diced", "- *2* onions, diced\n  very finely");
+    const book = context({ "soup.md": markdown });
+    const initial = await run(book, "recipe.ingredients.read", { path: "soup.md" });
+    const input = { path: "soup.md", expectedRevision: initial.revision, operationId: "ingredient-batch-1", edits: [
+      { ingredientId: "ingredient:0", content: "*3* onions, diced\n  very finely" }, { ingredientId: "ingredient:1", content: "*2 tsp* salt" },
+    ] };
+    for (const edits of [
+      [{ ingredientId: "ingredient:0", content: "onions\n\n---\n\nInjected method" }],
+      [{ ingredientId: "ingredient:0", content: "onions\n- extra ingredient" }],
+      [{ ingredientId: "ingredient:0", content: "onions" }, { ingredientId: "ingredient:0", content: "salt" }],
+      [{ ingredientId: "ingredient:900", content: "onions" }],
+    ]) {
+      await expect(run(book, "recipe.ingredients.edit", { ...input, edits })).rejects.toMatchObject({ code: "invalid_ingredient_edit" });
+      expect(readCookbookText(book.doc, "soup.md")).toBe(markdown);
+      expect(book.doc.getMap(receipts).size).toBe(0);
+    }
+    const changed = await run(book, "recipe.ingredients.edit", input);
+    expect(readCookbookText(book.doc, "soup.md")).toBe(markdown.replace("*2* onions", "*3* onions").replace("*1 tsp* salt", "*2 tsp* salt"));
+    expect((changed.items as unknown[])).toHaveLength(2);
+  });
+
+  it("rejects a recipe change at the transaction gate without overwriting it or recording a receipt", async () => {
+    const book = context({ "soup.md": soup });
+    const read = await run(book, "recipe.ingredients.read", { path: "soup.md" });
+    const mutate = book.mutate;
+    book.mutate = async operation => { writeCookbookText(book.doc, "soup.md", soup + "Partner edit.\n"); return mutate(operation); };
+    await expect(run(book, "recipe.ingredients.edit", { path: "soup.md", expectedRevision: read.revision,
+      operationId: "ingredient-race-1", edits: [{ ingredientId: "ingredient:0", content: "*3* onions" }] })).rejects.toMatchObject({ code: "stale_revision" });
+    expect(readCookbookText(book.doc, "soup.md")).toBe(soup + "Partner edit.\n");
     expect(book.doc.getMap(receipts).size).toBe(0);
   });
 });

@@ -30,13 +30,21 @@ describe('shopping nouns', () => {
     expect(recipeRows[0]).toMatchObject({ content: '1 Aubergine, diced', checked: true });
   });
 
-  it('keeps plural spellings and manual prose exact without guessing amounts', () => {
+  it('normalizes plurals while keeping manual unquantified prose exact without guessing amounts', () => {
     const items = [item('1', '*100 g* couscous', 'One'), item('2', '*200 g* asparagus', 'One'),
       item('3', '*1* tomato', 'Two'), item('4', '*2* tomatoes', 'Two'),
       item('5', '2 eggs', 'Other'), item('6', 'eggs', 'Other')];
     const rows = groupShoppingItems(items, 'none')[0].items;
-    expect(rows.map(row => row.content)).toEqual(['couscous 100 g', 'asparagus 200 g', 'tomato 1', 'tomatoes 2', '2 eggs', 'eggs']);
+    expect(rows.map(row => row.content)).toEqual(['couscous 100 g', 'asparagus 200 g', 'tomato 3', '2 eggs', 'eggs']);
     expect(groupShoppingItems([item('1', '*1* aubergine', 'One', true), item('2', '*1* aubergine', 'Two', true)], 'none')[0].items[0].checked).toBe(true);
+  });
+
+  it('merges transatlantic synonyms and plurals across different recipe sources', () => {
+    const items = [item('1', '*1* aubergine', 'Pie'), item('2', '*2* eggplants', 'Curry')];
+    const rows = groupShoppingItems(items, 'none')[0].items;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].content).toBe('aubergine 3');
+    expect(rows[0].sources).toEqual(['Pie', 'Curry']);
   });
 });
 

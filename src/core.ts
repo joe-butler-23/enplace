@@ -1,4 +1,15 @@
-import { parseRecipeIngredient, type RecipeAmount } from "./recipemd.js";
+import {
+  type ShoppingItem,
+  type ShoppingRow,
+  normalizeShoppingNoun,
+  classifyShoppingPair,
+  shoppingIngredient,
+  mergeShoppingItems,
+  singularize,
+  preparedName,
+  inferAisle,
+  resolveShoppingAisle,
+} from "./shopping.js";
 import { formatIngredient } from "./recipe-migration.js";
 import { isRecipePath, parseRecipeDocument } from "./recipe-document.js";
 export { isRecipePath, parseRecipeDocument, type ParsedRecipeDocument } from "./recipe-document.js";
@@ -26,47 +37,24 @@ export type ShoppingLine = {
   heading: string | null;
 };
 
-export type ShoppingItem = {
-  id: string; content: string; labels: string[]; sources?: string[]; checked: boolean;
+export {
+  type ShoppingItem,
+  type ShoppingRow,
+  normalizeShoppingNoun,
+  classifyShoppingPair,
+  shoppingIngredient,
+  mergeShoppingItems,
+  singularize,
+  preparedName,
+  inferAisle,
+  resolveShoppingAisle,
 };
-export type ShoppingRow = ShoppingItem & { memberIds: string[] };
 
-/** Authoring owns noun spelling; no plural, unit, or quantity inference. */
-export const shoppingNoun = (name: string): string => name.split(',', 1)[0].trim().toLowerCase();
+/** Canonical shopping noun: handles dialect mapping, singularization, and preparation tails. */
+export const shoppingNoun = (name: string): string => normalizeShoppingNoun(name);
 
-export function shoppingIngredient(text: string): { noun: string; name: string; display: string; amount: RecipeAmount | null } {
-  const clean = text.replace(/<!--[\s\S]*?-->/g, '').trim();
-  try {
-    const ingredient = parseRecipeIngredient(clean);
-    return { noun: shoppingNoun(ingredient.name), name: ingredient.name, display: ingredient.display, amount: ingredient.amount };
-  } catch {
-    return { noun: shoppingNoun(clean), name: clean, display: clean, amount: null };
-  }
-}
 
-export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[] {
-  const groups = new Map<string, { row: ShoppingRow; amounts: Map<string | null, number>; unquantified: Map<string, string> }>();
-  for (const item of items) {
-    const { noun, name, display, amount } = shoppingIngredient(item.content);
-    let group = groups.get(noun);
-    if (!group) {
-      group = { row: { ...item, content: name.split(',', 1)[0].trim(), sources: [], memberIds: [], checked: true }, amounts: new Map(), unquantified: new Map() };
-      groups.set(noun, group);
-    }
-    group.row.memberIds.push(item.id);
-    group.row.sources = unique([...group.row.sources ?? [], ...item.sources ?? []]);
-    group.row.checked &&= item.checked;
-    if (amount) group.amounts.set(amount.unit, (group.amounts.get(amount.unit) ?? 0) + Number(amount.factor));
-    else if (!group.unquantified.has(display.toLowerCase())) group.unquantified.set(display.toLowerCase(), display);
-  }
-  return [...groups.values()].map(({ row, amounts, unquantified }) => {
-    const quantities = [...amounts].map(([unit, factor]) => `${Number(factor.toPrecision(12))}${unit ? ` ${unit}` : ''}`);
-    const quantified = quantities.length ? `${row.content} ${quantities.join(' + ')}` : '';
-    return { ...row, content: [quantified, ...unquantified.values()].filter(Boolean).join(' + ') };
-  });
-}
-
-export const SHOPPING_AISLES = ['Fruit & vegetables', 'Bakery', 'Meat & fish', 'Dairy & eggs', 'Chilled', 'Frozen', 'Tins & jars', 'Rice, pasta & grains', 'Baking', 'Herbs, spices & oils', 'Drinks', 'Household'];
+export const SHOPPING_AISLES = ['Fruit & vegetables', 'Bakery', 'Meat & fish', 'Dairy & eggs', 'Chilled', 'Frozen', 'Tins & jars', 'Rice, pasta & grains', 'Baking', 'Herbs, spices & oils', 'Drinks', 'Household', 'Other'];
 
 export function parseAisles(markdown: string): Map<string, string> {
   const aisles = new Map<string, string>();

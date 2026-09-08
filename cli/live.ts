@@ -4,6 +4,7 @@ import { COOKING_OPERATIONS } from "../src/agent/operations";
 import { openCookingSession } from "../src/agent/session";
 import { associationPath, parseAssociation, readAssociation, readCookbookLink, saveAssociation } from "./association";
 import { executeSession } from "./session";
+import { parseArguments } from "./arguments";
 
 const HELP = `mep cookbook use [--relay URL]  Connect once; paste the link at the hidden prompt
 mep tools [operation ...]     Print compact schemas (all operations if omitted)
@@ -11,10 +12,12 @@ mep call <operation> [file|-]  Run an operation using JSON arguments (stdin by d
 mep session [--config file]   Run JSONL operations through one connection until EOF
 mep list [--json]              List live recipes
 mep show <path>                Read one live recipe as Markdown
+mep show <path> --ingredients  Read ingredient IDs, contents, groups and revision only
 mep add <file|->               Add RecipeMD to the live cookbook
 mep amend <path> <file|-> --base <file>  Merge an edited recipe with its read base
-mep plan                      Read the live meal plan
-mep shop                      Read the live shopping list
+mep plan [--week YYYY-MM-DD]   Read the structured meal plan (optional week scope)
+mep shop                      Read structured shopping items and visible notes
+mep plan|shop --markdown       Explicitly include Markdown in a read result
 mep shop --week YYYY-MM-DD     Build shopping for the selected week
 mep export <file.zip>          Explicitly export cookbook files
 
@@ -37,21 +40,12 @@ const inputText = (file: string): Promise<string> => file === "-" ? stdinText() 
 export async function executeLiveCli(argv: string[]): Promise<boolean> {
   if (argv.includes("--help") || argv[0] === "help") { process.stdout.write(HELP); return true; }
   if (argv.includes("--folder") || ["check", "convert"].includes(argv[0])) return false;
-  const positional: string[] = [];
-  const options = new Map<string, string>();
-  for (let index = 0; index < argv.length; index++) {
-    const value = argv[index];
-    if (value === "--json") { options.set(value, ""); continue; }
-    if (["--config", "--relay", "--base", "--operation-id", "--week"].includes(value)) {
-      const next = argv[++index];
-      if (!next || next.startsWith("--")) throw new Error(`${value} needs a value`);
-      options.set(value, next); continue;
-    }
-    if (value.startsWith("--")) throw new Error(`unknown option: ${value}`);
-    positional.push(value);
-  }
+  const { positional, options } = parseArguments(argv,
+    ["--json", "--markdown", "--ingredients"], ["--config", "--relay", "--base", "--operation-id", "--week"]);
   const [command, ...rest] = positional;
-  if (options.has("--week") && command !== "shop") throw new Error("--week is only valid with shop");
+  if (options.has("--week") && !["shop", "plan"].includes(command)) throw new Error("--week is only valid with plan or shop");
+  if (options.has("--ingredients") && command !== "show") throw new Error("--ingredients is only valid with show");
+  if (options.has("--markdown") && (!["plan", "shop"].includes(command) || (command === "shop" && options.has("--week")))) throw new Error("--markdown is only valid for plan or shopping reads");
   if (command === "tools") {
     for (const name of rest) {
       if (!COOKING_OPERATIONS.some(operation => operation.name === name)) throw new Error(`Unknown cooking operation: ${name}`);
@@ -99,11 +93,13 @@ export async function executeLiveCli(argv: string[]): Promise<boolean> {
     name = "recipe.update"; args = { operationId, path: rest[0], markdown: await inputText(rest[1]), base: await readFile(options.get("--base")!, "utf8") };
   } else if (command === "show") {
     if (rest.length !== 1) throw new Error("show needs one recipe path.");
-    name = "recipe.get"; args = { path: rest[0] };
+    name = options.has("--ingredients") ? "recipe.ingredients.read" : "recipe.get"; args = { path: rest[0] };
   } else {
     if (command !== "export" && rest.length) throw new Error(`Use mep call for ${command} operations; mep tools lists their schemas.`);
     name = command === "list" ? "recipe.list" : command === "plan" ? "plan.read" : options.has("--week") ? "shopping.build" : "shopping.read";
     args = {};
+    if (command === "plan" && options.has("--week")) args.week = options.get("--week");
+    if (options.has("--markdown")) args.includeMarkdown = true;
   }
   const session = await openCookingSession(association);
   try {

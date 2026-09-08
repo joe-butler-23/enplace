@@ -3,7 +3,7 @@ import { Ajv, type ValidateFunction } from "ajv";
 import {
   appendShoppingItem, buildShoppingMarkdown, isRecipePath, mergeShoppingItems, parseAisles,
   parsePlan, parseRecipe, parseShopping, recipePlanning, removeShoppingItem, resetShopping,
-  scanRecipes, serializePlan, setAisle, shoppingIngredient, SHOPPING_AISLES, toggleShoppingItem,
+  scanRecipes, serializePlan, setAisle, shoppingIngredient, resolveShoppingAisle, SHOPPING_AISLES, toggleShoppingItem,
   withRecipePlanning, type Recipe,
 } from "../core";
 import {
@@ -13,6 +13,7 @@ import {
 import { mergeText } from "../cookbook/merge";
 import { parseRecipeMD } from "../recipemd";
 import { withRecipeAdded } from "../recipe-document";
+import { editIngredients, ingredientSpans } from "./ingredients";
 
 /** The connection owns write health, transaction origin, persistence and acknowledgement. */
 export type CookingOperationContext = {
@@ -48,6 +49,7 @@ const date = string("Calendar date YYYY-MM-DD.", { pattern: "^\\d{4}-\\d{2}-\\d{
 const itemId = string("Exact line id returned by shopping.read.", { pattern: "^line:\\d+$" });
 const itemIds: Schema = { type: "array", items: itemId, minItems: 1, maxItems: 2000, uniqueItems: true };
 const content = string("One shopping ingredient or manual item, with no line breaks.", { minLength: 1, maxLength: 4096 });
+const includeMarkdown: Schema = { type: "boolean", description: "Explicitly include raw Markdown for document inspection/export; omitted by default." };
 function definition(name: string, description: string, properties: Record<string, Schema>, required: string[] = [], mutates = false): CookingOperationDefinition {
   return { name, description, mutates, inputSchema: { type: "object", properties: mutates ? { operationId, ...properties } : properties,
     required: mutates ? ["operationId", ...required] : required, additionalProperties: false } };
@@ -62,18 +64,25 @@ export const COOKING_OPERATIONS: readonly CookingOperationDefinition[] = [
     limit: { type: "integer", description: "Maximum matches after filtering; defaults to 100.", minimum: 1, maximum: 1000 },
   }),
   definition("recipe.get", "Read a recipe's complete Markdown and revision, including malformed recipes that need repair.", { path }, ["path"]),
+  definition("recipe.ingredients.read", "Read RecipeMD ingredient items, groups, yields and revision without description or method prose. IDs are valid only at this revision.", { path }, ["path"]),
+  definition("recipe.ingredients.edit", "Replace selected RecipeMD ingredient contents, preserving all other source bytes. Reject a changed recipe; return updated ingredients without method prose.", {
+    path, expectedRevision: revision,
+    edits: { type: "array", minItems: 1, maxItems: 2000, items: { type: "object", additionalProperties: false,
+      properties: { ingredientId: string("Exact item ID from recipe.ingredients.read.", { pattern: "^ingredient:\\d+$" }),
+        content: string("Replacement ingredient Markdown without its list marker; retain necessary preparation details.", { minLength: 1, maxLength: 4096 }) }, required: ["ingredientId", "content"] } },
+  }, ["path", "expectedRevision", "edits"], true),
   definition("recipe.create", "Add valid RecipeMD at a path derived from its title and retry token. Never overwrite an existing recipe.", { markdown }, ["markdown"], true),
   definition("recipe.update", "Amend a recipe with complete RecipeMD and the original base text. Preserve concurrent edits and return explicit merge conflicts.", { path, base: markdown, markdown }, ["path", "base", "markdown"], true),
   definition("recipe.delete", "Delete one exact recipe, retaining its text for recovery. Existing plan references remain visible as unresolved.", { path, expectedRevision: revision }, ["path", "expectedRevision"], true),
   definition("recipe.recoveries", "List recipe deletion recovery records, without changing the cookbook.", {}),
   definition("recipe.restore", "Restore a deleted recipe from its recovery id, refusing to overwrite any current file.", { recoveryId: operationId }, ["recoveryId"], true),
-  definition("plan.read", "Read the authoritative meal plan, marked recipes, day notes and unresolved recipe links. Optionally filter the displayed week.", { week: date }),
+  definition("plan.read", "Read structured meals, marked recipes, day notes and unresolved links. A requested week limits all dated content, including optional Markdown.", { week: date, includeMarkdown }),
   definition("plan.add", "Add an exact recipe to a date while retaining its other dates and marked state.", { path, date, expectedRevision: revision }, ["path", "date", "expectedRevision"], true),
   definition("plan.move", "Move one planned recipe occurrence from a date to another date.", { path, from: date, to: date, expectedRevision: revision }, ["path", "from", "to", "expectedRevision"], true),
   definition("plan.remove", "Remove one planned recipe occurrence without deleting the recipe.", { path, date, expectedRevision: revision }, ["path", "date", "expectedRevision"], true),
   definition("plan.mark", "Set the marked state of a recipe independently of its planned dates.", { path, marked: { type: "boolean" }, expectedRevision: revision }, ["path", "marked", "expectedRevision"], true),
   definition("plan.note", "Set or clear a day's plain-text planning note.", { date, note: string("One line of text, or empty to clear.", { maxLength: 4096 }), expectedRevision: revision }, ["date", "note", "expectedRevision"], true),
-  definition("shopping.read", "Read exact shopping rows, noun groups, checkbox state and aisle labels. Use row ids and revision for mutations.", {}),
+  definition("shopping.read", "Read visible shopping rows, notes, noun groups, checkbox state and aisle labels. Use row ids and revision for mutations.", { includeMarkdown }),
   definition("shopping.build", "Build shopping from a selected week of the current plan. Reject missing recipes and preserve manual items and checked state.", { week: date, expectedRevision: revision, planRevision: revision }, ["week", "expectedRevision", "planRevision"], true),
   definition("shopping.add", "Append one manual shopping item. A repeated operationId cannot append it again after reconnect.", { content }, ["content"], true),
   definition("shopping.edit", "Edit one exact shopping row, retaining its checkbox. A future build derives recipe-owned rows from their recipes again.", { itemId, content, expectedRevision: revision }, ["itemId", "content", "expectedRevision"], true),
@@ -93,7 +102,6 @@ type Recovery = { path: string; markdown: string; revision: string; deletedAt: s
 type Snapshot = { paths: string[]; texts: Map<string, string>; recipes: Recipe[] };
 type Prepared = { path: string; markdown: string | null; result: Result; recovery?: Recovery };
 const encoder = new TextEncoder();
-const owns = (object: object, key: string): boolean => Object.prototype.hasOwnProperty.call(object, key);
 
 export class CookingOperationError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = "CookingOperationError"; }
@@ -180,26 +188,46 @@ function invalidRecipes(source: Snapshot): string[] {
 async function recipeResult(path: string, markdown: string): Promise<Result> {
   return { path, markdown, revision: await cookingTextRevision(markdown), recipe: parseRecipe(path, markdown) };
 }
-async function planResult(source: Snapshot, week?: string): Promise<Result> {
+async function ingredientResult(path: string, markdown: string): Promise<Result> {
+  try {
+    const { title, yields, items } = ingredientSpans(markdown);
+    return { path, title, yields, revision: await cookingTextRevision(markdown), items: items.map(({ id, content, groups }) => ({ id, content, groups })) };
+  } catch { fail("invalid_recipe", "Targeted ingredient operations require valid RecipeMD. Use recipe.get for full-document repair."); }
+}
+async function planResult(source: Snapshot, weeks?: string[], includeMarkdown = false): Promise<Result> {
   const markdown = textAt(source, "Plan.md"), plan = parsePlan(markdown);
-  const selected = week ? new Set(weekDates(week)) : null;
+  const selected = weeks ? new Set(weeks.flatMap(weekDates)) : null;
+  const scopedPlan = { ...plan, days: new Map([...plan.days].filter(([day]) => !selected || selected.has(day))),
+    notes: new Map([...plan.notes].filter(([day]) => !selected || selected.has(day))) };
   const warnings: string[] = [];
   const entry = (reference: string): Result => {
     try { const recipe = resolve(source, reference); return { reference, path: recipe.path, title: recipe.title }; }
     catch (error) { const warning = error instanceof Error ? error.message : String(error); warnings.push(warning); return { reference, path: null, warning }; }
   };
-  return { markdown, revision: await cookingTextRevision(markdown), marked: plan.marked.map(entry),
-    days: [...new Set([...plan.days.keys(), ...plan.notes.keys()])].sort().filter(day => !selected || selected.has(day))
-      .map(date => ({ date, recipes: (plan.days.get(date) ?? []).map(entry), note: plan.notes.get(date) ?? "" })), warnings };
+  return { ...(includeMarkdown ? { markdown: selected ? serializePlan(scopedPlan) : markdown } : {}),
+    revision: await cookingTextRevision(markdown), scope: { dates: selected ? [...selected].sort() : null }, marked: plan.marked.map(entry),
+    days: [...new Set([...scopedPlan.days.keys(), ...scopedPlan.notes.keys()])].sort()
+      .map(date => ({ date, recipes: (scopedPlan.days.get(date) ?? []).map(entry), note: scopedPlan.notes.get(date) ?? "" })), warnings };
 }
-async function shoppingResult(source: Snapshot): Promise<Result> {
+async function shoppingResult(source: Snapshot, includeMarkdown = false): Promise<Result> {
   const markdown = textAt(source, "Shopping.md"), aisles = parseAisles(textAt(source, "Aisles.md"));
-  const items = parseShopping(markdown).map(line => {
-    const noun = shoppingIngredient(line.text).noun, aisle = aisles.get(noun) ?? "Other";
+  // Keep physical line numbers stable while omitting opaque comments from model-visible data.
+  const visible = markdown.replace(/<!--[\s\S]*?(?:-->|$)/g, comment => comment.replace(/[^\r\n]/g, ""));
+  const rows = parseShopping(visible);
+  const items = rows.map(line => {
+    const ingredient = shoppingIngredient(line.text);
+    const noun = ingredient.noun, aisle = resolveShoppingAisle(ingredient, aisles);
     return { id: `line:${line.line}`, content: line.text, checked: line.checked, noun, heading: line.heading, aisle, labels: [aisle], sources: line.heading ? [line.heading] : [] };
   });
+  const itemLines = new Set(rows.map(row => row.line));
+  let heading: string | null = null;
+  const notes = visible.split(/\r?\n/).flatMap((line, index) => {
+    const title = /^##\s+(.+?)\s*$/.exec(line);
+    if (title) { heading = title[1]; return []; }
+    return line.trim() && !/^#\s/.test(line) && !itemLines.has(index) ? [{ heading, content: line.trim() }] : [];
+  });
   const groups = mergeShoppingItems(items).map(group => ({ ...group, noun: items.find(item => item.id === group.memberIds[0])!.noun }));
-  return { markdown, revision: await cookingTextRevision(markdown), items, groups };
+  return { ...(includeMarkdown ? { markdown } : {}), revision: await cookingTextRevision(markdown), items, groups, notes };
 }
 async function aisleResult(source: Snapshot): Promise<Result> {
   const markdown = textAt(source, "Aisles.md");
@@ -218,10 +246,10 @@ function selectedItems(markdown: string, ids: string[]) {
 }
 function receiptSummary(name: string, result: Result): Result {
   const summary: Result = { applied: true, readOperation: name.startsWith("recipe.")
-    ? name === "recipe.delete" ? "recipe.recoveries" : "recipe.get"
+    ? name === "recipe.delete" ? "recipe.recoveries" : name === "recipe.ingredients.edit" ? "recipe.ingredients.read" : "recipe.get"
     : name.startsWith("plan.") ? "plan.read" : name.startsWith("aisles.") ? "aisles.read" : "shopping.read" };
   for (const field of ["path", "revision", "conflicts", "requiresResolution", "deleted", "recoveryId", "restoredFrom"]) {
-    if (owns(result, field)) summary[field] = result[field];
+    if (Object.prototype.hasOwnProperty.call(result, field)) summary[field] = result[field];
   }
   return summary;
 }
@@ -242,6 +270,15 @@ async function prepare(source: Snapshot, name: string, args: Result, doc: Y.Doc)
     if ([current, str("base")].some(text => text.split("\n").length > 2000)) fail("recipe_too_large", "Recipe merge inputs may contain at most 2000 lines.");
     const merged = mergeText(str("base"), str("markdown"), current);
     return { path, markdown: merged.text, result: { ...await recipeResult(path, merged.text), conflicts: merged.conflicts, requiresResolution: merged.conflicts > 0 } };
+  }
+  if (name === "recipe.ingredients.edit") {
+    const path = str("path"), current = requiredText(source, path);
+    await expected(source, path, str("expectedRevision"));
+    let markdown: string;
+    try { markdown = editIngredients(current, args.edits as { ingredientId: string; content: string }[]); }
+    catch { fail("invalid_ingredient_edit", "Select existing ingredients once and keep each replacement within its ingredient boundary. Full-document repairs use recipe.update."); }
+    validateRecipeText(markdown);
+    return { path, markdown, result: await ingredientResult(path, markdown) };
   }
   if (name === "recipe.delete") {
     const path = str("path"), markdown = requiredText(source, path);
@@ -286,7 +323,8 @@ async function prepare(source: Snapshot, name: string, args: Result, doc: Y.Doc)
       plan = withRecipePlanning(plan, recipe.link, planning);
     }
     const markdown = serializePlan(plan);
-    return { path: "Plan.md", markdown, result: await planResult(withText(source, "Plan.md", markdown)) };
+    const weeks = name === "plan.mark" ? [] : name === "plan.move" ? [str("from"), str("to")] : [str("date")];
+    return { path: "Plan.md", markdown, result: await planResult(withText(source, "Plan.md", markdown), weeks) };
   }
   if (name === "aisles.set") {
     await expected(source, "Aisles.md", str("expectedRevision"));
@@ -352,12 +390,13 @@ export async function executeCookingOperation(context: CookingOperationContext, 
       return { recipes: recipeRows(source, recipes, args.includeIngredients === true), invalidRecipes: invalidRecipes(source) };
     }
     if (name === "recipe.get") return recipeResult(args.path as string, requiredText(source, args.path as string));
+    if (name === "recipe.ingredients.read") return ingredientResult(args.path as string, requiredText(source, args.path as string));
     if (name === "recipe.recoveries") return { recoveries: [...context.doc.getMap<string>(RECOVERIES)].map(([recoveryId, raw]) => {
       const { path, revision, deletedAt } = JSON.parse(raw) as Recovery;
       return { recoveryId, path, revision, deletedAt, pathOccupied: source.paths.includes(path) };
     }) };
-    if (name === "plan.read") return planResult(source, args.week as string | undefined);
-    if (name === "shopping.read") return shoppingResult(source);
+    if (name === "plan.read") return planResult(source, args.week ? [args.week as string] : undefined, args.includeMarkdown === true);
+    if (name === "shopping.read") return shoppingResult(source, args.includeMarkdown === true);
     return aisleResult(source);
   }
   const prepared = await prepare(source, name, args, context.doc);
