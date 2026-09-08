@@ -4,7 +4,7 @@ import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook,
 
 const grouping = (page: Page, name: string) => page.getByRole('group', { name: 'Group shopping list' }).getByRole('button', { name, exact: true });
 
-test('preparation-heavy planned recipes produce clean purchase rows with original requirements', async ({ page }) => {
+test('preparation-heavy planned recipes produce clean purchase rows without extra disclosures', async ({ page }) => {
   await openFreshCookbook(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
@@ -25,14 +25,12 @@ test('preparation-heavy planned recipes produce clean purchase rows with origina
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
   await page.getByRole('button', { name: 'Build shopping list' }).click();
   await grouping(page, 'Aisle').click();
-  const names = ['2 green or red peppers', '130 ml olive oil', '1 tsp kosher salt + 2 g salt + fine sea salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour'];
+  const names = ['2 green or red peppers', '130 ml olive oil', '≈8 g salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour'];
   await expect(page.getByRole('checkbox')).toHaveCount(names.length);
   for (const name of names) await expect(page.getByRole('checkbox', { name, exact: true })).toBeAttached();
   await expect(page.locator('.shopping-group__label', { hasText: /^Other$/ })).toHaveCount(0);
   const oil = page.locator('.shopping-item').filter({ has: page.getByRole('checkbox', { name: '130 ml olive oil', exact: true }) });
-  await oil.getByText('Recipe requirements', { exact: true }).click();
-  await expect(oil.locator('details')).toContainText('90 ml extra-virgin olive oil, plus more for serving');
-  await expect(oil.getByRole('checkbox')).not.toBeChecked();
+  await expect(page.locator('.shopping-item details')).toHaveCount(0);
   await oil.getByText('130 ml olive oil', { exact: true }).click();
   await expect(oil.getByRole('checkbox')).toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -138,4 +136,41 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await restoredContext.close();
     await fixture.close();
   }
+});
+
+test('independent recipe corpus keeps expected purchase counts and aisles through planner, reload and export', async ({ page }) => {
+  const corpus: Array<{ title: string; ingredients: Array<{ text: string; purchase: string; aisle: string; include: boolean }> }> =
+    JSON.parse(await readFile('tests/fixtures/shopping/development.json', 'utf8'));
+  await openFreshCookbook(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove sample recipes' }).click();
+  await expect(page.locator('.mep-notices')).toContainText('Removed sample recipes.');
+  const today = new Date();
+  today.setDate(today.getDate() - (today.getDay() + 6) % 7);
+  const date = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+  const files = corpus.map(({ title, ingredients }, i) => ({
+    name: `corpus-${i}.md`, mimeType: 'text/markdown',
+    buffer: Buffer.from(`# ${title}\n\n---\n\n${ingredients.map(x => `- ${x.text}`).join('\n')}\n\n---\n\nCook.\n`),
+  }));
+  files.push({ name: 'Plan.md', mimeType: 'text/markdown', buffer: Buffer.from(`## ${date}\n${corpus.map((_, i) => `- [[corpus-${i}]]`).join('\n')}\n`) });
+  await page.locator('.mep-settings__file-button', { hasText: 'Import files' }).locator('input').setInputFiles(files);
+  await expect(page.locator('.mep-notices')).toContainText('8 recipes recognised.');
+  await page.getByTitle('Close settings').click();
+  await page.getByRole('button', { name: 'Planner', exact: true }).click();
+  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  const included = corpus.flatMap(recipe => recipe.ingredients).filter(x => x.include);
+  await expect(page.getByRole('checkbox')).toHaveCount(included.length);
+  await grouping(page, 'Aisle').click();
+  const purchases = new Map(included.map(x => [x.purchase, x.aisle]));
+  await expect(page.getByRole('checkbox')).toHaveCount(purchases.size);
+  for (const aisle of new Set(purchases.values())) {
+    const section = page.locator('.shopping-group').filter({ has: page.getByText(aisle, { exact: true }).and(page.locator('.shopping-group__label')) });
+    await expect(section.getByRole('checkbox')).toHaveCount([...purchases.values()].filter(x => x === aisle).length);
+  }
+  await expect(page.locator('.shopping-item details')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('checkbox')).toHaveCount(purchases.size);
+  const markdown = await exportedCookbookText(page, 'Shopping.md');
+  for (const ingredient of included) expect(markdown).toContain(`- [ ] ${ingredient.text}\n`);
 });

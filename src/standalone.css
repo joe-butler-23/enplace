@@ -134,9 +134,9 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 /* Sticky because knowing which aisle you are in matters mid-scroll; it costs one line. */
 .shopping-group__label { position: sticky; top: 0; z-index: 2; padding: 4px 0 6px 2px; background: var(--surface); font-size: 0.63rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
 .shopping-items { margin: 0; padding: 0; list-style: none; }
-.shopping-item { display: flex; flex-wrap: wrap; align-items: center; margin-left: -4px; border-radius: 7px; }
+.shopping-item { display: flex; align-items: center; margin-left: -4px; border-radius: 7px; }
 .shopping-item:hover { background: var(--hover); }
-.shopping-item__label { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 7px 4px 7px 8px; cursor: pointer; }
+.shopping-item__label { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 7px 4px 7px 8px; cursor: pointer; }
 .shopping-item__input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
 .shopping-item__box,
 .checkbox-box { flex: none; margin-top: 2px; width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 5px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
@@ -152,9 +152,6 @@ h3 { font-family: var(--font-serif); font-weight: 600; }
 .shopping-item__label:active .shopping-item__box,
 .recipe-view__checklist label:active .checkbox-box { transform: scale(0.9); }
 .shopping-item__name { flex: 1 1 auto; min-width: 0; font-size: 0.94rem; letter-spacing: -0.005em; color: var(--ink); }
-.shopping-item__requirements { flex-basis: 100%; min-width: 0; margin: 0 8px 5px 34px; color: var(--muted); font-size: 0.72rem; overflow-wrap: anywhere; }
-.shopping-item__requirements summary { cursor: pointer; }
-.shopping-item__requirements ul { padding-left: 16px; }
 .shopping-item__sources { display: block; margin-top: 2px; color: var(--muted); font-size: 0.72rem; overflow-wrap: anywhere; }
 .shopping-item.is-checked .shopping-item__name { color: var(--muted); text-decoration: line-through; }
 /* Row tools (aisle, remove) appear on hover; the aisle chip is a bare select so phones get the native picker. */

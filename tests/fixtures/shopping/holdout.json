@@ -1,0 +1,54 @@
+[
+  { "title": "Crisp salmon rice bowls", "ingredients": [
+    {"text": "*2* salmon fillets, skin on", "purchase": "salmon fillets", "aisle": "Meat & fish", "include": true},
+    {"text": "*200 g* basmati rice", "purchase": "basmati rice", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*150 g* frozen peas", "purchase": "frozen peas", "aisle": "Frozen", "include": true},
+    {"text": "*1* avocado, sliced", "purchase": "avocados", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2* spring onions, finely sliced", "purchase": "spring onions", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tbsp* soy sauce", "purchase": "soy sauce", "aisle": "Tins & jars", "include": true},
+    {"text": "*1 tsp* toasted sesame oil", "purchase": "toasted sesame oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1* lime, juiced", "purchase": "limes", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tsp* sesame seeds", "purchase": "sesame seeds", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*400 ml* water", "purchase": "water", "aisle": "Other", "include": false}
+  ] },
+  { "title": "Sweet potato black bean enchiladas", "ingredients": [
+    {"text": "*600 g* sweet potatoes, peeled and cubed", "purchase": "sweet potatoes", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*400 g* canned black beans, rinsed", "purchase": "canned black beans", "aisle": "Tins & jars", "include": true},
+    {"text": "*8* flour tortillas", "purchase": "flour tortillas", "aisle": "Bakery", "include": true},
+    {"text": "*300 g* passata", "purchase": "passata", "aisle": "Tins & jars", "include": true},
+    {"text": "*150 g* Cheddar, grated", "purchase": "Cheddar", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*1* onion, sliced", "purchase": "onions", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 cloves* garlic, crushed", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tsp* ground cumin", "purchase": "ground cumin", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* smoked paprika", "purchase": "smoked paprika", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*2 tbsp* olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "1-2 fresh red chillies, finely chopped", "purchase": "fresh red chillies", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "a little sour cream, to serve", "purchase": "sour cream", "aisle": "Dairy & eggs", "include": true}
+  ] },
+  { "title": "Mushroom barley bake with herb crumbs", "ingredients": [
+    {"text": "*200 g* pearl barley", "purchase": "pearl barley", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*400 g* chestnut mushrooms, sliced", "purchase": "chestnut mushrooms", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*15 g* dried porcini mushrooms, soaked", "purchase": "dried porcini mushrooms", "aisle": "Other", "include": true},
+    {"text": "*2* leeks, trimmed and sliced", "purchase": "leeks", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 cloves* garlic, chopped", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*40 g* unsalted butter", "purchase": "unsalted butter", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*50 g* Parmesan, grated", "purchase": "Parmesan", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*60 g* dried breadcrumbs", "purchase": "dried breadcrumbs", "aisle": "Bakery", "include": true},
+    {"text": "a few sprigs of fresh rosemary, leaves picked", "purchase": "fresh rosemary", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tbsp* garlic-infused olive oil", "purchase": "garlic-infused olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* sea salt", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*650 ml* water", "purchase": "water", "aisle": "Other", "include": false}
+  ] },
+  { "title": "Berry cocoa breakfast smoothie", "ingredients": [
+    {"text": "*200 g* frozen mixed berries", "purchase": "frozen mixed berries", "aisle": "Frozen", "include": true},
+    {"text": "*1* banana, peeled", "purchase": "bananas", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*150 g* plain Greek yoghurt", "purchase": "plain Greek yoghurt", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*150 ml* whole milk", "purchase": "whole milk", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*30 g* rolled oats", "purchase": "rolled oats", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*1 tbsp* cocoa powder", "purchase": "cocoa powder", "aisle": "Baking", "include": true},
+    {"text": "*1 tbsp* smooth peanut butter", "purchase": "smooth peanut butter", "aisle": "Tins & jars", "include": true},
+    {"text": "*1 tsp* maple syrup", "purchase": "maple syrup", "aisle": "Baking", "include": true},
+    {"text": "a handful of ice cubes", "purchase": "ice", "aisle": "Other", "include": false},
+    {"text": "breakfast booster blend, optional", "purchase": "breakfast booster blend", "aisle": "Other", "include": true}
+  ] }
+]

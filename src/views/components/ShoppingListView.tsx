@@ -110,10 +110,7 @@ function ShoppingItemRow({
         {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
       </select> : null}
       {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button> : null}
-      {item.requirements?.some(text => text !== item.content) ? <details className="shopping-item__requirements">
-        <summary>Recipe requirements</summary>
-        <ul>{item.requirements.map(text => <li key={text}>{text}</li>)}</ul>
-      </details> : null}
+
     </li>
   );
 }

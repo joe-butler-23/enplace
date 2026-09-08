@@ -169,7 +169,7 @@ describe("mergeShoppingItems", () => {
     ];
     const rows = mergeShoppingItems(items);
     expect(rows).toHaveLength(1);
-    expect(rows[0].content).toBe("0.5 tsp salt + 0.5 tsp fine salt + 2 g salt + salt, to taste");
+    expect(rows[0].content).toBe("≈8 g salt");
     expect(rows[0].memberIds).toEqual(["1", "2", "3", "4"]);
   });
 });

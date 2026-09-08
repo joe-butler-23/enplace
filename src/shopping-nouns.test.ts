@@ -23,7 +23,7 @@ describe('shopping nouns', () => {
       const rows = groupShoppingItems(items, grouping).flatMap(group => group.items);
       expect(rows).toHaveLength(2);
       expect(rows[0]).toMatchObject({ content: '2 Aubergine', checked: false, memberIds: ['1', '2'], sources: ['Pie', 'Soup'] });
-      expect(rows[1]).toMatchObject({ content: '0.5 tsp salt + 0.5 tsp fine salt + 2 g salt + salt, to taste', memberIds: ['3', '4', '5', '6'] });
+      expect(rows[1]).toMatchObject({ content: '≈8 g salt', memberIds: ['3', '4', '5', '6'] });
     }
     const recipeRows = groupShoppingItems(items, 'recipe').flatMap(group => group.items);
     expect(recipeRows).toHaveLength(6);

@@ -18,7 +18,7 @@ it('builds a usable non-AI list from three preparation-heavy recipes without cha
     ['2 green or red peppers', 'Fruit & vegetables'],
     ['3 cloves garlic', 'Fruit & vegetables'],
     ['130 ml olive oil', 'Herbs, spices & oils'],
-    ['1 tsp kosher salt + 2 g salt + fine sea salt', 'Herbs, spices & oils'],
+    ['≈8 g salt', 'Herbs, spices & oils'],
     ['80 g white sandwich, french, or italian bread', 'Bakery'],
     ['1 lime', 'Fruit & vegetables'],
     ['10 g fresh dill leaves', 'Fruit & vegetables'],
@@ -43,12 +43,11 @@ it('retains purchased waters, flavoured products, forms and incompatible count u
 });
 
 
-it('keeps unknown qualifiers, package forms, alternatives and salt varieties distinct', () => {
+it('keeps unknown qualifiers, package forms and alternatives distinct', () => {
   const contents = ['*1 tsp* kosher salt', '*1 tsp* fine sea salt', '*1 g* cheese (50% fat)', '*1 g* cheese (10% fat)', '*1* garlic, peeled, powder', '*1* garlic', '*1* tomato, chopped or tinned'];
   const rows = mergeShoppingItems(contents.map((content, i) => ({ id: String(i), content, labels: [], checked: false })));
   expect(rows).toHaveLength(6);
-  expect(rows[0].content).toBe('1 tsp kosher salt + 1 tsp fine sea salt');
-  expect(rows[0].requirements).toEqual(['1 tsp kosher salt', '1 tsp fine sea salt']);
+  expect(rows[0].content).toBe('2 tsp salt');
   expect(rows[4].content).toBe('1 garlic');
   expect(rows[5].content).toBe('1 tomato, chopped or tinned');
 });
@@ -64,5 +63,30 @@ it('separates fractional preparation clauses from the vegetable, and salt grade 
   expect(pepper.name).toBe('red chilli');
   expect(resolveShoppingAisle(pepper)).toBe('Fruit & vegetables');
   const rows = mergeShoppingItems(['*1 tsp* salt', '*1 tsp* salt, fine'].map((content, i) => ({ id: String(i), content, labels: [], checked: false })));
-  expect(rows[0].content).toBe('1 tsp salt + 1 tsp fine salt');
+  expect(rows[0].content).toBe('2 tsp salt');
+});
+
+it.each([
+  [['*1.5 tsp* kosher salt', '*3 g* salt', 'fine sea salt'], '≈12 g salt'],
+  [['*1 tsp* kosher salt', '*2 tsp* fine sea salt'], '3 tsp salt'],
+  [['*1 tbsp* salt', '*2 tsp* sea salt'], '5 tsp salt'],
+  [['*0.01 kg* salt', '*3 g* kosher salt'], '13 g salt'],
+  [['*1 tbsp* salt', '*3 g* sea salt'], '≈21 g salt'],
+  [['*1/3 tsp* salt', '*1 g* salt'], '≈3 g salt'],
+  [['*1 TSP* salt', '*2 tsp* salt'], '3 tsp salt'],
+  [['salt to taste', 'fine sea salt'], 'salt'],
+  [['*2 g* salt', 'salt to taste'], '2 g salt'],
+  [['*1 pinch* salt', '*2 g* salt'], 'salt'],
+  [['*1 constructor* salt', '*2 g* salt'], 'salt'],
+  [['*1 toString* salt', '*2 g* salt'], 'salt'],
+])('renders one salt purchase total for %j', (contents, expected) => {
+  for (const ordered of [contents, [...contents].reverse()]) {
+    const items = ordered.map((content, i) => ({ id: String(i), content, labels: [], checked: i === 0 }));
+    const original = structuredClone(items);
+    const rows = mergeShoppingItems(items);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ content: expected, partial: true, checkedCount: 1 });
+    expect(rows[0].memberIds).toHaveLength(contents.length);
+    expect(items).toEqual(original);
+  }
 });

@@ -13,7 +13,6 @@ export type ShoppingRow = ShoppingItem & {
   memberIds: string[];
   partial?: boolean;
   checkedCount?: number;
-  requirements?: string[];
 };
 
 const PLURALS_TO_SINGULAR = new Map([
@@ -54,16 +53,18 @@ export function singularize(word: string): string {
   return word;
 }
 
-const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|unpeeled|crushed|smashed|bashed|rinsed|washed|seeded|deseeded|cored|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|warmed|minced|pitted|stoned|drained";
-const preparationModifier = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly)\\s+)?";
-const preparationStart = new RegExp("^(?:" + preparationModifier + "(?:" + preparationVerbs + ")\\b|cut\\s+into\\b|(?:crusts?|skins?|seeds?|stems?|stalks?|cores?|pith)\\s+removed\\b|(?:plus\\s+more\\s+)?(?:to\\s+(?:taste|serve)|for\\s+\\w+)\\b|to\\s+get\\b|frozen\\s+for\\s+storage$|zest\\s+only$|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?)$)", "i");
+const preparationVerbs = "diced|sliced|chopped|cubed|grated|peeled|unpeeled|crushed|smashed|bashed|rinsed|washed|seeded|deseeded|cored|zested|juiced|trimmed|torn|shredded|beaten|divided|sifted|halved|quartered|crumbled|melted|whisked|warmed|minced|pitted|stoned|drained|pressed|softened";
+const preparationModifier = "(?:(?:finely|roughly|coarsely|thinly|thickly|lightly|freshly)\\s+)?";
+const preparationStart = new RegExp("^(?:" + preparationModifier + "(?:" + preparationVerbs + ")\\b|cut\\s+into\\b|(?:crusts?|skins?|seeds?|stems?|stalks?|cores?|pith|leaves?)\\s+(?:removed|picked)\\b|(?:plus\\s+more\\s+)?(?:to\\s+(?:taste|serve)|for\\s+\\w+)\\b|to\\s+get\\b|frozen\\s+for\\s+storage$|zest\\s+only$|\\d+(?:[-–—]\\d+)?\\s*(?:cloves?|heads?|bulbs?|stalks?|sprigs?|leaves?|bunches?)$)", "i");
 const inlinePreparation = new RegExp("\\s+" + preparationModifier + "(?:" + preparationVerbs + "|cut\\s+into)\\b", "i");
 const countPart = /^(cloves?|heads?|bulbs?|stalks?|sprigs?|bunches?)\s+(?:of\s+)?(.+)$|^(.+?)\s+(cloves?|heads?|bulbs?|stalks?|sprigs?|bunches?)$/i;
 
 export function preparedName(name: string): string {
   // Remove quantity hints, never parenthesised product forms or alternatives.
-  let product = name.replace(/\(\s*(?:about\s+)?\d+(?:[./]\d+)?\s*(?:g|kg|ml|l|tsp|tbsp|small|medium|large|slices?|cloves?)\s*\)/gi, " ").trim()
+  let product = name.replace(/\s+/g, " ").replace(/\(\s*(?:about\s+)?\d+(?:[./]\d+)?\s*(?:g|kg|ml|l|tsp|tbsp|small|medium|large|slices?|cloves?)\s*\)/gi, " ").trim()
     .replace(/^[,\s]*(?:plus\s+(?:more\s+)?for\s+(?:dusting|oiling|greasing|frying)\s+)/i, "");
+  product = product.replace(/^(?:a\s+(?:handful|little|few|small\s+bunch)|some)(?:\s+(?:sprigs?|bunches?))?\s+(?:of\s+)?/i, "");
+  product = product.replace(/^(.+),\s*(bone[- ]in|skin[- ]on|boneless|skinless)$/i, "$2 $1");
   product = product.replace(/^(.+),\s*(fine|coarse|flaky)$/i, "$2 $1");
   product = product.replace(/\b(lemon|lime|orange|grapefruit)(?:s)?\s+finely grated zest\b/gi, "$1 zest");
   const clauses = product.split(/,\s*/);
@@ -74,7 +75,7 @@ export function preparedName(name: string): string {
     const head = product.slice(0, inline.index);
     if (AISLE_RULES.some(([, rx]) => rx.test(head)) && !/[,]|\bor\b/i.test(product.slice(inline.index))) product = head;
   }
-  return product.replace(/\s+/g, " ").trim() || name;
+  return product.replace(/,?\s+to\s+(?:taste|serve)$/i, "").replace(/\s+/g, " ").trim() || name;
 }
 
 function countedProduct(name: string): { name: string; unit: string | null } {
@@ -83,7 +84,7 @@ function countedProduct(name: string): { name: string; unit: string | null } {
   return match ? { name: match[2] ?? match[3], unit: singularize((match[1] ?? match[4]).toLowerCase()) + "s" } : { name, unit: null };
 }
 
-// Purchase families are not quantity equivalences: salt varieties keep their own totals.
+// Purchase identity; original recipe quantities remain in Shopping.md.
 function purchaseFamily(noun: string): string {
   if (/^(?:(?:extra )?virgin )?olive oil$/.test(noun)) return "olive oil";
   if (/^(?:(?:fine|coarse|flaky) )?(?:(?:sea|kosher|table) )?salt$/.test(noun)) return "salt";
@@ -217,7 +218,7 @@ export function shoppingIngredient(text: string): {
       if (amount && !amount.unit) amount = { ...amount, unit: counted.unit };
     }
     // A counted citrus fruit can supply zest/juice; a mass of zest is not fruit mass.
-    if (amount && !amount.unit) name = name.replace(/^(.*?\b(?:lemon|lime|orange|grapefruit)s?)\s+(?:zest|finely grated zest)\b.*$/i, "$1");
+    if (amount && !amount.unit) name = name.replace(/^(.*?\b(?:lemon|lime|orange|grapefruit)s?)[,\s]+(?:zest|finely grated zest)\b.*$/i, "$1");
     return {
       noun: normalizeShoppingNoun(name),
       name,
@@ -290,14 +291,13 @@ function normalizeUnit(unit: string | null): string | null {
   if (lower === "kilograms" || lower === "kilogram") return "kg";
   if (lower === "millilitres" || lower === "millilitre" || lower === "milliliters" || lower === "milliliter") return "ml";
   if (lower === "litres" || lower === "litre" || lower === "liters" || lower === "liter") return "l";
-  return unit;
+  return lower;
 }
 
 export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[] {
   type GroupData = {
     row: ShoppingRow;
-    amounts: Map<string, { unit: string | null; name: string; factor: Rational }>;
-    requirements: Set<string>;
+    amounts: Map<string | null, { unit: string | null; factor: Rational }>;
     unquantified: Map<string, string>;
     sources: Set<string>;
   };
@@ -315,20 +315,18 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
       group = {
         row: {
           ...item,
-          content: family !== noun ? family : name,
+          content: family === "salt" || family !== noun ? family : name,
           memberIds: [],
           checked: true,
           checkedCount: 0,
         },
         sources: new Set(),
-        requirements: new Set(),
         amounts: new Map(),
         unquantified: new Map(),
       };
       groups.set(groupKey, group);
     }
     group.row.memberIds.push(item.id);
-    group.requirements.add(display);
     for (const source of item.sources ?? []) group.sources.add(source);
     if (item.labels?.length && !group.row.labels?.length) group.row.labels = item.labels;
     if (item.aisle && !group.row.aisle) group.row.aisle = item.aisle;
@@ -341,9 +339,8 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     if (amount) {
       try {
         const factor = parseRational(amount.factor);
-        const key = JSON.stringify([unit, family === "salt" ? noun : ""]);
-        const current = group.amounts.get(key);
-        group.amounts.set(key, { unit, name: family === "salt" ? name : group.row.content, factor: current ? addRational(current.factor, factor) : factor });
+        const current = group.amounts.get(unit);
+        group.amounts.set(unit, { unit, factor: current ? addRational(current.factor, factor) : factor });
       } catch {
         const key = display.toLowerCase();
         if (!group.unquantified.has(key)) group.unquantified.set(key, display);
@@ -354,14 +351,24 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
     }
   }
 
-  return [...groups.values()].map(({ row, amounts, unquantified, sources, requirements }) => {
+  return [...groups.values()].map(({ row, amounts, unquantified, sources }) => {
     const totals = [...amounts.values()];
     const quantity = ({ unit, factor }: typeof totals[number]) => `${formatRational(factor)}${unit ? ` ${unit}` : ""}`;
-    const sameName = totals.every(total => total.name === totals[0]?.name);
-    const quantified = sameName && totals.length
-      ? `${totals.map(quantity).join(" + ")} ${totals[0].name}`
-      : totals.map(total => `${quantity(total)} ${total.name}`).join(" + ");
-    const content = [quantified, ...unquantified.values()].filter(Boolean).join(" + ");
+    const quantified = totals.length ? `${totals.map(quantity).join(" + ")} ${row.content}` : "";
+    let content = [quantified, ...unquantified.values()].filter(Boolean).join(" + ");
+    if (row.content === "salt") {
+      content = quantified || "salt";
+      if (totals.length > 1) {
+        const mass = totals.some(total => total.unit === "g" || total.unit === "kg");
+        const factors = new Map<string, bigint>(mass ? [["g", 1n], ["kg", 1000n], ["tsp", 6n], ["tbsp", 18n]] : [["tsp", 1n], ["tbsp", 3n]]);
+        if (totals.every(total => total.unit && factors.has(total.unit))) {
+          const sum = totals.reduce((sum, total) => addRational(sum, rational(total.factor[0] * factors.get(total.unit!)!, total.factor[1])), rational(0n));
+          // Shopping estimate only: salt crystal size makes volume-to-mass inexact.
+          const approximate = mass && totals.some(total => total.unit === "tsp" || total.unit === "tbsp");
+          content = `${approximate ? "≈" : ""}${formatRational(sum)} ${mass ? "g" : "tsp"} salt`;
+        } else content = "salt";
+      }
+    }
     const totalMembers = row.memberIds.length;
     const checkedCount = row.checkedCount ?? 0;
     const partial = checkedCount > 0 && checkedCount < totalMembers;
@@ -369,7 +376,6 @@ export function mergeShoppingItems(items: readonly ShoppingItem[]): ShoppingRow[
       ...row,
       sources: [...sources],
       content,
-      requirements: [...requirements],
       partial,
     };
   });
@@ -385,10 +391,10 @@ const AISLE_RULES: ReadonlyArray<[string, RegExp]> = [
   ["Frozen", /^frozen\b/i],
   ["Tins & jars", /^(?:can|tin|jar|cans|tins|jars|canned|tinned|jarred)\b/i],
   ["Fruit & vegetables", /\bfresh\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)(?:\s+(?:leaf|leaves))?$/i],
-  ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)(?:\s+(?:leaf|leaves))?$/i],
+  ["Herbs, spices & oils", /\b(?:dried|ground)\s+(?:ginger|coriander|basil|parsley|mint|dill|rosemary|thyme|chive|chives|cilantro|tarragon|sage|oregano)(?:\s+(?:leaf|leaves))?$/i],
   ["Tins & jars", /\b(?:peanut|groundnut|almond|cashew|seed|nut)\s+butter$/i],
   ["Tins & jars", /\bcoconut\s+(?:milk|cream)$/i],
-  ["Baking", /\b(?:cocoa|cacao|shea)\s+butter$/i],
+  ["Baking", /\b(?:(?:cocoa|cacao)\s+(?:butter|powder)|shea\s+butter)$/i],
   ["Herbs, spices & oils", /\b(?:black|white|cracked|cayenne|ground)\s+pepp?er(?:corn)?s?$/i],
   ["Fruit & vegetables", /\b(?:bell|sweet|green|red|yellow|poblano|serrano)\s+peppers?$/i],
   ["Baking", /(?:^|\s)(?:flours?|sugars?|yeasts?|syrups?|treacles?|molasses|nectars?|baking powder|bicarbonate|cornstarch|cornflour|starches?|icings?|chocolates?|pastr(?:y|ies)|extracts?|essences?|malt powder|nuts?|walnuts?|pecans?|almonds?|cashews?|pistachios?|hazelnuts?|pine nuts?|peanuts?)$/i],

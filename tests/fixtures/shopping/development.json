@@ -1,0 +1,103 @@
+[
+  {"title": "Lemon chicken tray roast", "ingredients": [
+    {"text": "*800 g* chicken thighs, bone in", "purchase": "chicken thighs", "aisle": "Meat & fish", "include": true},
+    {"text": "*600 g* potatoes, cut into wedges", "purchase": "potatoes", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*3* carrots, peeled and halved", "purchase": "carrots", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1* lemon, zest and juice", "purchase": "lemons", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*4 cloves* garlic, crushed", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 tbsp* extra virgin olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* dried rosemary", "purchase": "dried rosemary", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* sea salt", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1/2 tsp* ground black pepper", "purchase": "ground black pepper", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*150 ml* water", "purchase": "water", "aisle": "Other", "include": false}
+  ]},
+  {"title": "Ginger tofu and broccoli noodles", "ingredients": [
+    {"text": "*400 g* firm tofu, pressed and cubed", "purchase": "firm tofu", "aisle": "Chilled", "include": true},
+    {"text": "*250 g* dried egg noodles", "purchase": "dried egg noodles", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*1 head* broccoli, cut into florets", "purchase": "broccoli", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*3* spring onions, sliced", "purchase": "spring onions", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*30 g* fresh ginger, grated", "purchase": "fresh ginger", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 cloves* garlic, finely chopped", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*3 tbsp* soy sauce", "purchase": "soy sauce", "aisle": "Tins & jars", "include": true},
+    {"text": "*1 tbsp* toasted sesame oil", "purchase": "toasted sesame oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tbsp* cornflour", "purchase": "cornflour", "aisle": "Baking", "include": true},
+    {"text": "*1 tbsp* sesame seeds", "purchase": "sesame seeds", "aisle": "Herbs, spices & oils", "include": true}
+  ]},
+  {"title": "Chickpea spinach coconut curry", "ingredients": [
+    {"text": "*400 g* canned chickpeas, drained", "purchase": "canned chickpeas", "aisle": "Tins & jars", "include": true},
+    {"text": "*400 ml* coconut milk", "purchase": "coconut milk", "aisle": "Tins & jars", "include": true},
+    {"text": "*200 g* frozen spinach", "purchase": "frozen spinach", "aisle": "Frozen", "include": true},
+    {"text": "*1* onion, finely diced", "purchase": "onions", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 cloves* garlic, minced", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*20 g* fresh ginger, peeled and grated", "purchase": "fresh ginger", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tbsp* ground cumin", "purchase": "ground cumin", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* ground coriander", "purchase": "ground coriander", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* ground turmeric", "purchase": "ground turmeric", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*250 g* basmati rice", "purchase": "basmati rice", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "salt to taste", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*2 tbsp* olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true}
+  ]},
+  {"title": "Roasted tomato and ricotta penne", "ingredients": [
+    {"text": "*300 g* dried penne", "purchase": "dried penne", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*500 g* cherry tomatoes, halved", "purchase": "cherry tomatoes", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*250 g* ricotta", "purchase": "ricotta", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*40 g* Parmesan, freshly grated", "purchase": "Parmesan", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*2 cloves* garlic, sliced", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 tbsp* olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "a handful of fresh basil leaves", "purchase": "fresh basil", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1/2 tsp* chilli flakes", "purchase": "chilli flakes", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* table salt", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1/4 tsp* ground black pepper", "purchase": "ground black pepper", "aisle": "Herbs, spices & oils", "include": true}
+  ]},
+  {"title": "Pear and ginger loaf cake", "ingredients": [
+    {"text": "*225 g* plain flour", "purchase": "plain flour", "aisle": "Baking", "include": true},
+    {"text": "*2 tsp* baking powder", "purchase": "baking powder", "aisle": "Baking", "include": true},
+    {"text": "*1 tsp* ground ginger", "purchase": "ground ginger", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*120 g* unsalted butter, softened", "purchase": "unsalted butter", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*150 g* light brown sugar", "purchase": "light brown sugar", "aisle": "Baking", "include": true},
+    {"text": "*2* eggs, beaten", "purchase": "eggs", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*80 ml* whole milk", "purchase": "whole milk", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*2* pears, peeled and diced", "purchase": "pears", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1 tsp* vanilla extract", "purchase": "vanilla extract", "aisle": "Baking", "include": true},
+    {"text": "*1 pinch* salt", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true}
+  ]},
+  {"title": "Apple oat breakfast pancakes", "ingredients": [
+    {"text": "*100 g* rolled oats", "purchase": "rolled oats", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*80 g* plain flour", "purchase": "plain flour", "aisle": "Baking", "include": true},
+    {"text": "*1 tsp* baking powder", "purchase": "baking powder", "aisle": "Baking", "include": true},
+    {"text": "*1* egg", "purchase": "eggs", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*180 ml* whole milk", "purchase": "whole milk", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*1* apple, coarsely grated", "purchase": "apples", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*1/2 tsp* ground cinnamon", "purchase": "ground cinnamon", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*15 g* unsalted butter, melted", "purchase": "unsalted butter", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*2 tbsp* maple syrup", "purchase": "maple syrup", "aisle": "Baking", "include": true},
+    {"text": "plain Greek yoghurt, to serve", "purchase": "plain Greek yoghurt", "aisle": "Dairy & eggs", "include": true}
+  ]},
+  {"title": "Warm lentil and beetroot salad", "ingredients": [
+    {"text": "*200 g* dried green lentils", "purchase": "dried green lentils", "aisle": "Rice, pasta & grains", "include": true},
+    {"text": "*3* raw beetroot, peeled and diced", "purchase": "raw beetroot", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*100 g* fresh spinach", "purchase": "fresh spinach", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*100 g* feta, crumbled", "purchase": "feta", "aisle": "Dairy & eggs", "include": true},
+    {"text": "*40 g* walnuts, roughly chopped", "purchase": "walnuts", "aisle": "Baking", "include": true},
+    {"text": "*2 tbsp* extra virgin olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tbsp* red wine vinegar", "purchase": "red wine vinegar", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* Dijon mustard", "purchase": "Dijon mustard", "aisle": "Tins & jars", "include": true},
+    {"text": "*1* lemon, juiced", "purchase": "lemons", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "a small bunch of fresh parsley, chopped", "purchase": "fresh parsley", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "salt to taste", "purchase": "salt", "aisle": "Herbs, spices & oils", "include": true}
+  ]},
+  {"title": "Smoky pork and white bean skillet", "ingredients": [
+    {"text": "*400 g* pork mince", "purchase": "pork mince", "aisle": "Meat & fish", "include": true},
+    {"text": "*400 g* canned cannellini beans, drained", "purchase": "canned cannellini beans", "aisle": "Tins & jars", "include": true},
+    {"text": "*400 g* canned chopped tomatoes", "purchase": "canned chopped tomatoes", "aisle": "Tins & jars", "include": true},
+    {"text": "*1* onion, chopped", "purchase": "onions", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2* carrots, diced", "purchase": "carrots", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 cloves* garlic, crushed", "purchase": "garlic", "aisle": "Fruit & vegetables", "include": true},
+    {"text": "*2 tsp* smoked paprika", "purchase": "smoked paprika", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* cumin seeds", "purchase": "cumin seeds", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tbsp* olive oil", "purchase": "olive oil", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*1 tsp* smoked salt", "purchase": "smoked salt", "aisle": "Herbs, spices & oils", "include": true},
+    {"text": "*4 slices* sourdough bread", "purchase": "sourdough bread", "aisle": "Bakery", "include": true},
+    {"text": "*100 ml* water", "purchase": "water", "aisle": "Other", "include": false}
+  ]}
+]
