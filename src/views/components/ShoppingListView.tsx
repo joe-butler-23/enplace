@@ -106,7 +106,7 @@ function ShoppingItemRow({
         </span>
       </label>
       {onAisle ? <select className="shopping-item__aisle" aria-label={`Aisle for ${item.content}`} value={item.labels[0] ?? ''} disabled={busy} onChange={(event) => onAisle(item.id, event.currentTarget.value)}>
-        <option value="">Automatic{!item.labels[0] && item.aisle ? ` (${item.aisle})` : ''}</option>
+        <option value="">{item.labels[0] ? 'Reset aisle' : item.aisle ?? OTHER_GROUP}</option>
         {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
       </select> : null}
       {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button> : null}
