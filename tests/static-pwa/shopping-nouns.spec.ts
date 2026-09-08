@@ -14,8 +14,8 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   today.setDate(today.getDate() - (today.getDay() + 6) % 7);
   const date = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const recipes = {
-    'a.md': ['*2* green or red peppers, seeded and cut into 2 cm chunks', '*90 ml* extra-virgin olive oil, plus more for serving', '*1 tsp* kosher salt'],
-    'b.md': ['*30 ml* olive oil', 'fine sea salt', '*10 g* fresh dill leaves', '*80 g* ice cubes'],
+    'a.md': ['*2* green or red peppers (seeded and cut into 2 cm chunks)', '*85 ml* plus 5 ml extra-virgin olive oil, plus more for serving', '*1 tsp* kosher salt'],
+    'b.md': ['*30 ml* olive oil', 'fine sea salt', '*10 g* fresh dill leaves (roughly chopped)', '*80 g* ice cubes'],
     'c.md': ['*180 ml* water, warmed to 40 °c', '*10 ml* (2 tsp), plus more for oiling extra-virgin olive oil', '*12 g* granulated sugar', '*250 g* , plus more for dusting plain flour', '*2 g* salt'],
   };
   const files = { ...Object.fromEntries(Object.entries(recipes).map(([path, ingredients]) => [path, `# ${path}\n\n---\n\n${ingredients.map(text => `- ${text}`).join('\n')}\n\n---\n\nCook.\n`])), 'Plan.md': `## ${date}\n- [[a]]\n- [[b]]\n- [[c]]\n` };
@@ -38,7 +38,7 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   await page.reload();
   await expect(page.getByRole('checkbox', { name: '130 ml olive oil', exact: true })).toBeChecked();
   const markdown = await exportedCookbookText(page, 'Shopping.md');
-  expect(markdown).toContain('- [x] *90 ml* extra-virgin olive oil, plus more for serving');
+  expect(markdown).toContain('- [x] *85 ml* plus 5 ml extra-virgin olive oil, plus more for serving');
   expect(markdown).toContain('- [x] *10 ml* (2 tsp), plus more for oiling extra-virgin olive oil');
   expect(markdown).toContain('*250 g* , plus more for dusting plain flour');
   expect(markdown).not.toContain('ice cubes');
@@ -83,7 +83,7 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await second.goto(page.url());
     await expect(second.getByRole('checkbox')).toHaveCount(4);
     await grouping(second, 'Aisle').click();
-    await page.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('Fruit & vegetables');
+    await page.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption({ value: 'Fruit & vegetables' });
     await expect(second.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Fruit & vegetables');
     await second.getByLabel('Aisle for 2 aubergine', { exact: true }).selectOption('Chilled');
     await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Chilled');
