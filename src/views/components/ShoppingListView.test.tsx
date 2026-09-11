@@ -16,7 +16,7 @@ const props = {
   onCheck: vi.fn(),
   onAdd: vi.fn(),
   onRemove: vi.fn(),
-  onCopyLink: vi.fn(),
+  onCopy: vi.fn(),
 };
 
 describe("ShoppingListView Markdown presentation", () => {
@@ -26,12 +26,14 @@ describe("ShoppingListView Markdown presentation", () => {
     ]);
   });
 
-  it("renders recipe groups with Markdown add/remove controls and Copy list", () => {
+  it("renders recipe groups with Markdown add/remove controls and a closed actions menu", () => {
     const html = renderToStaticMarkup(<ShoppingListView {...props} />);
     expect(html).toContain("Shopping list");
     expect(html).toContain("Soup");
     expect(html).toContain("Bread");
-    expect(html).toContain("Copy list");
+    expect(html).toContain('aria-label="More actions"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Copy list");
     expect(html).not.toContain(">Refresh<");
     expect(html).not.toContain(">Retry<");
     expect(html).not.toContain("Roll back");

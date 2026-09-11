@@ -13,8 +13,8 @@ export function installManifest(origin: string, id: string): void {
     start_url: `${origin}/#k=${id}`,
     scope: `${origin}/`,
     display: "standalone",
-    background_color: "#f7efe5",
-    theme_color: "#a64b2a",
+    background_color: "#f7f3ec",
+    theme_color: "#a8421f",
     icons: [
       { src: `${origin}/icons/icon-192.png`, sizes: "192x192", type: "image/png" },
       { src: `${origin}/icons/icon-512.png`, sizes: "512x512", type: "image/png" },

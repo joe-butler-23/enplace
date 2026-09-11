@@ -3,39 +3,48 @@ import { CookbookPanel } from "@/cookbook/CookbookPanel";
 import { Dialog } from "./Dialog";
 
 export type Command = { id: string; label: string; action: () => void };
+/** Enter runs the first match, so a typed prefix and Enter is the whole interaction. */
 export function CommandPalette({ commands, query, onQuery, onClose }: { commands: Command[]; query: string; onQuery: (value: string) => void; onClose: () => void }): React.JSX.Element {
-  const ref = React.useRef<HTMLDialogElement>(null);
   const input = React.useRef<HTMLInputElement>(null);
-  const previous = React.useRef<HTMLElement | null>(null);
-  React.useEffect(() => {
-    previous.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.showModal(); input.current?.focus();
-    return () => { if (ref.current?.open) ref.current.close(); if (previous.current?.isConnected) previous.current.focus(); };
-  }, []);
-  return <dialog ref={ref} className="mep-command" aria-labelledby="mep-command-title" onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <h2 id="mep-command-title">Command palette</h2>
-    <input ref={input} autoFocus aria-label="Search commands" placeholder="Type a command…" value={query} onChange={(event) => onQuery(event.target.value)} />
-    <div className="mep-command__list">{commands.length === 0 ? <div className="mep-command__empty">No matches.</div> : commands.map((command) => <button key={command.id} type="button" onClick={() => { command.action(); onClose(); }}>{command.label}</button>)}</div>
-  </dialog>;
+  React.useEffect(() => { input.current?.focus(); }, []);
+  const run = (command: Command): void => { command.action(); onClose(); };
+  return <Dialog title="Commands" onClose={onClose}>
+    <form className="mep-command" onSubmit={(event) => { event.preventDefault(); if (commands[0]) run(commands[0]); }}>
+      <input ref={input} aria-label="Search commands" placeholder="Type a command…" value={query} onChange={(event) => onQuery(event.currentTarget.value)} />
+      {commands.length === 0 ? <p className="mep-command__empty">No matches.</p> : <div className="mep-command__list">
+        {commands.map((command) => <button key={command.id} type="button" className="mep-menu__item" onClick={() => run(command)}>{command.label}</button>)}
+      </div>}
+    </form>
+  </Dialog>;
 }
+const SHORTCUTS: ReadonlyArray<readonly [React.ReactNode, string]> = [
+  [<><kbd>Ctrl</kbd> <kbd>K</kbd></>, "Command palette (⌘ K on a Mac)"],
+  [<kbd>?</kbd>, "This list"],
+  [<kbd>Esc</kbd>, "Close a dialog or menu"],
+  [<><kbd>Ctrl</kbd> click</>, "Open a recipe in the side pane"],
+  [<><kbd>←</kbd> <kbd>→</kbd></>, "Move the focused planner card to the neighbouring column"],
+  [<><kbd>Shift</kbd> drag</>, "Copy a planner card to another day instead of moving it"],
+];
 export function HelpDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const ref = React.useRef<HTMLDialogElement>(null);
-  React.useEffect(() => { ref.current?.showModal(); return () => { if (ref.current?.open) ref.current.close(); }; }, []);
-  return <div className="mep-modal-overlay" onClick={onClose}><dialog ref={ref} className="mep-help" aria-label="Enplace help" onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => event.stopPropagation()}>
-    <div className="mep-help__header"><h3>Quick Help</h3><button type="button" className="mep-button" onClick={onClose}>Close</button></div>
-    <div className="mep-help__hint">Press <kbd>?</kbd> to open or close this overlay.</div>
-    <div className="mep-help__section"><h4>Core shortcuts</h4><ul><li><kbd>Ctrl/Cmd</kbd> + <kbd>K</kbd>: open command palette</li><li><kbd>Esc</kbd>: close open overlays and modals</li><li>Sidebar: Planner, Recipe Database, Shopping List, Settings</li></ul></div>
-    <div className="mep-help__section"><h4>Planner basics</h4><ul><li>Drag cards between columns to schedule or re-plan.</li><li>Hold <kbd>Shift</kbd> while dragging to duplicate instead of move.</li><li>Hold <kbd>Ctrl/Cmd</kbd> when clicking a card to open in a split.</li></ul></div>
-  </dialog></div>;
+  return <Dialog title="Keyboard shortcuts" onClose={onClose}>
+    <dl className="mep-help">{SHORTCUTS.map(([keys, action], index) => <React.Fragment key={index}><dt>{keys}</dt><dd>{action}</dd></React.Fragment>)}</dl>
+  </Dialog>;
 }
 type SettingsProps = { routePath: string; onClose: () => void };
 export function SettingsDialog({ routePath, onClose }: SettingsProps): React.JSX.Element {
   return <Dialog title="Settings" onClose={onClose}><CookbookPanel routePath={routePath} /></Dialog>;
 }
-export function StartupFailure({ phase, error, events, onRetry }: { phase: string; error: string; events: string[]; onRetry: () => void }): React.JSX.Element {
-  const copy = async () => navigator.clipboard.writeText(["Enplace startup diagnostics", `timestamp: ${new Date().toISOString()}`, `phase: ${phase}`, `error: ${error}`, "events:", ...events].join("\n"));
-  return <div className="mep-root"><div className="mep-shell mep-shell--loading"><div className="mep-loading mep-loading--error"><div className="mep-loading__title">Startup failed</div><div className="mep-loading__phase">{phase}</div><pre className="mep-loading__error">{error}</pre>{events.length ? <pre className="mep-loading__trace">{events.slice(-8).join("\n")}</pre> : null}<div className="mep-loading__actions"><button type="button" className="mep-button mep-button--ghost" onClick={onRetry}>Retry startup</button><button type="button" className="mep-button mep-button--ghost" onClick={() => void copy()}>Copy diagnostics</button></div></div></div></div>;
+export function StartupFailure({ error, onRetry }: { error: string; onRetry: () => void }): React.JSX.Element {
+  const copy = (): void => { void navigator.clipboard.writeText(`Enplace startup failed at ${new Date().toISOString()}\n${error}`).catch(() => undefined); };
+  return <main className="mep-gate" role="alert"><section className="mep-gate__card">
+    <h1>Enplace could not start</h1>
+    <pre className="mep-gate__detail">{error}</pre>
+    <div className="mep-gate__actions">
+      <button type="button" className="mep-button" onClick={onRetry}>Retry</button>
+      <button type="button" className="mep-button" onClick={copy}>Copy details</button>
+    </div>
+  </section></main>;
 }
 export function Notices({ notices }: { notices: { id: string; message: string }[] }): React.JSX.Element {
-  return <div className="mep-notices" role="status" aria-live="polite" aria-atomic="true">{notices.map((notice) => <div key={notice.id} className="mep-notice">{notice.message}</div>)}</div>;
+  return <div className="mep-notices" role="status" aria-live="polite" aria-atomic="true">{notices.map((notice) => <div key={notice.id} className="mep-toast">{notice.message}</div>)}</div>;
 }

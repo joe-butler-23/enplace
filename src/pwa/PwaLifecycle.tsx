@@ -29,7 +29,7 @@ export function PwaLifecycle({ children }: React.PropsWithChildren): React.JSX.E
       {children}
       {update && (
         <div className="mep-pwa-status" aria-live="polite">
-          <div className="mep-pwa-toast" role="status">
+          <div className="mep-toast" role="status">
             <span>An Enplace update is ready.</span>
             <button type="button" onClick={activateUpdate}>Reload to update</button>
           </div>

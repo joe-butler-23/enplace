@@ -80,9 +80,8 @@ type PlannerCookbookViewProps = Omit<React.ComponentProps<typeof WeeklyOrganiser
 function PlannerCookbookView({ active, capability, onRetry, ...props }: PlannerCookbookViewProps): React.JSX.Element | null {
   const recipes = useCookbookSlice("recipes"); const plan = useCookbookSlice("plan");
   const dayNotes = React.useMemo(() => Object.fromEntries(plan.notes), [plan.notes]); const { resolveCover } = useCookbookImages();
-  if (capability.status === "error") return active
-    ? <div className="mep-loading"><div>Planner failed to load: {capability.message}</div><button type="button" className="mep-button mep-button--ghost" onClick={onRetry}>Retry planner</button></div>
-    : <div className="mep-planner-intent-error" role="alert"><span>Planner failed to load: {capability.message}</span><button type="button" className="mep-button mep-button--ghost" onClick={onRetry}>Retry planner</button></div>;
+  // One failure banner whether or not the planner is the current view: the view behind it stays usable.
+  if (capability.status === "error") return <div className="mep-planner-intent-error" role="alert"><span>Planner failed to load: {capability.message}</span><button type="button" className="mep-button" onClick={onRetry}>Retry planner</button></div>;
   if (!active || capability.status !== "ready") return null;
   return <div className="mep-planner"><WeeklyOrganiserBoard {...props} recipes={recipes} plan={plan} dayNotes={dayNotes} resolveCover={resolveCover} /></div>;
 }
@@ -148,18 +147,15 @@ function App(): React.JSX.Element | null {
   const settingsRef = React.useRef(DEFAULT_STANDALONE_SETTINGS);
   const [runtime, setRuntime] = React.useState<Runtime | null>(null);
   const [startupError, setStartupError] = React.useState("");
-  const [startupPhase, setStartupPhase] = React.useState("Preparing startup");
-  const [startupEvents, setStartupEvents] = React.useState<string[]>([]);
   const initialize = React.useCallback(async () => {
-    setStartupError(""); setStartupEvents([]); setStartupPhase("Loading preferences");
+    setStartupError("");
     try {
       const stored = await loadSettings();
       const settings = await prepareStandaloneStartup({ ...DEFAULT_STANDALONE_SETTINGS, ...stored });
       settingsRef.current = settings;
       setRuntime({ settings, plannerOrderStore: new PlannerOrderStore() });
     } catch (error) {
-      const detail = formatError(error);
-      setStartupError(detail); setStartupEvents([`[${new Date().toISOString()}] Startup failed: ${detail}`]);
+      setStartupError(formatError(error));
     }
   }, []);
   React.useEffect(() => { void initialize(); }, [initialize]);
@@ -369,23 +365,23 @@ function App(): React.JSX.Element | null {
     window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key);
   }, []);
   const commands: Command[] = React.useMemo(() => [
-    { id: "planner", label: "Go to Planner", action: () => { void setActiveView("planner"); } },
     { id: "database", label: "Go to Recipe Database", action: () => { void setActiveView("database"); } },
-    { id: "shopping", label: "Open Shopping List", action: () => { void setActiveView("shopping"); } },
+    { id: "planner", label: "Go to Planner", action: () => { void setActiveView("planner"); } },
+    { id: "shopping", label: "Go to Shopping List", action: () => { void setActiveView("shopping"); } },
     { id: "settings", label: "Open Settings", action: openSettings },
-    { id: "help", label: "Open Help Overlay", action: () => setHelpOpen(true) },
+    { id: "help", label: "Show keyboard shortcuts", action: () => setHelpOpen(true) },
   ], [openSettings, setActiveView]);
   const filteredCommands = commands.filter((command) => command.label.toLowerCase().includes(commandQuery.trim().toLowerCase()));
 
-  if (!runtime) return startupError ? <StartupFailure phase={startupPhase} error={startupError} events={startupEvents} onRetry={() => void initialize()} /> : null;
+  if (!runtime) return startupError ? <StartupFailure error={startupError} onRetry={() => void initialize()} /> : null;
   const { settings } = runtime;
-  return <div className="mep-root"><div className={`mep-shell ${previewFile ? "mep-shell--preview-open" : "mep-shell--preview-closed"} ${activeView === "shopping" ? "mep-shell--shopping" : ""}`} style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
+  return <div className="mep-root"><div className="mep-shell" style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
     <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} />
     <main className={`mep-main ${activeView === "planner" ? "mep-main--planner" : ""} ${activeView === "database" ? "mep-main--database" : ""} ${activeView === "shopping" ? "mep-main--shopping" : ""}`}>
       <h1 className="mep-sr-only">Enplace</h1>
       {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
-      {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopyLink={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
+      {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopy={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
         const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content;
         if (text) void shoppingWork(() => updateShoppingAisle(text, aisle)).catch(() => undefined);
       }} /> : null}

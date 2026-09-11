@@ -1,6 +1,11 @@
-import "./fonts.css";
-import "../styles.css";
-import "./standalone.css";
+import "./styles/fonts.css";
+import "./styles/base.css";
+import "./styles/shell.css";
+import "./styles/dialogs.css";
+import "./styles/database.css";
+import "./styles/planner.css";
+import "./styles/recipe.css";
+import "./styles/shopping.css";
 import type * as Y from "yjs";
 import { openCookbookAttempt } from "./cookbook/opening";
 import { setCurrentCookbookConnection } from "./cookbook/current";
@@ -45,26 +50,27 @@ function configuredRelayUrl(): string | null {
   }).env?.VITE_ENPLACE_RELAY_URL?.trim() || null;
 }
 
-type CookbookGate = { title: string; retry?: boolean };
+type Gate = { title: string; detail: string; action: string; alert?: boolean };
 
-function showCookbookGate({ title, retry = false }: CookbookGate): void {
+/** The card shown in place of the app, before it mounts: a title, one line, and a reload. */
+function showGate({ title, detail, action, alert = false }: Gate): void {
   const container = document.getElementById("root");
   if (!container) return;
   const main = document.createElement("main");
-  main.className = "mep-vault-gate";
+  main.className = "mep-gate";
+  if (alert) main.setAttribute("role", "alert");
   const card = document.createElement("section");
-  card.className = "mep-vault-gate__card";
+  card.className = "mep-gate__card";
   const heading = document.createElement("h1");
   heading.textContent = title;
-  card.append(heading);
-  if (retry) {
-    const button = document.createElement("button");
-    button.className = "mep-button";
-    button.type = "button";
-    button.textContent = "Retry";
-    button.addEventListener("click", () => window.location.reload());
-    card.append(button);
-  }
+  const text = document.createElement("p");
+  text.textContent = detail;
+  const button = document.createElement("button");
+  button.className = "mep-button";
+  button.type = "button";
+  button.textContent = action;
+  button.addEventListener("click", () => window.location.reload());
+  card.append(heading, text, button);
   main.append(card);
   container.replaceChildren(main);
 }
@@ -96,11 +102,14 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
       seed: createdHere ? seedSamplePack : undefined,
       deferRelayUntilLocalWrite: unpublished,
       onFirstLocalWrite: () => setCookbookUnpublished(id, false),
-    }, signal, (warning) => showCookbookGate({
-      title: warning === "storage"
-        ? "Cookbook storage is taking longer than expected. Close other Enplace tabs or reload."
-        : "This device hasn't downloaded this cookbook yet. Check your connection; it will open automatically when available.",
-      retry: true,
+    }, signal, (warning) => showGate(warning === "storage" ? {
+      title: "Still opening your cookbook",
+      detail: "Cookbook storage is taking longer than expected. Close other Enplace tabs or reload.",
+      action: "Retry",
+    } : {
+      title: "Waiting for this cookbook",
+      detail: "This device hasn't downloaded this cookbook yet. Check your connection; it will open automatically when available.",
+      action: "Retry",
     }));
     if (!connection || signal.aborted) { void connection?.close(); return null; }
     // The plaintext copy persisted before the wire document became the persisted copy.
@@ -155,33 +164,14 @@ async function start(): Promise<void> {
   }
 }
 
-function showStartupFailure(reason: unknown): void {
-  const container = document.getElementById("root");
-  if (!container) return;
-  const main = document.createElement("main");
-  main.className = "mep-vault-gate";
-  main.setAttribute("role", "alert");
-  const card = document.createElement("section");
-  card.className = "mep-vault-gate__card";
-  const title = document.createElement("h1");
-  title.textContent = "Enplace could not open your cookbook";
-  const detail = document.createElement("p");
-  detail.textContent = reason instanceof Error
-    ? reason.message
-    : "Reload Enplace and try opening the cookbook again.";
-  const reload = document.createElement("button");
-  reload.className = "mep-button";
-  reload.type = "button";
-  reload.textContent = "Reload Enplace";
-  reload.addEventListener("click", () => window.location.reload());
-  card.append(title, detail, reload);
-  main.append(card);
-  container.replaceChildren(main);
-}
-
 void start().catch((error) => {
   if (!opening.signal.aborted) {
     opening.abort();
-    showStartupFailure(error);
+    showGate({
+      title: "Enplace could not open your cookbook",
+      detail: error instanceof Error ? error.message : "Reload Enplace and try opening the cookbook again.",
+      action: "Reload Enplace",
+      alert: true,
+    });
   }
 });

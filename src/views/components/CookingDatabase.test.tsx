@@ -45,7 +45,7 @@ describe("recipe database markup", () => {
   it("keeps the card action separate and reset", () => {
     const markup = render({ recipes: [recipe()] }); expect(markup).toMatch(/<article[^>]*class="cooking-db__card"/);
     expect(markup).toContain('class="cooking-db__card-open"'); expect(markup).not.toContain('role="button"');
-    const css = readFileSync(new URL("../../../styles.css", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../styles/database.css", import.meta.url), "utf8");
     expect(/\.cooking-db__card-open\s*\{([^}]*)\}/.exec(css)?.[1]).toContain("all: unset");
   });
 });

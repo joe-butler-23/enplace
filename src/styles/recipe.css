@@ -1,0 +1,113 @@
+/* Recipe page (full) and the split-pane rendering (rendered). */
+.recipe-view { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.recipe-view--rendered { gap: 10px; }
+/* One track definition drives the masthead and the body columns, so the cover's left
+   edge lands exactly on the Method column instead of on its own private grid. */
+.recipe-view--full { --recipe-columns: minmax(0, 0.618fr) minmax(0, 1fr); --recipe-gap: 64px; }
+.recipe-view__content { max-width: 1100px; margin-inline: auto; display: grid; grid-template-columns: var(--recipe-columns); column-gap: var(--recipe-gap); row-gap: 0; align-items: start; }
+.recipe-view__masthead,
+.recipe-view__notice,
+.recipe-view__notes,
+.recipe-view__tags,
+.recipe-view__content > .recipe-view__mdx--full { grid-column: 1 / -1; }
+.recipe-view__masthead { display: grid; grid-template-columns: var(--recipe-columns); gap: var(--recipe-gap); align-items: end; margin-bottom: 72px; }
+/* No cover: the title takes the measure rather than leaving a placeholder box. */
+.recipe-view__masthead--textonly { grid-template-columns: minmax(0, 1fr); }
+.recipe-view--full .recipe-view__masthead h1 { margin: 0; font-size: clamp(2.2rem, 4vw, 3.06rem); font-weight: 600; line-height: 1.04; letter-spacing: -0.022em; }
+/* Provenance left, the page actions right, in the small-label voice (.mep-label). Nothing else
+   earns a line here, and the actions hold that right edge whether or not there is a source. */
+.recipe-view__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; color: var(--muted); }
+.recipe-view__masthead .recipe-view__meta { margin-top: 20px; }
+.recipe-view__lede { margin-top: 20px; max-width: 52ch; color: var(--muted); font-size: 1.02rem; line-height: 1.55; text-wrap: pretty; }
+.recipe-view__lede p { margin: 0; }
+.recipe-view__lede p + p { margin-top: 8px; }
+.recipe-view__source { min-width: 0; }
+.recipe-view__source a { color: var(--accent); text-decoration: none; }
+.recipe-view__source a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; }
+/* Every cover is the same shape at the same size, so no recipe page is laid out
+   differently from another and the image cannot shift the page as it decodes. */
+.recipe-view__hero { aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--line); }
+.recipe-view__hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Edit, Delete and Done are one control shape in the app's small-label voice. There is
+   no second button style for the editing state: the same row changes what it offers. */
+.recipe-view__actions { flex: none; display: flex; align-items: baseline; gap: 24px; }
+.recipe-view__action { border: 0; background: none; padding: 0; white-space: nowrap; cursor: pointer; }
+.recipe-view__action:hover { color: var(--accent); }
+.recipe-view__save-state { white-space: nowrap; }
+.recipe-view__save-state.is-error,
+.recipe-view__notice { color: var(--danger); }
+.recipe-view__notice { margin: -48px 0 48px; font-size: 0.9rem; }
+
+.recipe-view__panel { min-width: 0; }
+.recipe-view__panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; min-height: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+/* Section labels carry .mep-label, overriding the global serif heading: a serif here reads as a title. */
+.recipe-view__panel h2 { margin: 0; }
+/* Stays mounted whether or not anything is ticked: hiding it on empty would drop
+   focus to body on the click that empties it, which is the defect this replaced. */
+.recipe-view__reset { border: 0; background: none; padding: 0; cursor: pointer; }
+.recipe-view__reset:hover { color: var(--accent); }
+.recipe-view__yield { margin: -12px 0 20px; color: var(--muted); font-size: 0.9rem; }
+.recipe-view__group { margin: 20px 0 4px; }
+.recipe-view__checklist > li:first-child .recipe-view__group { margin-top: 0; }
+.recipe-view__checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.recipe-view__checklist .is-checked { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: var(--line-strong); }
+.recipe-view__checklist label { display: flex; align-items: flex-start; gap: 12px; margin-left: -8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 0.94rem; line-height: 1.5; }
+.recipe-view__checklist label:hover { background: var(--hover); }
+.recipe-view__check { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+/* Steps carry no checkbox: the number is the control, so the row is one object. */
+.recipe-view__checklist--steps { gap: 28px; }
+.recipe-view__checklist--steps > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 20px; align-items: start; }
+.recipe-view__step-number { width: 28px; height: 28px; margin: -3px 0 0 -6px; padding: 0; border: 0; border-radius: 999px; background: transparent; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.06em; color: var(--faint); cursor: pointer; }
+.recipe-view__step-number:hover { background: var(--hover-strong); color: var(--muted); }
+.recipe-view__step-number[aria-pressed="true"] { color: var(--accent); }
+.recipe-view__step-text { margin: 0; max-width: 62ch; font-size: 1rem; line-height: 1.625; color: var(--ink); text-wrap: pretty; }
+.recipe-view__step-text.is-checked { color: var(--muted); }
+/* Rendered markdown links, in steps and in the notes region, follow the page accent. */
+.recipe-view__checklist a,
+.recipe-view__notes a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.recipe-view__checklist a:hover,
+.recipe-view__notes a:hover { color: var(--accent-hover); border-bottom-color: var(--accent-hover); }
+
+.recipe-view__notes { margin-top: 96px; }
+/* A heading inside the notes body is a section label like the others (see .mep-label), not a title. */
+.recipe-view__notes h2 { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin: 0 0 28px; }
+.recipe-view__cooklog { grid-column: 1 / -1; margin-top: 96px; }
+/* <details> so the disclosure is keyboard-operable and needs no state of its own. */
+.recipe-view__cooklog > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); cursor: pointer; list-style: none; }
+.recipe-view__cooklog > summary::-webkit-details-marker { display: none; }
+.recipe-view__cooklog > summary:hover .recipe-view__cooklog-label { color: var(--accent); }
+.recipe-view__cooklog > summary:focus-visible { outline-offset: 4px; }
+/* The count restates the list once it is open. */
+.recipe-view__cooklog[open] .recipe-view__cooklog-summary { visibility: hidden; }
+.recipe-view__cooklog ul { list-style: none; margin: 0; padding: 28px 0 0; }
+.recipe-view__cooklog li { display: grid; grid-template-columns: 132px minmax(0, 1fr); column-gap: 32px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.recipe-view__cooklog li:last-child { border-bottom: 0; }
+.recipe-view__cooklog-entry p { margin: 0; max-width: 62ch; font-size: 0.94rem; line-height: 1.55; color: var(--ink); }
+.recipe-view__cooklog-entry p + p { margin-top: 4px; }
+.recipe-view__cooklog-verdict { font-size: 0.8rem; color: var(--muted); }
+.recipe-view__tags { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; margin: 96px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); }
+.recipe-view__tags li + li::before { content: "·"; margin-right: 12px; }
+
+.recipe-view__editor { display: flex; flex-direction: column; }
+.recipe-view__editor textarea { box-sizing: border-box; width: 100%; min-height: 62vh; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); padding: 12px; line-height: 1.5; resize: vertical; }
+.recipe-view__mdx { min-height: 100%; }
+.recipe-view__mdx img { max-width: 100%; max-height: 600px; width: auto; height: auto; border-radius: 8px; display: block; margin: 10px 0; object-fit: contain; }
+.recipe-view__read-document { min-width: 0; }
+.recipe-view__read-document > :first-child { margin-top: 0; }
+.recipe-view__image { position: relative; width: fit-content; max-width: min(100%, 720px); margin: 1rem 0; overflow: clip; background: var(--surface-sunk); }
+.recipe-view__image img,
+.recipe-view__image-error { width: 100%; }
+.recipe-view__image img { display: block; max-width: 100%; height: auto; max-height: min(60vh, 640px); width: auto; object-fit: contain; object-position: left center; }
+.recipe-view__image-error { display: grid; place-items: center; color: var(--muted); min-height: 240px; min-width: min(100%, 720px); }
+
+@media (max-width: 760px) {
+  .recipe-view__content,
+  .recipe-view__masthead { grid-template-columns: 1fr; }
+  .recipe-view__content { column-gap: 0; row-gap: 28px; }
+  /* Stacked, the desktop's column gap and section air would leave a phone screen of blank. */
+  .recipe-view__masthead { row-gap: 24px; margin-bottom: 12px; }
+  .recipe-view__notice { margin: 0; }
+  .recipe-view__notes,
+  .recipe-view__cooklog,
+  .recipe-view__tags { margin-top: 48px; }
+}

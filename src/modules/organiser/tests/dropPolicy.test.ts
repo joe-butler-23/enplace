@@ -4,7 +4,6 @@ import type { ResolveDropContext } from "../kanban/dropPolicy";
 import { entryOrdersAfterDrop, insertionIndexForDrop } from "../components/WeeklyPlannerDnd";
 import {
 	MARKED_COLUMN_ID,
-	laneClassNameFor,
 	resolveOrganiserDrop,
 } from "../kanban/dropPolicy";
 
@@ -45,12 +44,6 @@ describe("resolveOrganiserDrop", () => {
 	});
 });
 
-describe("laneClassNameFor", () => {
-	it("classes only the marked lane", () => {
-		expect(laneClassNameFor(MARKED_COLUMN_ID)).toBe("kanban-board--marked");
-		expect(laneClassNameFor("2026-07-15")).toBe("");
-	});
-});
 
 
 type Entry = Parameters<typeof entryOrdersAfterDrop>[4] extends Map<string, (infer T)[]> ? T : never;

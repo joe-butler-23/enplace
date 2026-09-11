@@ -1,0 +1,70 @@
+/* Shopping list: one centred column, a sticky aisle label per group, row tools on hover. */
+.shopping-list-view { box-sizing: border-box; position: relative; height: 100%; min-height: 0; max-width: 720px; width: 100%; margin: 0 auto; padding: 26px 28px 0; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line); border-right: 1px solid var(--line); color: var(--ink); }
+/* One row: title, grouping, hide-done, overflow. Nothing else earns header space. */
+.shopping-list-view__header { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.shopping-list-view__header h2 { flex: 1 1 auto; margin: 0; font-size: 1.31rem; line-height: 1.2; letter-spacing: -0.01em; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shopping-icon-toggle { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+.shopping-icon-toggle svg { width: 15px; height: 15px; }
+.shopping-icon-toggle.is-active { background: var(--ink); border-color: var(--ink); color: var(--on-accent); }
+.shopping-menu { position: relative; flex: 0 0 auto; }
+.shopping-menu__trigger { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--muted); }
+.shopping-menu__trigger::after { content: "\00b7\00b7\00b7"; font-size: 1.06rem; letter-spacing: 0.1em; line-height: 0.55; }
+.shopping-menu__trigger:hover { background: var(--surface-sunk); color: var(--ink); }
+.shopping-menu__panel { right: 0; min-width: 220px; }
+.shopping-list-view__sync-status { flex: 0 0 auto; margin: 0 0 14px; color: var(--muted); font-size: 0.85rem; }
+
+.shopping-list-view__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-bottom: 78px; }
+.shopping-group + .shopping-group { margin-top: 22px; }
+/* Sticky because knowing which aisle you are in matters mid-scroll; it costs one line. */
+.shopping-group__label { position: sticky; top: 0; z-index: 2; padding: 4px 0 6px 2px; background: var(--surface); }
+.shopping-items { margin: 0; padding: 0; list-style: none; }
+.shopping-item { display: flex; align-items: center; margin-left: -4px; border-radius: 7px; }
+.shopping-item:hover { background: var(--hover); }
+.shopping-item__label { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 7px 4px 7px 8px; cursor: pointer; }
+.shopping-item__input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.shopping-item__name { flex: 1 1 auto; min-width: 0; font-size: 0.94rem; letter-spacing: -0.005em; color: var(--ink); }
+.shopping-item__sources { display: block; margin-top: 2px; color: var(--muted); font-size: 0.72rem; overflow-wrap: anywhere; }
+.shopping-item.is-checked .shopping-item__name { color: var(--muted); text-decoration: line-through; }
+/* Row tools (aisle, remove) appear on hover; the aisle chip is a bare select so phones get the native picker. */
+.shopping-item__aisle,
+.shopping-item__remove { flex: 0 0 auto; border: none; border-radius: 999px; background: transparent; line-height: 1; cursor: pointer; opacity: 0; }
+/* Sized to the aisle it shows, where supported, so a short aisle leaves the name its width. */
+.shopping-item__aisle { field-sizing: content; max-width: 40%; min-width: 0; padding: 0.4rem 0.6rem; color: var(--muted); font-size: 0.8rem; line-height: normal; text-overflow: ellipsis; appearance: none; }
+.shopping-item__remove { width: 30px; height: 30px; margin-right: 2px; color: var(--line-strong); font-size: 1.05rem; }
+.shopping-item:hover :is(.shopping-item__aisle, .shopping-item__remove),
+.shopping-item__aisle:focus-visible,
+.shopping-item__remove:focus-visible { opacity: 1; }
+.shopping-item__aisle:hover:not(:disabled),
+.shopping-item__remove:hover:not(:disabled) { background: var(--surface-sunk); color: var(--accent); }
+@media (hover: none) {
+  /* No hover on touch: keep the affordances present but quiet. */
+  .shopping-item__aisle,
+  .shopping-item__remove { opacity: 0.45; }
+}
+
+.shopping-composer { position: absolute; left: 28px; right: 28px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 6; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px 8px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-pop); }
+.shopping-composer__input { flex: 1 1 auto; min-width: 0; min-height: 38px; border: none; background: transparent; font-size: 0.96rem; }
+.shopping-composer__input::placeholder { color: var(--faint); }
+.shopping-composer__input:focus { outline: none; }
+.shopping-button { min-height: 38px; padding: 0 14px; border: none; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 0.88rem; font-weight: 500; cursor: pointer; }
+.shopping-button:hover:not(:disabled) { background: var(--accent-hover); }
+.shopping-button:disabled { opacity: 0.45; cursor: default; }
+.shopping-list-view__error { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 16px 18px; border: 1px solid var(--danger-line); border-radius: 14px; background: var(--danger-tint); color: var(--danger); }
+.shopping-list-view__empty,
+.shopping-list-view__cleared { margin: 18px 0; font-size: 0.9rem; color: var(--muted); }
+.shopping-list-view__cleared { text-align: center; }
+
+/* The design's proportions are desktop-tight; a thumb in an aisle needs more. */
+@media (max-width: 760px) {
+  .shopping-list-view { max-width: none; padding: 16px 16px 0; border-left: 0; border-right: 0; }
+  /* Title on its own line: the three controls do not share 375px with a serif title. */
+  .shopping-list-view__header { flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .shopping-list-view__header h2 { flex-basis: 100%; font-size: 1.2rem; }
+  .shopping-list-view__header .mep-segmented { margin-right: auto; }
+  .shopping-icon-toggle,
+  .shopping-menu__trigger { width: 38px; height: 38px; }
+  .shopping-item__label { min-height: 52px; gap: 13px; }
+  .shopping-item__name { font-size: 1.02rem; }
+  .shopping-item__remove { width: 38px; height: 38px; }
+  .shopping-composer { left: 16px; right: 16px; }
+}

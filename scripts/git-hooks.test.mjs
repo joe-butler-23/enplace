@@ -25,11 +25,11 @@ const structuredMutations = [
   ["npm engine enforcement", (state) => { state.npmrc = "engine-strict=false\n"; }],
   ["relay-owned TypeScript", (state) => { state.relayPackage.devDependencies = { typescript: "5.9.3" }; }],
   ["lock root Node engine", (state) => { state.lock.packages[""].engines.node = ">=22"; }],
-  ["lock root Wrangler range", (state) => { state.lock.packages[""].devDependencies.wrangler = "^4.128.0"; }],
+  ["lock root Wrangler range", (state) => { state.lock.packages[""].devDependencies.wrangler = "^4.131.0"; }],
   ["lock root workspace", (state) => { state.lock.packages[""].workspaces = ["relay", "other"]; }],
   ["missing relay package", (state) => { delete state.lock.packages.relay; }],
   ["missing relay link", (state) => { delete state.lock.packages["node_modules/enplace-relay"]; }],
-  ["nested Wrangler", (state) => { state.lock.packages["relay/node_modules/wrangler"] = { version: "4.128.0" }; }],
+  ["nested Wrangler", (state) => { state.lock.packages["relay/node_modules/wrangler"] = { version: "4.131.0" }; }],
   ["relay pretypes lifecycle", (state) => { state.relayPackage.scripts.pretypes = "tsc"; }],
   ["relay pretypecheck lifecycle", (state) => { state.relayPackage.scripts.pretypecheck = "tsc"; }],
   ["relay prebuild lifecycle", (state) => { state.relayPackage.scripts.prebuild = "wrangler deploy"; }],
@@ -113,7 +113,7 @@ function assertReleaseContract(state) {
   assert.deepEqual(rootPackage.workspaces, ["relay"]);
   assert.equal(state.relayLockExists, false);
 
-  assert.equal(rootPackage.devDependencies.wrangler, "4.128.0");
+  assert.equal(rootPackage.devDependencies.wrangler, "4.131.0");
   for (const section of ["dependencies", "devDependencies"]) {
     assert.equal(relayPackage[section]?.wrangler, undefined);
     assert.equal(relayPackage[section]?.typescript, undefined);
@@ -123,12 +123,12 @@ function assertReleaseContract(state) {
   const lockRoot = lock.packages[""];
   assert.deepEqual(lockRoot.workspaces, ["relay"]);
   assert.equal(lockRoot.engines.node, rootPackage.engines.node);
-  assert.equal(lockRoot.devDependencies.wrangler, "4.128.0");
+  assert.equal(lockRoot.devDependencies.wrangler, "4.131.0");
   assert.ok(lock.packages.relay);
   assert.equal(lock.packages["node_modules/enplace-relay"]?.link, true);
   const lockedWranglers = Object.entries(lock.packages)
     .filter(([name]) => name === "node_modules/wrangler" || name.endsWith("/node_modules/wrangler"));
-  assert.deepEqual(lockedWranglers.map(([name, value]) => [name, value.version]), [["node_modules/wrangler", "4.128.0"]]);
+  assert.deepEqual(lockedWranglers.map(([name, value]) => [name, value.version]), [["node_modules/wrangler", "4.131.0"]]);
 
   assert.equal(rootPackage.scripts["preflight:release"], "./scripts/preflight-release.sh");
   assert.equal(rootPackage.scripts["typecheck:app"], "tsc --noEmit");

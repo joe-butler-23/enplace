@@ -52,8 +52,9 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
     await expect(second.getByRole('checkbox', { name: 'tomatoes', exact: true })).toBeVisible();
     const grouping = (target: typeof page, name: string) => target.getByRole('group', { name: 'Group shopping list' }).getByRole('button', { name, exact: true });
     await grouping(page, 'Aisle').click();
-    await page.getByLabel('Aisle for tomatoes').selectOption('Fruit & vegetables');
-    await page.getByLabel('Aisle for flour').selectOption('Baking');
+    // By value: the automatic option is labelled with the inferred aisle, so a label match would pick it.
+    await page.getByLabel('Aisle for tomatoes').selectOption({ value: 'Fruit & vegetables' });
+    await page.getByLabel('Aisle for flour').selectOption({ value: 'Baking' });
     await expect(page.locator('.shopping-group__label')).toHaveText(['Baking', 'Fruit & vegetables', 'Herbs, spices & oils']);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.shopping-list-view').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -72,6 +73,8 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
     page.once('dialog', dialog => dialog.dismiss());
     await page.getByRole('button', { name: 'Reset shopping list', exact: true }).click();
     await expect(page.getByRole('checkbox')).toHaveCount(3);
+    // Choosing an action closes the menu, cancelled or not.
+    await page.getByLabel('More actions').click();
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Reset shopping list', exact: true }).click();
     await expect(page.getByRole('checkbox')).toHaveCount(0);

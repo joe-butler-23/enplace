@@ -1,0 +1,62 @@
+/* The app frame: rail, main pane, split preview, transient notices, and the screens shown
+   before or instead of the app. */
+.mep-root { height: 100vh; }
+.mep-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--mep-preview-width); height: 100vh; overflow: hidden; }
+.mep-view { display: contents; }
+.mep-view[hidden] { display: none; }
+
+/* Every child centres on the rail's own axis, so the back arrow, the nav icons and the
+   mark share one vertical line in the column layout and one baseline in the row layout. */
+.mep-sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: hidden; }
+.mep-sidebar__back { box-sizing: border-box; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 0; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.mep-sidebar__back svg { width: 16px; height: 16px; stroke-width: 2.2; }
+.mep-sidebar__back:hover:not(:disabled) { background: var(--hover-strong); }
+.mep-sidebar__back:disabled { opacity: 0.55; cursor: default; }
+.mep-nav { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mep-nav__item { width: 32px; height: 32px; box-sizing: border-box; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.mep-nav__icon { width: 16px; flex: 0 0 16px; text-align: center; }
+.mep-nav__item:hover { border-color: var(--line); background: var(--hover); }
+.mep-nav__item:active { transform: scale(0.94); }
+.mep-nav__item.is-active { background: var(--accent-tint); border-color: transparent; color: var(--accent); }
+/* Sits at the foot of the rail on the page ground - no plate, no background, and
+   held back so it reads as a mark rather than competing with the nav icons. */
+.mep-sidebar__mark { margin-top: auto; opacity: 0.55; width: 32px; height: auto; align-self: center; user-select: none; -webkit-user-drag: none; }
+
+.mep-main { position: relative; padding: 32px; overflow: auto; overscroll-behavior: contain; }
+.mep-main--planner { padding: 0; height: 100%; min-height: 0; width: 100%; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+.mep-main--database { box-sizing: border-box; display: flex; flex-direction: column; padding: 10px 14px 14px; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
+.mep-main--shopping { padding: 0; }
+.mep-planner { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.mep-planner-intent-error { position: absolute; top: 12px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 28px); padding: 10px 12px; border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); color: var(--ink); transform: translateX(-50%); }
+.mep-database-panel { display: contents; }
+
+.mep-preview { background: var(--surface); border-left: 1px solid var(--line); position: relative; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.mep-preview__resizer { position: absolute; top: 0; left: -5px; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
+.mep-preview__header-row { display: flex; align-items: center; justify-content: flex-end; }
+.mep-preview pre { white-space: pre-wrap; font-family: var(--font-sans); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; max-height: 70vh; overflow: auto; }
+.mep-preview__empty { color: var(--muted); font-size: 0.9rem; }
+.mep-preview__content { min-height: 0; flex: 1 1 auto; }
+
+/* Transient notices share one bottom-centre slot, lifted clear of the add button and the
+   shopping composer so a notice never covers the control that produced it. */
+.mep-notices,
+.mep-pwa-status { position: fixed; bottom: calc(92px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; width: max-content; max-width: min(420px, calc(100vw - 32px)); }
+.mep-toast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-size: 0.9rem; box-shadow: var(--shadow); }
+.mep-toast button { flex: none; padding: 7px 12px; border: none; border-radius: 999px; background: var(--ink); color: var(--on-accent); font-size: 0.82rem; font-weight: 500; cursor: pointer; }
+.mep-toast button:disabled { opacity: 0.45; cursor: default; }
+
+/* The screens shown instead of the app: the cookbook gate from entry.tsx, a failed startup, and
+   a render failure caught by the error boundary. */
+.mep-gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+.mep-gate__card { width: min(520px, 100%); padding: clamp(24px, 5vw, 48px); border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); }
+.mep-gate h1 { margin: 0 0 16px; font-size: clamp(1.75rem, 6vw, 2.5rem); line-height: 1.05; }
+.mep-gate p { margin: 0 0 20px; line-height: 1.55; color: var(--muted); }
+.mep-gate__detail { margin: 0 0 20px; padding: 10px 12px; max-height: 220px; overflow: auto; border-radius: 10px; background: var(--danger-tint); color: var(--danger); font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mep-gate__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Phones: the rail becomes a top bar and the preview never takes a column of its own. */
+@media (max-width: 760px) {
+  .mep-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
+  .mep-sidebar { position: sticky; top: 0; z-index: 5; width: 100%; min-width: 0; max-width: none; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: space-between; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .mep-nav { flex-direction: row; flex-wrap: wrap; }
+}

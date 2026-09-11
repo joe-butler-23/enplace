@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Plan, Recipe, RecipePlanning } from "@/core";
 import { buildBoardEntries, type BoardEntry } from "../kanban/buildBoardsData";
-import { laneClassNameFor, resolveOrganiserDrop } from "../kanban/dropPolicy";
+import { resolveOrganiserDrop } from "../kanban/dropPolicy";
 import type { OrganiserItem } from "../types";
 import type { BoardConfig, ColumnDefinition } from "../types/kanban-config";
 import {
@@ -44,14 +44,6 @@ type PlannerCardProps = {
   onOpen?: (event: React.MouseEvent, path: string) => void;
   onRemove?: (path: string, sourceColumnId: string) => void;
 };
-
-const RECIPE_ICON = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
-    <path d="M7 2v20" />
-    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
-  </svg>
-);
 
 export function PlannerCard({
   entry,
@@ -107,7 +99,6 @@ export function PlannerCard({
           style={!coverUrl ? { touchAction: "none" } : undefined}
           onClick={(event) => onOpen?.(event, entry.filePath)}
         >
-          {RECIPE_ICON}
           <span className="card-title">{entry.item.title}</span>
         </button>
       </div>
@@ -121,27 +112,26 @@ type PlannerLaneProps = {
   resolveCover: (entry: BoardEntry<OrganiserItem>) => string;
   onOpen: (event: React.MouseEvent, path: string) => void;
   onRemove: (path: string, sourceColumnId: string) => void;
+  onNote?: (date: string) => void;
 };
 
-export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove }: PlannerLaneProps): React.JSX.Element {
+export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, onNote }: PlannerLaneProps): React.JSX.Element {
   const { setNodeRef } = useDroppable({ id: column.id, data: { type: "lane", laneId: column.id } });
   const densityClass = column.id !== "marked" && entries.length > 1 ? " kanban-board--multi-recipe" : "";
-  const headerClass = laneClassNameFor(column.id);
+  const note = column.note;
   return (
     <div
       ref={setNodeRef}
-      className={`kanban-board${densityClass}`}
+      className={`kanban-board${densityClass}${column.className ? ` ${column.className}` : ""}`}
       data-id={column.id}
-      style={{
-        width: "100%",
-        marginLeft: "0px",
-        marginRight: "0px",
-        gridRow: column.gridRow,
-        gridColumn: column.gridColumn,
-      }}
+      style={{ gridRow: column.gridRow, gridColumn: column.gridColumn }}
     >
-      <header className={`kanban-board-header${headerClass ? ` ${headerClass}` : ""}`}>
-        <div className="kanban-title-board" dangerouslySetInnerHTML={{ __html: column.title }} />
+      <header className="organiser-column-header">
+        <span className="organiser-column-title">{column.title}</span>
+        {/* An empty day offers "+"; a day with a note shows it in full width, and the note is its own edit control. */}
+        {note === undefined || !onNote ? null : note
+          ? <button type="button" className="organiser-column-note has-note" data-date={column.id} title={note} onClick={() => onNote(column.id)}>{note}</button>
+          : <button type="button" className="organiser-column-note is-empty" data-date={column.id} aria-label={`Add a note for ${column.title}`} onClick={() => onNote(column.id)}>+</button>}
       </header>
       <SortableContext items={entries.map((entry) => entry.entryId)} strategy={verticalListSortingStrategy}>
         <div className="kanban-drag">
@@ -298,13 +288,6 @@ export function usePlannerInteractions(options: UsePlannerInteractionsOptions) {
         return next;
       });
       const result = removalState.result;
-      console.info("planner_drop_recipe_to_marked", {
-        filePath: itemId,
-        sourceColumnId,
-        targetColumnId,
-        result,
-        refreshColumns: ["marked", sourceColumnId],
-      });
       if (result && !result.marked) return { deleted: true };
       return;
     }
@@ -327,13 +310,11 @@ export function usePlannerInteractions(options: UsePlannerInteractionsOptions) {
     await removePlannerRecipe(
       sourceColumnId,
       async (date) => {
-        let result: RecipeDateRemovalResult | null = null;
         await options.updatePlanning(itemId, (current) => {
           const next = { ...current, scheduledDates: [...current.scheduledDates] };
-          result = removeRecipeScheduledDateOccurrence(next, date, { markWhenEmpty: false });
+          removeRecipeScheduledDateOccurrence(next, date, { markWhenEmpty: false });
           return next;
         });
-        console.info("planner_remove_recipe_date_occurrence", { filePath: itemId, sourceColumnId: date, result });
       },
       () => options.onUnmarkRecipe(itemId),
     );

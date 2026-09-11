@@ -7,43 +7,23 @@ interface UsePikadayDatePickerOptions {
 	inputRef: React.RefObject<HTMLInputElement | null>;
 	containerRef: React.RefObject<HTMLElement | null>;
 	selectedDate?: Date;
-	format?: string;
 	onSelect: (date: Date) => void;
 	onClose: () => void;
 }
 
-interface UsePikadayDatePickerResult {
-	gotoToday: () => void;
-	clear: () => void;
-}
+/**
+ * Shows Pikaday inside the given container while open. Weeks start on Monday, like the board. A
+ * layout effect, so the calendar paints in the same frame as its popover rather than one later.
+ */
+export function usePikadayDatePicker(options: UsePikadayDatePickerOptions): void {
+	const { isOpen, inputRef, containerRef, selectedDate, onSelect, onClose } = options;
 
-export function usePikadayDatePicker(
-	options: UsePikadayDatePickerOptions
-): UsePikadayDatePickerResult {
-	const {
-		isOpen,
-		inputRef,
-		containerRef,
-		selectedDate,
-		format = "YYYY-MM-DD",
-		onSelect,
-		onClose,
-	} = options;
-
-	const pickerRef = React.useRef<Pikaday | null>(null);
 	const handleSelect = useEffectEvent(onSelect);
 	const handleClose = useEffectEvent(onClose);
 	const selectedDateKey = selectedDate?.getTime() ?? null;
 
-	React.useEffect(() => {
-		if (!isOpen) {
-			if (pickerRef.current) {
-				pickerRef.current.destroy();
-				pickerRef.current = null;
-			}
-			return;
-		}
-
+	React.useLayoutEffect(() => {
+		if (!isOpen) return;
 		const input = inputRef.current;
 		const container = containerRef.current;
 		if (!input || !container) return;
@@ -52,7 +32,8 @@ export function usePikadayDatePicker(
 			field: input,
 			container,
 			bound: false,
-			format,
+			firstDay: 1,
+			format: "YYYY-MM-DD",
 			onSelect: handleSelect,
 			onClose: handleClose,
 		});
@@ -62,27 +43,6 @@ export function usePikadayDatePicker(
 		}
 
 		picker.show();
-		pickerRef.current = picker;
-
-		// Remove tooltips from day abbreviations
-		container.querySelectorAll(".pika-table abbr[title]").forEach((abbr) => {
-			abbr.removeAttribute("title");
-		});
-
-		return () => {
-			picker.destroy();
-			pickerRef.current = null;
-		};
-	}, [format, inputRef, containerRef, isOpen, selectedDateKey]);
-
-	const gotoToday = React.useCallback(() => {
-		pickerRef.current?.gotoToday();
-		pickerRef.current?.setDate(new Date(), true);
-	}, []);
-
-	const clear = React.useCallback(() => {
-		pickerRef.current?.clear();
-	}, []);
-
-	return { gotoToday, clear };
+		return () => picker.destroy();
+	}, [inputRef, containerRef, isOpen, selectedDateKey]);
 }

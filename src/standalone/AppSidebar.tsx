@@ -33,7 +33,7 @@ export function AppSidebar({
   return (
     <aside className="mep-sidebar">
       <button
-        className={`mep-sidebar__back ${canGoBack ? "" : "is-disabled"}`}
+        className="mep-sidebar__back"
         type="button"
         onClick={onBack}
         disabled={!canGoBack}

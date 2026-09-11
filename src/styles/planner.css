@@ -1,0 +1,90 @@
+/* Weekly planner: toolbar, week picker, and the five-lane board. */
+.weekly-organiser-container { height: 100%; width: 100%; box-sizing: border-box; padding: 0 12px 12px; position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; background: linear-gradient(180deg, var(--surface) 0%, var(--paper) 100%); }
+.organiser-topbar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 8px 6px; background: var(--surface); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.topbar-icon-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 4px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.topbar-icon-btn:hover { background: var(--hover); color: var(--ink); }
+.week-nav { display: flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
+.week-nav-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 3px 6px; color: var(--muted); font-size: 0.75em; display: flex; align-items: center; justify-content: center; }
+.week-nav-btn:hover { background: var(--hover); color: var(--ink); }
+.week-range { margin-left: 4px; font-size: 0.8em; color: var(--muted); white-space: nowrap; }
+
+/* The week picker: Pikaday rendered inside our own popover, restyled to the palette. */
+.week-nav-calendar { position: relative; display: inline-flex; align-items: center; }
+.calendar-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 10; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-pop); min-width: 240px; }
+.calendar-input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+.pika-single { z-index: 9999; display: block; position: relative; color: var(--ink); background: transparent; border: none; border-radius: 0; box-shadow: none; }
+.pika-single::before,
+.pika-single::after { content: ' '; display: table; }
+.pika-single::after { clear: both; }
+.pika-single.is-hidden { display: none; }
+.pika-lendar { float: left; width: 240px; margin: 8px; }
+.pika-title { position: relative; text-align: center; }
+.pika-label { display: inline-block; position: relative; z-index: 9999; overflow: hidden; margin: 0; padding: 5px 3px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); background-color: transparent; }
+.pika-title select { cursor: pointer; position: absolute; z-index: 9998; margin: 0; left: 0; top: 5px; opacity: 0; }
+.calendar-popover .pika-prev,
+.calendar-popover .pika-next { all: unset; display: block; cursor: pointer; position: relative; width: 20px; height: 30px; text-indent: -9999px; overflow: hidden; }
+.calendar-popover .pika-prev::before,
+.calendar-popover .pika-next::before { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-indent: 0; color: var(--muted); }
+.calendar-popover .pika-prev::before { content: '\2039'; }
+.calendar-popover .pika-next::before { content: '\203a'; }
+.calendar-popover .pika-prev:hover::before,
+.calendar-popover .pika-next:hover::before { color: var(--ink); }
+.calendar-popover .pika-prev { float: left; }
+.calendar-popover .pika-next { float: right; }
+.pika-select { display: inline-block; }
+.pika-table { width: 100%; border-collapse: collapse; border-spacing: 0; border: 0; }
+.pika-table th,
+.pika-table td { width: 14.285714285714286%; padding: 0; }
+.pika-table th { color: var(--muted); font-size: 11px; line-height: 25px; font-weight: 600; text-align: center; }
+.pika-table abbr { text-decoration: none; cursor: default; }
+.calendar-popover .pika-button { all: unset; display: block; cursor: pointer; box-sizing: border-box; width: 100%; padding: 6px 0; color: var(--ink); font-size: 12px; line-height: 1; text-align: center; }
+.calendar-popover .pika-button:hover { color: var(--accent); }
+.calendar-popover .is-today .pika-button { font-weight: bold; color: var(--accent); }
+.calendar-popover .is-selected .pika-button { font-weight: bold; text-decoration: underline; text-underline-offset: 2px; }
+.calendar-popover .is-outside-current-month .pika-button { opacity: 0.4; }
+
+/* Marked plus four day tracks per row, all one width. Not adjustable: five equal lanes is the
+   layout. A 200px floor keeps all five on a 1280px laptop without horizontal scrolling. */
+.weekly-organiser-kanban { flex: 1 1 auto; display: flex; height: 100%; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.weekly-organiser-kanban-host { display: flex; flex: 1 1 auto; min-height: 100%; width: 100%; min-width: 100%; }
+.kanban-container { position: relative; box-sizing: border-box; display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 100%; width: 100%; min-width: calc(200px * 5 + 12px * 4); align-items: stretch; align-content: stretch; justify-content: start; }
+.kanban-container * { box-sizing: border-box; }
+.kanban-board { contain: style; background-color: var(--paper); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; padding: 8px; box-shadow: var(--shadow-card); min-width: 0; min-height: 0; align-self: stretch; overflow: hidden; }
+.kanban-board.is-today { border-color: var(--accent); }
+.kanban-board.is-today .organiser-column-title { color: var(--accent); }
+/* Day title and its "+" share a row; a note, once written, takes the full width beneath. */
+.organiser-column-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 6px; margin: 4px 8px 6px; font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.organiser-column-title { white-space: nowrap; }
+.organiser-column-note { all: unset; cursor: pointer; border-radius: 4px; text-transform: none; letter-spacing: normal; }
+/* all: unset above also unsets the global ring. */
+.organiser-column-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.organiser-column-note.is-empty { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-weight: bold; opacity: 0.5; }
+.organiser-column-note.is-empty:hover { opacity: 1; color: var(--ink); }
+.organiser-column-note.has-note { flex-basis: 100%; min-width: 0; color: var(--ink); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.organiser-column-note.has-note:hover { color: var(--accent); }
+.kanban-board .kanban-drag { contain: layout style; flex: 1 1 auto; min-height: 0; padding: 4px; display: flex; flex-direction: column; gap: 8px; border-radius: 10px; position: relative; overflow-y: auto; overflow-x: hidden; }
+.kanban-board .kanban-drag::-webkit-scrollbar { width: 4px; }
+.kanban-board .kanban-drag::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 4px; }
+.kanban-board .kanban-drag:hover::-webkit-scrollbar-thumb { background-color: var(--line-strong); }
+
+/* Cards clip to their bounds and contain their own paint so a drag repaints only the card. */
+.kanban-item { contain: layout style paint; overflow: hidden; background-color: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: var(--shadow-card); cursor: grab; user-select: none; flex-shrink: 0; }
+.kanban-item:active { cursor: grabbing; transform: scale(0.985); }
+.kanban-item.is-drag-overlay { transform: translateZ(0); will-change: transform; backface-visibility: hidden; box-shadow: none; cursor: grabbing; }
+.organiser-card-content { padding: 6px 8px; position: relative; }
+.card-cover { margin-bottom: 6px; border-radius: 6px; overflow: hidden; aspect-ratio: 1 / 1; background-color: var(--paper); }
+/* A day with more than one recipe halves each cover so the lane holds them without scrolling. */
+.kanban-board--multi-recipe .card-cover { aspect-ratio: 2 / 1; }
+.card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+.card-remove-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: var(--surface); color: var(--muted); cursor: pointer; opacity: 0; display: flex; align-items: center; justify-content: center; z-index: 5; }
+.card-remove-btn:hover { background: var(--hover); color: var(--ink); }
+.kanban-item:hover .card-remove-btn { opacity: 1; }
+.card-open-btn { all: unset; width: 100%; cursor: pointer; text-align: left; }
+/* all: unset above also unsets the global ring. */
+.card-open-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card-header { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.card-title { flex: 1; min-width: 0; font-weight: 600; font-size: 0.9em; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .week-nav { flex-wrap: wrap; }
+}

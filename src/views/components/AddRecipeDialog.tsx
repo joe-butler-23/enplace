@@ -40,7 +40,7 @@ export function AddRecipeDialog({ onClose }: { onClose: () => void }): React.JSX
       {error ? <p className="mep-import-page__error" role="alert">{error}</p> : null}
       <div className="mep-settings__actions">
         <button type="submit" className="mep-button" disabled={busy}>{busy ? "Adding…" : "Add recipe"}</button>
-        <button type="button" className="mep-button mep-button--ghost" disabled={busy} onClick={close}>Cancel</button>
+        <button type="button" className="mep-button" disabled={busy} onClick={close}>Cancel</button>
       </div>
       <p className="mep-import-page__meta">Use <a href="https://recipemd.org/specification.html" target="_blank" rel="noreferrer">RecipeMD</a>, or ask a recipe assistant to produce it.</p>
     </form>

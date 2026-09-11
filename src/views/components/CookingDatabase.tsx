@@ -2,6 +2,7 @@ import * as React from "react";
 import type { Plan, Recipe } from "@/core";
 import { RecipeIndexItem, RecipeIndexSort } from "../../modules/cooking/types";
 import type { StandaloneSettings } from "@/standalone/settings";
+import { useDismiss } from "@/shared/use-dismiss";
 import { databaseQuery, initialDatabaseState, projectDatabaseView } from "./database-query";
 import { AddRecipeDialog } from "./AddRecipeDialog";
 import { AddButton } from "./AddButton";
@@ -192,37 +193,14 @@ export const CookingDatabase = React.memo(function CookingDatabase({
     }
   };
 
-  React.useEffect(() => {
-    if (openMenu === null) return;
-    const onClick = (e: MouseEvent) => {
-      if (!(e.target as Element).closest(".cooking-db__popover")) setOpenMenu(null);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenu(null);
-    };
-    document.addEventListener("click", onClick);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("click", onClick);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [openMenu]);
-
-  React.useEffect(() => {
-    if (tagSuggestions.length === 0) return;
-    const handler = (e: MouseEvent) => {
-      if (!(e.target as Element).closest(".cooking-db__searchbox")) {
-        setSuggestDismissed(true);
-      }
-    };
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, [tagSuggestions.length]);
+  useDismiss(openMenu !== null, (target) => Boolean(target.closest(".cooking-db__popover")), () => setOpenMenu(null));
+  useDismiss(tagSuggestions.length > 0, (target) => Boolean(target.closest(".cooking-db__searchbox")),
+    () => setSuggestDismissed(true));
 
   const activeFilterCount = countActiveFilters(state);
 
   let databaseContent: React.ReactNode = (
-    <div className="cooking-db__grid" style={{ "--cooking-db-card-size": "220px" } as React.CSSProperties}>
+    <div className="cooking-db__grid">
       {renderedRecipes.map(({ recipe, coverPath }) => (
         <RecipeCard key={recipe.path} recipe={recipe} coverPath={coverPath}
           onOpenRecipe={onOpenRecipe} onPointerDownRecipe={onPointerDownRecipe}
@@ -232,10 +210,10 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   );
   if (recipes.length === 0) {
     databaseContent = (
-      <div className="cooking-db__empty cooking-db__no-results" role="status">
+      <div className="cooking-db__empty" role="status">
         <h2>No recipes match these filters</h2>
         <p>Try a different search or clear the active filters.</p>
-        <button type="button" className="cooking-db__filter-action"
+        <button type="button" className="mep-button"
           onClick={() => updateState({ search: "", marked: "all", scheduled: "all", added: "all", tags: [] })}>
           Clear filters
         </button>
@@ -244,7 +222,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
   }
   if (recipes.length === 0 && !hasActiveQuery(state)) {
     databaseContent = (
-      <div className="cooking-db__empty cooking-db__onboarding">
+      <div className="cooking-db__empty">
         <h2>No recipes yet</h2>
         <p>Import a web page, paste Markdown, or open a file to start your cookbook.</p>
       </div>
@@ -295,11 +273,11 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             onKeyDown={handleSearchKeyDown}
           />
           {tagSuggestions.length > 0 && (
-            <div className="cooking-db__tag-suggest" id="cooking-db-tag-suggest" role="listbox">
+            <div className="mep-menu cooking-db__tag-suggest" id="cooking-db-tag-suggest" role="listbox">
               {tagSuggestions.map((tag, index) => (
                 <button
                   key={tag}
-                  className={`cooking-db__tag-suggestion${index === highlight ? " is-active" : ""}`}
+                  className={`mep-menu__item${index === highlight ? " is-active" : ""}`}
                   type="button"
                   role="option"
                   aria-selected={index === highlight}
@@ -333,16 +311,14 @@ export const CookingDatabase = React.memo(function CookingDatabase({
           </button>
           {openMenu === "sort" && (
             <div
-              className="cooking-db__popover-menu cooking-db__sort-menu"
+              className="mep-menu cooking-db__popover-menu"
               role="listbox"
               aria-label="Sort recipes"
             >
               {SORT_OPTIONS.map((option) => (
                 <button
                   key={option.value}
-                  className={`cooking-db__filter-action cooking-db__sort-option${
-                    state.sort === option.value ? " is-active" : ""
-                  }`}
+                  className={`mep-menu__item${state.sort === option.value ? " is-active" : ""}`}
                   type="button"
                   role="option"
                   aria-selected={state.sort === option.value}
@@ -377,7 +353,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
             )}
           </button>
           {openMenu === "filter" && (
-            <div className="cooking-db__popover-menu cooking-db__filter-menu">
+            <div className="mep-menu cooking-db__popover-menu cooking-db__filter-menu">
               <div className="cooking-db__filter-row">
                 <span aria-hidden="true">Marked</span>
                 <select
@@ -419,10 +395,10 @@ export const CookingDatabase = React.memo(function CookingDatabase({
                 </select>
               </div>
 
-              <div className="cooking-db__filter-divider" />
+              <div className="mep-menu__divider" />
 
               <button
-                className="cooking-db__filter-action"
+                className="mep-menu__item"
                 type="button"
                 disabled={activeFilterCount === 0}
                 onClick={() => updateState({ marked: "all", scheduled: "all", added: "all" })}
@@ -430,15 +406,15 @@ export const CookingDatabase = React.memo(function CookingDatabase({
                 Clear all filters
               </button>
 
-              <div className="cooking-db__filter-divider" />
+              <div className="mep-menu__divider" />
 
               <button
-                className="cooking-db__filter-action mod-warning"
+                className="mep-menu__item mod-warning"
                 type="button"
                 onClick={handleClearMarked}
                 disabled={markedCount === 0 || clearPending}
               >
-                {clearPending ? "Clearing..." : "Clear marked"}
+                {clearPending ? "Clearing…" : "Clear marked"}
               </button>
             </div>
           )}

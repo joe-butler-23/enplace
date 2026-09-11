@@ -522,8 +522,10 @@ it('enforces the per-room connection cap without disturbing accepted sockets or 
 
 it('throttles new-room creation per client address without throttling reconnects to an existing room', async () => {
   const clientIp = '203.0.113.7';
+  // The limiter allows 20 per fixed 60s window, and 21 requests can straddle a window boundary
+  // without any one window seeing 21. Within 41 requests (well under a minute) one window must.
   let lastStatus = 101;
-  for (let index = 0; index < 21; index += 1) {
+  for (let index = 0; index < 41 && lastStatus !== 429; index += 1) {
     const response = await openRaw(freshRoomId(), { 'cf-connecting-ip': clientIp });
     lastStatus = response.status;
     if (response.status === 101) {
@@ -542,7 +544,8 @@ it('throttles new-room creation per client address without throttling reconnects
     response.webSocket.accept();
     response.webSocket.close(1000, "reconnect test");
   }
-});
+  // Up to ~65 real upgrades through Miniflare: the default 5s budget is too tight on a loaded host.
+}, 30_000);
 
 it('expires an idle room via the retention alarm but spares a room with an open connection', async () => {
   const idleId = freshRoomId();

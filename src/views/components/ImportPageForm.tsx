@@ -88,7 +88,7 @@ export function ImportPageForm({ onClose }: { onClose: () => void }): React.JSX.
       {error ? <p className="mep-import-page__error" role="alert">{error}</p> : null}
       {recipes.length ? <div className="mep-settings__actions">
         <button type="submit" className="mep-button" disabled={!!busy || !count}>{busy === "adding" ? "Adding…" : count === 1 ? "Add recipe" : `Add ${count} recipes`}</button>
-        <button type="button" className="mep-button mep-button--ghost" disabled={!!busy} onClick={onClose}>Cancel</button>
+        <button type="button" className="mep-button" disabled={!!busy} onClick={onClose}>Cancel</button>
       </div> : null}
       <details className="mep-import-page__fallback">
         <summary>Page can't be fetched? Paste its HTML or open a saved copy</summary>

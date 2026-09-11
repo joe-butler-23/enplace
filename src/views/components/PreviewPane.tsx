@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { MergeResult } from "@/cookbook/merge";
+import { setIcon } from "@/platform-primitives";
 import { RecipeView, type RecipeViewHandle } from "./RecipeView";
 
 /** Keyed on `path` alone by the caller, so an autosave or partner edit that only changes
@@ -43,7 +44,7 @@ export function PreviewPane(props: PreviewPaneProps): React.JSX.Element {
     <div className="mep-preview__resizer" role="separator" aria-label="Resize side pane" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={760} aria-valuenow={width} tabIndex={0}
       onMouseDown={(event) => { event.preventDefault(); drag.current = { x: event.clientX, width }; }}
       onKeyDown={(event) => { const delta = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0; if (delta) { event.preventDefault(); onWidth(Math.max(320, Math.min(760, width + delta))); } }} />
-    <div className="mep-preview__header-row"><button type="button" className="mep-preview__close" onClick={onClose}>x</button></div>
+    <div className="mep-preview__header-row"><button type="button" className="mep-icon-button" title="Close side pane" aria-label="Close side pane" onClick={onClose} ref={(element) => { if (element) setIcon(element, "x"); }} /></div>
     {!path ? <div className="mep-preview__empty">Open a card to see the note.</div> : content === "Failed to load file." ? <div className="mep-preview__empty">Failed to load file.</div> : !isRecipe ? raw :
       <PreviewErrorBoundary key={path} retryKey={retryCount} fallback={<div className="mep-preview__content"><div className="mep-preview__empty">
         Could not render this note preview. Showing raw markdown.

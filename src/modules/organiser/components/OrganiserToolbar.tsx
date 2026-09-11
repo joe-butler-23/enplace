@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useDismiss } from "@/shared/use-dismiss";
 import { usePikadayDatePicker } from "../hooks/usePikadayDatePicker";
 import {
   addCalendarDays,
@@ -14,10 +15,7 @@ export type OrganiserToolbarCalendar = {
   startDateValue: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   popoverRef: React.RefObject<HTMLDivElement | null>;
-  toggleRef: React.RefObject<HTMLButtonElement | null>;
   onToggle: () => void;
-  onGotoToday: () => void;
-  onClearDate: () => void;
 };
 
 export type OrganiserToolbarWeekNav = {
@@ -28,7 +26,6 @@ export type OrganiserToolbarWeekNav = {
 };
 
 export type OrganiserToolbarProps = {
-  topbarRef: React.RefObject<HTMLDivElement | null>;
   calendar: OrganiserToolbarCalendar;
   weekNav: OrganiserToolbarWeekNav;
   onSendShoppingList?: () => void;
@@ -36,7 +33,6 @@ export type OrganiserToolbarProps = {
 
 /** One row: which week the board is showing, and the one action that acts on that week. */
 export function OrganiserToolbar({
-  topbarRef,
   calendar,
   weekNav,
   onSendShoppingList,
@@ -46,14 +42,11 @@ export function OrganiserToolbar({
     startDateValue,
     inputRef: calendarInputRef,
     popoverRef: calendarPopoverRef,
-    toggleRef: calendarToggleRef,
     onToggle: onToggleCalendar,
-    onGotoToday,
-    onClearDate,
   } = calendar;
   const { onPrevWeek, onNextWeek, onResetWeek, weekRangeDisplay } = weekNav;
   return (
-    <div className="organiser-topbar" ref={topbarRef}>
+    <div className="organiser-topbar">
       <div className="week-nav">
         <button
           type="button"
@@ -74,9 +67,9 @@ export function OrganiserToolbar({
         </button>
         <div className="week-nav-calendar">
           <button
-            ref={calendarToggleRef}
             className="week-nav-btn"
             aria-label="Choose week"
+            aria-expanded={isCalendarOpen}
             onClick={onToggleCalendar}
             type="button"
           >
@@ -97,14 +90,6 @@ export function OrganiserToolbar({
                 value={startDateValue}
                 readOnly
               />
-              <div className="pika-footer">
-                <button type="button" className="pika-footer-btn" onClick={onGotoToday}>
-                  Today
-                </button>
-                <button type="button" className="pika-footer-btn" onClick={onClearDate}>
-                  Clear
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -151,16 +136,14 @@ type WeeklyToolbarState = {
 export function useWeeklyToolbarState(): WeeklyToolbarState {
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false);
-  const topbarRef = React.useRef<HTMLDivElement>(null);
   const calendarInputRef = React.useRef<HTMLInputElement>(null);
   const calendarPopoverRef = React.useRef<HTMLDivElement>(null);
-  const calendarToggleRef = React.useRef<HTMLButtonElement>(null);
 
   const startDate = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
   const endDate = addCalendarDays(startDate, 6);
   const startDateValue = formatIsoDate(startDate);
   const endDateValue = formatIsoDate(endDate);
-  const weekRangeDisplay = `${formatPlannerDate(startDate, false, false)} - ${formatPlannerDate(endDate, false, true)}`;
+  const weekRangeDisplay = `${formatPlannerDate(startDate, false, false)} – ${formatPlannerDate(endDate, false, true)}`;
 
   const handleCalendarSelect = React.useCallback((date: Date) => {
     if (!date || Number.isNaN(date.getTime())) return;
@@ -169,7 +152,7 @@ export function useWeeklyToolbarState(): WeeklyToolbarState {
   }, []);
   const handleCalendarClose = React.useCallback(() => setIsCalendarOpen(false), []);
   const calendarSelectedDate = React.useMemo(() => dateFromIso(startDateValue), [startDateValue]);
-  const { gotoToday, clear: clearCalendarSelection } = usePikadayDatePicker({
+  usePikadayDatePicker({
     isOpen: isCalendarOpen,
     inputRef: calendarInputRef,
     containerRef: calendarPopoverRef,
@@ -177,32 +160,9 @@ export function useWeeklyToolbarState(): WeeklyToolbarState {
     onSelect: handleCalendarSelect,
     onClose: handleCalendarClose,
   });
-  const handleCalendarClear = React.useCallback(() => {
-    clearCalendarSelection();
-    setWeekOffset(0);
-    setIsCalendarOpen(false);
-  }, [clearCalendarSelection]);
-
-  React.useEffect(() => {
-    if (!isCalendarOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const isInsidePopover = calendarPopoverRef.current?.contains(target);
-      const isInsideToggle = calendarToggleRef.current?.contains(target);
-      let element: HTMLElement | null = target;
-      let isInsidePikaday = false;
-      while (element) {
-        if (typeof element.className === "string" && element.className.includes("pika")) {
-          isInsidePikaday = true;
-          break;
-        }
-        element = element.parentElement;
-      }
-      if (!isInsidePopover && !isInsideToggle && !isInsidePikaday) setIsCalendarOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isCalendarOpen]);
+  // Pikaday redraws its month on mousedown; the pointerdown that precedes it still sees the old,
+  // attached nodes, so containment inside the toggle-and-popover wrapper is enough.
+  useDismiss(isCalendarOpen, (target) => Boolean(target.closest(".week-nav-calendar")), handleCalendarClose);
 
   const handleCalendarToggle = React.useCallback(() => setIsCalendarOpen((open) => !open), []);
   const previousWeek = React.useCallback(() => setWeekOffset((offset) => offset - 1), []);
@@ -214,10 +174,7 @@ export function useWeeklyToolbarState(): WeeklyToolbarState {
     startDateValue,
     inputRef: calendarInputRef,
     popoverRef: calendarPopoverRef,
-    toggleRef: calendarToggleRef,
     onToggle: handleCalendarToggle,
-    onGotoToday: gotoToday,
-    onClearDate: handleCalendarClear,
   };
   const weekNav: OrganiserToolbarWeekNav = {
     onPrevWeek: previousWeek,
@@ -230,6 +187,6 @@ export function useWeeklyToolbarState(): WeeklyToolbarState {
     weekOffset,
     startDateValue,
     endDateValue,
-    toolbarProps: { topbarRef, calendar, weekNav },
+    toolbarProps: { calendar, weekNav },
   };
 }

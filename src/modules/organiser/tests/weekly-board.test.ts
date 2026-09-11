@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { addCalendarDays, calendarWeekOffset, formatIsoDate, formatPlannerDate, formatPlannerDay, normalizeFrontmatterDate, startOfIsoWeek } from "../utils/scheduled-dates";
 import { generateWeekColumns } from "../boards/weeklyOrganiserConfig";
-import { clampHorizontalScroll } from "../hooks/useWeeklyBoardLayout";
 
-describe("weekly board dates, columns, and scroll clamping", () => {
+describe("weekly board dates and columns", () => {
 	it("keeps ISO week dates and labels stable without Moment", () => {
     const monday = startOfIsoWeek(new Date(2026, 7, 5));
     expect(formatIsoDate(monday)).toBe("2026-08-03");
@@ -15,26 +14,18 @@ describe("weekly board dates, columns, and scroll clamping", () => {
     expect(normalizeFrontmatterDate("not a date")).toBeNull();
   });
 
-	it("escapes day notes in column titles", () => {
+	it("carries day notes and titles as plain text and marks only today", () => {
 		const dateId = formatIsoDate(startOfIsoWeek());
-		const columns = generateWeekColumns(0, {
-			[dateId]: '<img src=x onerror="alert(1)">',
-		});
-		const title = columns.find((column) => column.id === dateId)?.title;
+		const note = '<img src=x onerror="alert(1)">';
+		const columns = generateWeekColumns(0, { [dateId]: note });
+		const day = columns.find((column) => column.id === dateId);
 
-		expect(title).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
-		expect(title).not.toContain('<img src=x onerror="alert(1)">');
-		expect(title).toContain('class="organiser-column-note has-note"');
-	});
-
-	it("ignores an absent scroll host", () => expect(() => clampHorizontalScroll(null)).not.toThrow());
-
-	it.each([
-		[100, 100, 4, 0], [200, 100, -1, 0], [200, 100, 101, 100], [200, 100, 50, 50],
-	] as const)("clamps horizontal scroll %s/%s from %s", (scrollWidth, clientWidth, scrollLeft, expected) => {
-		const element = { scrollWidth, clientWidth, scrollLeft } as HTMLElement;
-		clampHorizontalScroll(element);
-		expect(element.scrollLeft).toBe(expected);
+		expect(day?.note).toBe(note);
+		expect(day?.title).toBe(formatPlannerDay(startOfIsoWeek()));
+		expect(columns.find((column) => column.id === "marked")?.note).toBeUndefined();
+		expect(columns.filter((column) => column.className === "is-today").map((column) => column.id))
+			.toEqual([formatIsoDate(new Date())]);
+		expect(generateWeekColumns(1).some((column) => column.className === "is-today")).toBe(false);
 	});
 
 });

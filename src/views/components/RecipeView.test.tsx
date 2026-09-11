@@ -107,9 +107,9 @@ describe("recipe read/edit boundary", () => {
     );
 
     expect((markup.match(/>Edit<\/button>/g) ?? [])).toHaveLength(1);
-    expect(markup).toContain('class="recipe-view__meta"');
+    expect(markup).toContain('class="recipe-view__meta mep-label"');
     expect(markup).toContain('class="recipe-view__actions"');
-    expect(markup).toContain('class="recipe-view__action"');
+    expect(markup).toContain('class="recipe-view__action mep-label"');
     expect(markup).not.toContain("recipe-view__toolbar");
   });
 

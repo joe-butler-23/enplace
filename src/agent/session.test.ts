@@ -10,7 +10,9 @@ import { startRelay } from "../../scripts/cookbook-relay.mjs";
 it("does not report a disconnected local snapshot as a current successful read", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "enplace-session-read-"));
   const relay = await startRelay({ port: 0, persist: directory });
-  const session = await openCookingSession({ id: newCookbookId(), relayUrl: relay.url, create: true, timeoutMs: 100 });
+  // One budget covers opening, the fixture write and the disconnected read. 100ms made opening
+  // itself time out on a loaded host; the read still rejects, only later.
+  const session = await openCookingSession({ id: newCookbookId(), relayUrl: relay.url, create: true, timeoutMs: 2_000 });
   try {
     await session.execute("shopping.add", { operationId: "offline-read-fixture", content: "Lemons" });
     const disconnected = new Promise<void>((resolve, reject) => {

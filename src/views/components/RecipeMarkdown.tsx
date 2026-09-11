@@ -1,10 +1,9 @@
 import * as React from "react";
 import DOMPurify from "dompurify";
 import { parse, parseInline, Renderer, type Tokens } from "marked";
+import { escapeHtml } from "@/shared/html";
 
 export type RecipeImageResources = { resolveImage: (src: string, path: string) => string | null };
-
-const UNSAFE_LINK_STYLE = "color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);";
 
 const allowedAttributes: Readonly<Record<string, ReadonlySet<string>>> = {
   a: new Set(["href", "title"]),
@@ -15,7 +14,6 @@ const allowedAttributes: Readonly<Record<string, ReadonlySet<string>>> = {
   input: new Set(["checked", "disabled", "type"]),
   li: new Set(["class"]),
   ol: new Set(["start"]),
-  span: new Set(["style"]),
   table: new Set([]),
   td: new Set(["align"]),
   th: new Set(["align"]),
@@ -39,15 +37,6 @@ const allowedAttributes: Readonly<Record<string, ReadonlySet<string>>> = {
   ul: new Set(["class"]),
 };
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function decodeTarget(target: string): string {
   if (!target.includes("&")) return target;
   const decoder = document.createElement("textarea");
@@ -70,7 +59,6 @@ function isAllowedAttribute(tag: string, name: string, value: string): boolean {
   if (name === "class") {
     return /^(?:contains-task-list|task-list-item|language-[a-z0-9_-]+|recipe-view__image|recipe-view__image-error)$/i.test(value);
   }
-  if (name === "style") return tag === "span" && value === UNSAFE_LINK_STYLE;
   if (name === "role") return tag === "div" && value === "img";
   if (name === "decoding") return value === "sync";
   if (name === "type") return tag === "input" && value === "checkbox";
@@ -110,10 +98,8 @@ function rendererFor(path: string, resolveImage: RecipeImageResources["resolveIm
     return `<figure class="recipe-view__image"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}"${imageTitle} decoding="sync"></figure>`;
   };
   renderer.link = function ({ href, title, text, tokens }: Tokens.Link) {
-    if (!isAllowedTarget(href)) {
-      // Keep the old link colour while removing all link semantics and interaction.
-      return `<span style="${UNSAFE_LINK_STYLE}">${escapeHtml(text)}</span>`;
-    }
+    // An unsafe target keeps its words and loses the link: text that looks clickable but is not would mislead.
+    if (!isAllowedTarget(href)) return escapeHtml(text);
     const linkTitle = title ? ` title="${escapeHtml(title)}"` : "";
     return `<a href="${escapeHtml(decodeTarget(href))}"${linkTitle}>${this.parser.parseInline(tokens)}</a>`;
   };

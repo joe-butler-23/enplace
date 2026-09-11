@@ -6,7 +6,6 @@ import type { OrganiserItem } from "../types";
 import { resolveFilePathFromItemId } from "../utils/item-id";
 import type { PlannerOrderStore } from "../utils/planner-order";
 import { selectWeeklyShoppingRecipePaths } from "../utils/weekly-shopping-selection";
-import { useWeeklyBoardLayout } from "../hooks/useWeeklyBoardLayout";
 import { OrganiserToolbar, useWeeklyToolbarState } from "./OrganiserToolbar";
 import {
   closestCenter,
@@ -51,7 +50,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     () => createWeeklyOrganiserConfig(toolbar.weekOffset, dayNotes),
     [toolbar.weekOffset, dayNotes],
   );
-  const layout = useWeeklyBoardLayout();
   const resolveKanbanImageSrc = React.useCallback(
     (item: OrganiserItem) => resolveCover(item.coverImage ?? null, item.path) ?? "",
     [resolveCover],
@@ -74,17 +72,12 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     refreshOrder: plannerEntries.refreshOrder,
   });
 
-  const handleColumnNoteAction = React.useCallback(
-    async (event: Pick<React.SyntheticEvent, "stopPropagation" | "preventDefault">, date: string) => {
-      event.stopPropagation();
-      event.preventDefault();
-      if (!onSaveDayNote) return;
-      const currentNote = dayNotes?.[date] ?? "";
-      const newNote = window.prompt("Enter note for this day:", currentNote);
-      if (newNote !== null && newNote !== currentNote) onSaveDayNote(date, newNote.trim());
-    },
-    [dayNotes, onSaveDayNote],
-  );
+  const editDayNote = React.useCallback((date: string) => {
+    if (!onSaveDayNote) return;
+    const currentNote = dayNotes?.[date] ?? "";
+    const newNote = window.prompt("Enter note for this day:", currentNote);
+    if (newNote !== null && newNote !== currentNote) onSaveDayNote(date, newNote.trim());
+  }, [dayNotes, onSaveDayNote]);
 
   const handleSendShoppingList = React.useCallback(() => {
     if (!onSendShoppingList) return;
@@ -97,38 +90,23 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     onSendShoppingList(recipePaths);
   }, [config, onSendShoppingList, plan, recipes, toolbar.endDateValue, toolbar.startDateValue]);
 
-  const handleKanbanClickCapture = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null;
-    const noteButton = target?.closest(".organiser-column-note") as HTMLElement | null;
-    const date = noteButton?.dataset.date;
-    if (date) void handleColumnNoteAction(event, date);
-  }, [handleColumnNoteAction]);
-
+  // ArrowLeft/ArrowRight on a focused card moves it to the neighbouring column.
   const handleKanbanKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest(".card-open-btn")) {
-      const card = target.closest(".kanban-item") as HTMLElement | null;
-      if (!card?.dataset.eid || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
-      const sourceColumnId = card.closest(".kanban-board")?.getAttribute("data-id");
-      const sourceIndex = config.columns.findIndex((column) => column.id === sourceColumnId);
-      const direction = event.key === "ArrowLeft" ? -1 : 1;
-      const targetColumnId = config.columns[sourceIndex + direction]?.id;
-      if (!sourceColumnId || !targetColumnId) return;
-      event.preventDefault();
-      void planner.handleDrop(resolveFilePathFromItemId(card.dataset.eid), targetColumnId, { sourceColumnId })
-        .catch(() => notify("Could not move recipe. Please try again."));
-      return;
-    }
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const noteButton = target?.closest(".organiser-column-note") as HTMLElement | null;
-    const date = noteButton?.dataset.date;
-    if (!date) return;
+    const card = target?.closest(".card-open-btn")?.closest(".kanban-item") as HTMLElement | null | undefined;
+    if (!card?.dataset.eid) return;
+    const sourceColumnId = card.closest(".kanban-board")?.getAttribute("data-id");
+    const sourceIndex = config.columns.findIndex((column) => column.id === sourceColumnId);
+    const targetColumnId = config.columns[sourceIndex + (event.key === "ArrowLeft" ? -1 : 1)]?.id;
+    if (!sourceColumnId || !targetColumnId) return;
     event.preventDefault();
-    void handleColumnNoteAction(event, date);
-  }, [config.columns, handleColumnNoteAction, notify, planner.handleDrop]);
+    void planner.handleDrop(resolveFilePathFromItemId(card.dataset.eid), targetColumnId, { sourceColumnId })
+      .catch(() => notify("Could not move recipe. Please try again."));
+  }, [config.columns, notify, planner.handleDrop]);
 
   return (
-    <div ref={layout.plannerRootRef} className="weekly-organiser-container">
+    <div className="weekly-organiser-container">
       <OrganiserToolbar
         {...toolbar.toolbarProps}
         onSendShoppingList={onSendShoppingList ? handleSendShoppingList : undefined}
@@ -137,14 +115,9 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
         className="weekly-organiser-kanban"
         role="region"
         aria-label="Weekly organiser board"
-        ref={layout.kanbanRef}
-        onClickCapture={handleKanbanClickCapture}
         onKeyDownCapture={handleKanbanKeyDownCapture}
       >
-        <div
-          id="weekly-organiser-kanban"
-          className={`weekly-organiser-kanban-host${planner.activeDrag ? " is-board-dragging" : ""}`}
-        >
+        <div id="weekly-organiser-kanban" className="weekly-organiser-kanban-host">
           <DndContext
             sensors={planner.sensors}
             collisionDetection={closestCenter}
@@ -165,6 +138,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
                       notify("Could not remove recipe. Please try again."),
                     );
                   }}
+                  onNote={onSaveDayNote ? editDayNote : undefined}
                 />
               ))}
             </div>

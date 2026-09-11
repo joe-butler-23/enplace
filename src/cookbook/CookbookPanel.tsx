@@ -93,7 +93,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
 
   return (
     <section className="mep-settings__section">
-      <h3>Cookbook link</h3>
+      <h3 className="mep-label">Cookbook link</h3>
       <p className="mep-settings__note">Anyone with this private link can view and change this cookbook.</p>
       <input className="mep-settings__link" type="url" readOnly aria-label="Cookbook link" value={link} />
       <div className="mep-settings__actions">
@@ -252,12 +252,12 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
       <CookbookLinkSection id={connection.id} routePath={routePath} />
 
       <section className="mep-settings__section">
-        <h3>Your files</h3>
+        <h3 className="mep-label">Your files</h3>
         <div className="mep-settings__actions">
           <button className="mep-button" type="button" disabled={busy} onClick={() => void downloadCookbook()}>
             Download cookbook (.zip)
           </button>
-          <label className="mep-button mep-button--ghost mep-settings__file-button">
+          <label className="mep-button mep-settings__file-button">
             Import files
             <input
               type="file"
@@ -269,17 +269,17 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
               }}
             />
           </label>
-          {hasSamples ? <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={() => void removeSamples()}>Remove sample recipes</button> : null}
+          {hasSamples ? <button className="mep-button" type="button" disabled={busy} onClick={() => void removeSamples()}>Remove sample recipes</button> : null}
         </div>
       </section>
 
       <section className="mep-settings__section">
-        <h3>Cookbooks</h3>
+        <h3 className="mep-label">Cookbooks</h3>
         <div className="mep-settings__actions">
           <button className="mep-button" type="button" disabled={busy} onClick={() => void startCookbook()}>
             Start a new cookbook
           </button>
-          <button className="mep-button mep-button--ghost" type="button" disabled={busy} onClick={pasteCookbookLink}>
+          <button className="mep-button" type="button" disabled={busy} onClick={pasteCookbookLink}>
             Paste a link
           </button>
         </div>

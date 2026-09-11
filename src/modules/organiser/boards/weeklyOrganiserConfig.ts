@@ -1,6 +1,5 @@
 import { addCalendarDays, formatIsoDate, formatPlannerDay, startOfIsoWeek } from "../utils/scheduled-dates";
 import { BoardConfig, ColumnDefinition } from "../types/kanban-config";
-import { escapeHtml } from "@/shared/html";
 
 function getDayColumnGridPlacement(dayIndex: number): {
 	gridRow: string;
@@ -26,6 +25,7 @@ export function generateWeekColumns(
 	dayNotes: Record<string, string> = {}
 ): ColumnDefinition[] {
 	const startOfWeek = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
+	const today = formatIsoDate(new Date());
 	const markedColumn: ColumnDefinition = {
 		id: "marked",
 		title: "Marked",
@@ -39,15 +39,12 @@ export function generateWeekColumns(
 	for (let i = 0; i < 7; i++) {
 		const date = addCalendarDays(startOfWeek, i);
 		const dateId = formatIsoDate(date);
-		const note = dayNotes[dateId] || "";
-		const noteHtml = `<button type="button" class="organiser-column-note ${
-			note ? "has-note" : "is-empty"
-		}" data-date="${dateId}" aria-label="Add note">${note ? escapeHtml(note) : "+"}</button>`;
-
 		dayColumns.push({
 			id: dateId,
-			title: `<div class="organiser-column-header"><span class="organiser-column-title">${formatPlannerDay(date)}</span>${noteHtml}</div>`,
+			title: formatPlannerDay(date),
+			note: dayNotes[dateId] ?? "",
 			fieldValue: dateId,
+			className: dateId === today ? "is-today" : undefined,
 			...getDayColumnGridPlacement(i),
 		});
 	}

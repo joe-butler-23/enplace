@@ -1,0 +1,92 @@
+/* Tokens and element defaults. Every surface stylesheet reads these names; nothing redefines
+   a colour locally and no rule hardcodes a hex. Retune the app from here. */
+:root {
+  color-scheme: light;
+  /* The app has exactly two typefaces; no surface declares a font-family of its own. */
+  --font-sans: "Space Grotesk Variable", "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Fraunces Variable", Fraunces, Georgia, serif;
+  /* Grounds, lightest first */
+  --paper: #f7f3ec; --surface: #fffdf9; --surface-sunk: #f2ece2; --hover: #faf6ef; --hover-strong: #f4eee4;
+  /* Ink */
+  --ink: #1f1c19;
+  /* Secondary and label text both clear 4.5:1 on --paper, the lightest ground they sit on. A
+     label is made quiet by size, tracking and caps, not by being unreadable. */
+  --muted: #6d645e; --faint: #746a5c;
+  /* Hairlines and control borders */
+  --line-soft: #f0eae0; --line: #e8e0d4; --line-strong: #ded4c5;
+  /* Accent */
+  --accent: #a8421f; --accent-hover: #7d3117; --accent-tint: #f1e0d6; --on-accent: #fdfaf5;
+  /* Status */
+  --danger: #9f2d20; --danger-line: #e2bdb6; --danger-tint: #fdf1ee; --success: #4a6b3d;
+  /* Elevation, lowest first: a card on its lane, a menu over the page, a dialog or notice. */
+  --shadow-card: 0 1px 2px rgba(31, 28, 25, 0.05);
+  --shadow-pop: 0 18px 44px -14px rgba(60, 40, 20, 0.28);
+  --shadow: 0 20px 40px rgba(31, 28, 25, 0.08);
+  --sidebar-width: 48px;
+  /* Native checkboxes, radios and pickers take the accent too. */
+  accent-color: var(--accent);
+}
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-sans); }
+h1,
+h2,
+h3 { font-family: var(--font-serif); font-weight: 600; }
+/* Controls speak the app's typeface; each control sets only its own size. */
+button,
+input,
+select,
+textarea { font: inherit; color: inherit; }
+::file-selector-button { margin-right: 10px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--hover); color: var(--ink); font: inherit; font-size: 0.85rem; cursor: pointer; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { color: var(--accent-hover); }
+/* One focus ring. Rules that differ (an inset ring, a ring drawn on a proxy) say so locally. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The small-label voice: section labels, row labels, and the quiet text actions beside them.
+   Headings inside rendered notes cannot carry the class, so they are named here too. */
+.mep-label,
+.recipe-view__notes h2 { font-family: var(--font-sans); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.mep-sr-only { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
+.mep-button { border: 1px solid var(--line); background: var(--hover); padding: 8px 12px; border-radius: 10px; font-size: 0.875rem; cursor: pointer; }
+.mep-button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.mep-button:disabled { opacity: 0.5; cursor: default; }
+/* Round and square icon buttons that close or step back: one shape, one hover. */
+.mep-icon-button { flex: none; box-sizing: border-box; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.mep-icon-button:hover:not(:disabled) { background: var(--hover-strong); color: var(--ink); }
+.mep-icon-button svg { width: 16px; height: 16px; stroke-width: 2.2; }
+/* Anchored menus: Sort, Filter, tag suggestions, the week picker and the shopping overflow.
+   Each owner sets only which edge it anchors to. */
+.mep-menu { position: absolute; top: calc(100% + 6px); z-index: 20; display: grid; gap: 2px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-pop); }
+.mep-menu__item { padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-size: 0.875rem; text-align: left; white-space: nowrap; cursor: pointer; }
+.mep-menu__item:hover:not(:disabled),
+.mep-menu__item.is-active { background: var(--hover-strong); }
+.mep-menu__item:disabled { opacity: 0.45; cursor: default; }
+.mep-menu__item.mod-warning { color: var(--danger); }
+.mep-menu__divider { height: 1px; margin: 4px 0; background: var(--line); }
+.mep-segmented { flex: 0 0 auto; display: flex; padding: 2px; background: var(--surface-sunk); border-radius: 999px; }
+.mep-segmented > button { padding: 5px 12px; border: none; border-radius: 999px; background: transparent; color: var(--muted); font-size: 0.78rem; font-weight: 500; cursor: pointer; }
+.mep-segmented > button[aria-pressed="true"] { background: var(--ink); color: var(--on-accent); }
+/* The one add action, bottom-right of the database and the shopping list. */
+.mep-fab { position: absolute; right: 28px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 6; width: 54px; height: 54px; border: none; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 1.62rem; line-height: 1; cursor: pointer; box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--accent) 70%, transparent); }
+.mep-fab:hover { background: var(--accent-hover); transform: translateY(-2px); }
+.mep-fab:active { transform: scale(0.95); }
+/* The shared tick box: a visually hidden input followed by this drawn box. */
+.shopping-item__box,
+.checkbox-box { flex: none; margin-top: 2px; width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 5px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
+.shopping-item__box svg,
+.checkbox-box svg { width: 10px; height: 10px; fill: none; stroke: var(--surface); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.shopping-item__input:checked + .shopping-item__box,
+.recipe-view__check:checked + .checkbox-box { background: var(--accent); border-color: var(--accent); }
+.shopping-item__input:checked + .shopping-item__box svg,
+.recipe-view__check:checked + .checkbox-box svg { opacity: 1; }
+.shopping-item__input:focus-visible + .shopping-item__box,
+.recipe-view__check:focus-visible + .checkbox-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Feedback on pointer-down, not release: waiting until click reads as dead. */
+.shopping-item__label:active .shopping-item__box,
+.recipe-view__checklist label:active .checkbox-box { transform: scale(0.9); }
+@media (max-width: 760px) {
+  .mep-segmented > button { padding: 9px 12px; }
+  .mep-fab { right: 16px; }
+  .shopping-item__box,
+  .checkbox-box { width: 19px; height: 19px; border-radius: 6px; }
+  .shopping-item__box svg,
+  .checkbox-box svg { width: 12px; height: 12px; }
+}

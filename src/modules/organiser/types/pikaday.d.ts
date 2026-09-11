@@ -3,6 +3,7 @@ declare module "pikaday" {
 		field?: HTMLInputElement;
 		container?: HTMLElement;
 		bound?: boolean;
+		firstDay?: number;
 		format?: string;
 		onSelect?: (date: Date) => void;
 		onClose?: () => void;
@@ -12,10 +13,7 @@ declare module "pikaday" {
 		constructor(options: PikadayOptions);
 		setDate(date: Date, preventOnSelect?: boolean): void;
 		show(): void;
-		hide(): void;
 		destroy(): void;
-		gotoToday(): void;
-		clear(): void;
 	}
 
 	export default Pikaday;

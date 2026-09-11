@@ -1,0 +1,79 @@
+/* Recipe database: header tools, the card grid, and its empty states. */
+.cooking-db { position: relative; padding: 8px 10px 10px; height: 100%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
+.cooking-db__header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-shrink: 0; min-width: 0; }
+.cooking-db__tools { display: flex; gap: 8px; }
+.cooking-db__header h2 { margin: 0; font-size: 1.05rem; white-space: nowrap; }
+.cooking-db__count { color: var(--muted); font-size: 0.8rem; white-space: nowrap; margin-right: 4px; }
+.cooking-db__select { height: 32px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 0.85rem; }
+/* The field holds accepted tag chips and the query together. Its height is fixed: chips that
+   wrapped the row taller would push the grid down and register as layout shift. Chips scroll
+   sideways in their own track instead. */
+.cooking-db__searchbox { position: relative; flex: 1 1 240px; min-width: 160px; height: 32px; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+.cooking-db__searchbox:focus-within { border-color: var(--accent); }
+.cooking-db__chips { display: flex; align-items: center; gap: 4px; max-width: 55%; overflow-x: auto; scrollbar-width: none; }
+.cooking-db__chips::-webkit-scrollbar { display: none; }
+.cooking-db__chip { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; height: 22px; padding: 0 7px; border: 0; border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
+.cooking-db__chip:hover { color: var(--danger); }
+.cooking-db__search { flex: 1 1 60px; min-width: 60px; height: 100%; padding: 0; border: 0; background: transparent; font-size: 0.875rem; outline: none; }
+/* The chips and Backspace already clear the query; the native clear button is off-palette. */
+.cooking-db__search::-webkit-search-cancel-button { appearance: none; }
+.cooking-db__tag-suggest { left: 0; min-width: 180px; max-height: 240px; overflow: auto; }
+/* Sort and Filter are the same control shape: a labelled button carrying its own
+   state in a badge, opening a panel below. Only the badge tone differs -- Filter's
+   accent count says something is hidden, Sort's muted value is informational. */
+.cooking-db__popover { position: relative; flex: 0 0 auto; }
+.cooking-db__popover-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); white-space: nowrap; }
+.cooking-db__popover-toggle:hover { background: var(--paper); }
+.cooking-db__popover-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 0.7rem; }
+.cooking-db__popover-badge.mod-value { padding: 0 7px; background: var(--paper); color: var(--muted); }
+.cooking-db__popover-menu { right: 0; min-width: 190px; }
+.cooking-db__filter-menu { min-width: 280px; gap: 6px; padding: 8px; }
+.cooking-db__filter-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-left: 2px; font-size: 0.85rem; color: var(--muted); }
+/* One select width, so the three rows share a right edge whatever their longest option. */
+.cooking-db__filter-row .cooking-db__select { flex: 0 0 11rem; }
+
+.cooking-db__grid-container { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* Chromium ignores ::-webkit-scrollbar once scrollbar-color is set, so the standard properties are scoped to engines without the pseudo-elements. */
+.cooking-db__grid-container::-webkit-scrollbar { width: 10px; }
+.cooking-db__grid-container::-webkit-scrollbar-thumb { background-color: var(--line-strong); border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
+.cooking-db__grid-container::-webkit-scrollbar-thumb:hover,
+.cooking-db__grid-container::-webkit-scrollbar-thumb:active { background-color: var(--muted); }
+@supports not selector(::-webkit-scrollbar) { .cooking-db__grid-container { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; } }
+/* auto-fill with a bounded track: cards keep one size whether the grid holds one result
+   or forty, and the 448px thumbnail is never asked to paint above its own resolution
+   (224px at a device pixel ratio of 2). Leftover width stays at the end of the row. */
+.cooking-db__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 264px)); gap: 12px; align-items: start; padding: 1px 1px calc(78px + env(safe-area-inset-bottom)); }
+/* Containment measured in AGENTS.md "Database card containment": keep layout paint style. */
+.cooking-db__card { box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--hover); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; contain: layout paint style; width: 100%; }
+.cooking-db__card:hover { border-color: var(--accent); background: var(--paper); }
+.cooking-db__card-open { all: unset; display: block; width: 100%; cursor: pointer; }
+/* all: unset above also unsets the global ring, so the inset ring is drawn here in full. */
+.cooking-db__card-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cooking-db__card-open:active { transform: scale(0.985); }
+.cooking-db__cover { box-sizing: border-box; background: var(--paper); display: flex; align-items: center; justify-content: center; width: 100%; flex: 0 0 auto; min-height: 0; aspect-ratio: 1 / 1; overflow: hidden; }
+.cooking-db__cover--empty::after { content: 'No image'; color: var(--muted); font-size: 0.85rem; }
+.cooking-db__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cooking-db__body { box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 0; flex: 0 0 74px; height: 74px; overflow: hidden; }
+.cooking-db__title { font-weight: 600; font-size: 1rem; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cooking-db__meta { color: var(--muted); font-size: 0.85rem; min-height: 1.1rem; }
+.cooking-db__actions { box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; flex: 0 0 36px; height: 36px; }
+.cooking-db__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.cooking-db__toggle input { margin: 0; }
+
+/* No recipes yet, or none matching: one heading, one line, at most one action. */
+.cooking-db__empty { max-width: 60ch; padding: 24px 2px; display: grid; justify-items: start; gap: 10px; color: var(--muted); }
+.cooking-db__empty h2 { margin: 0; font-size: 1.31rem; line-height: 1.2; letter-spacing: -0.01em; color: var(--ink); }
+.cooking-db__empty p { margin: 0; }
+.cooking-db__error { color: var(--danger); background: var(--hover); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+
+@media (max-width: 760px) {
+  .cooking-db__header { flex-wrap: wrap; }
+  .cooking-db__searchbox { order: 1; flex-basis: 100%; }
+  /* Sort and Filter sit at the left edge here, so their menus open rightwards from the pair. */
+  .cooking-db__tools { position: relative; }
+  .cooking-db__popover { position: static; }
+  .cooking-db__popover-menu { left: 0; right: auto; }
+  /* A phone is too narrow for a 200px track to fit twice, and one column would blow a 448px
+     thumbnail up on a 338px card. Two columns keep it above 2x and show twice the shelf. */
+  .cooking-db__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

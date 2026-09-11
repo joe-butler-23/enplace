@@ -20,7 +20,7 @@ export function Dialog({ title, onClose, children }: {
     <div className="mep-dialog__body">
       <div className="mep-dialog__header">
         <h2>{title}</h2>
-        <button className="mep-dialog__close" type="button" onClick={onClose} title={`Close ${title.toLowerCase()}`} ref={(element) => { if (element) setIcon(element, "x"); }} />
+        <button className="mep-icon-button" type="button" onClick={onClose} title={`Close ${title.toLowerCase()}`} ref={(element) => { if (element) setIcon(element, "x"); }} />
       </div>
       {children}
     </div>
