@@ -11,6 +11,7 @@ import {
 } from "./doc";
 import { clearCurrentCookbookId, setCurrentCookbookId } from "./registry";
 import { SAMPLE_PATHS } from "./sample-pack";
+import { notify } from "@/shared/notify";
 
 const MAX_IMPORT_FILES = 500;
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -22,9 +23,6 @@ function openCookbookLink(id: string): void {
 
 const blobPart = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
 
-function notify(message: string): void {
-  window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } }));
-}
 
 function statusMessage(status: CookbookStatus, preparing: boolean): string {
   if (preparing) return "Preparing the shared copy…";

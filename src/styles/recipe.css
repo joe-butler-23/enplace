@@ -57,7 +57,7 @@
 /* Steps carry no checkbox: the number is the control, so the row is one object. */
 .recipe-view__checklist--steps { gap: 28px; }
 .recipe-view__checklist--steps > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 20px; align-items: start; }
-.recipe-view__step-number { width: 28px; height: 28px; margin: -3px 0 0 -6px; padding: 0; border: 0; border-radius: 999px; background: transparent; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.06em; color: var(--faint); cursor: pointer; }
+.recipe-view__step-number { width: 28px; height: 28px; margin: -3px 0 0 -6px; padding: 0; border: 0; border-radius: 999px; background: transparent; font-size: 0.78rem; font-weight: 500; letter-spacing: 0.06em; color: var(--faint); cursor: pointer; }
 .recipe-view__step-number:hover { background: var(--hover-strong); color: var(--muted); }
 .recipe-view__step-number[aria-pressed="true"] { color: var(--accent); }
 .recipe-view__step-text { margin: 0; max-width: 62ch; font-size: 1rem; line-height: 1.625; color: var(--ink); text-wrap: pretty; }

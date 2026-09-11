@@ -1,6 +1,5 @@
 /* The app frame: rail, main pane, split preview, transient notices, and the screens shown
    before or instead of the app. */
-.mep-root { height: 100vh; }
 .mep-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--mep-preview-width); height: 100vh; overflow: hidden; }
 .mep-view { display: contents; }
 .mep-view[hidden] { display: none; }
@@ -28,7 +27,6 @@
 .mep-main--shopping { padding: 0; }
 .mep-planner { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .mep-planner-intent-error { position: absolute; top: 12px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 28px); padding: 10px 12px; border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); color: var(--ink); transform: translateX(-50%); }
-.mep-database-panel { display: contents; }
 
 .mep-preview { background: var(--surface); border-left: 1px solid var(--line); position: relative; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
 .mep-preview__resizer { position: absolute; top: 0; left: -5px; width: 10px; height: 100%; cursor: col-resize; z-index: 2; }
@@ -36,6 +34,9 @@
 .mep-preview pre { white-space: pre-wrap; font-family: var(--font-sans); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; max-height: 70vh; overflow: auto; }
 .mep-preview__empty { color: var(--muted); font-size: 0.9rem; }
 .mep-preview__content { min-height: 0; flex: 1 1 auto; }
+
+/* Quarantined relay records: permanent, full-width, above the app. */
+.mep-integrity-banner { padding: 10px 16px; border-bottom: 1px solid var(--danger-line); background: var(--danger-tint); color: var(--danger); text-align: center; font-size: 0.9rem; }
 
 /* Transient notices share one bottom-centre slot, lifted clear of the add button and the
    shopping composer so a notice never covers the control that produced it. */

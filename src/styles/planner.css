@@ -1,17 +1,15 @@
 /* Weekly planner: toolbar, week picker, and the five-lane board. */
 .weekly-organiser-container { height: 100%; width: 100%; box-sizing: border-box; padding: 0 12px 12px; position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; background: linear-gradient(180deg, var(--surface) 0%, var(--paper) 100%); }
 .organiser-topbar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 8px 6px; background: var(--surface); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.topbar-icon-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 4px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
-.topbar-icon-btn:hover { background: var(--hover); color: var(--ink); }
 .week-nav { display: flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
-.week-nav-btn { cursor: pointer; background: transparent; border: none; border-radius: 4px; padding: 3px 6px; color: var(--muted); font-size: 0.75em; display: flex; align-items: center; justify-content: center; }
-.week-nav-btn:hover { background: var(--hover); color: var(--ink); }
+/* "Today" is the one text button in the row; the arrows, picker and cart are .mep-icon-button. */
+.week-nav-btn { cursor: pointer; background: transparent; border: none; border-radius: 8px; padding: 5px 8px; color: var(--muted); font-size: 0.75em; }
+.week-nav-btn:hover { background: var(--hover-strong); color: var(--ink); }
 .week-range { margin-left: 4px; font-size: 0.8em; color: var(--muted); white-space: nowrap; }
 
 /* The week picker: Pikaday rendered inside our own popover, restyled to the palette. */
 .week-nav-calendar { position: relative; display: inline-flex; align-items: center; }
 .calendar-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 10; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-pop); min-width: 240px; }
-.calendar-input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
 .pika-single { z-index: 9999; display: block; position: relative; color: var(--ink); background: transparent; border: none; border-radius: 0; box-shadow: none; }
 .pika-single::before,
 .pika-single::after { content: ' '; display: table; }
@@ -49,6 +47,8 @@
 .weekly-organiser-kanban-host { display: flex; flex: 1 1 auto; min-height: 100%; width: 100%; min-width: 100%; }
 .kanban-container { position: relative; box-sizing: border-box; display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 100%; width: 100%; min-width: calc(200px * 5 + 12px * 4); align-items: stretch; align-content: stretch; justify-content: start; }
 .kanban-container * { box-sizing: border-box; }
+/* Marked spans both rows of the first track; the seven days auto-place Monday to Sunday around it. */
+.kanban-board[data-id="marked"] { grid-row: span 2; }
 .kanban-board { contain: style; background-color: var(--paper); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; padding: 8px; box-shadow: var(--shadow-card); min-width: 0; min-height: 0; align-self: stretch; overflow: hidden; }
 .kanban-board.is-today { border-color: var(--accent); }
 .kanban-board.is-today .organiser-column-title { color: var(--accent); }

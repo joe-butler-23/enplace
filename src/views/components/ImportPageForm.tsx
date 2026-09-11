@@ -1,8 +1,8 @@
 import * as React from "react";
 import { configuredImageEndpoint, configuredPageEndpoint, fetchImageBlob, fetchPageHtml } from "../../recipe-import/page-fetch";
 import { importPageRecipes, readPageRecipes, type PageRecipe } from "../../recipe-import/page-import";
+import { notify } from "../../shared/notify";
 
-const notify = (message: string): void => { window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } })); };
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Fetches a recipe page through the relay, or reads a pasted or opened page, and adds the chosen recipes as new cookbook files. */

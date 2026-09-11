@@ -5,11 +5,8 @@ export interface ColumnDefinition {
   title: string;
   /** Day lanes only: the household's note for that date, "" when there is none. */
   note?: string;
-  fieldValue: string | boolean | number | undefined;
   isDefault?: boolean;
   className?: string;
-  gridRow?: string;
-  gridColumn?: string;
 }
 
 export interface BaseKanbanItem {
@@ -21,6 +18,5 @@ export interface BaseKanbanItem {
 
 export interface BoardConfig {
   id: string;
-  name: string;
   columns: ColumnDefinition[];
 }

@@ -4,45 +4,30 @@ import Pikaday from "pikaday";
 
 interface UsePikadayDatePickerOptions {
 	isOpen: boolean;
-	inputRef: React.RefObject<HTMLInputElement | null>;
 	containerRef: React.RefObject<HTMLElement | null>;
-	selectedDate?: Date;
+	selectedDate: Date;
 	onSelect: (date: Date) => void;
 	onClose: () => void;
 }
 
 /**
- * Shows Pikaday inside the given container while open. Weeks start on Monday, like the board. A
- * layout effect, so the calendar paints in the same frame as its popover rather than one later.
+ * Shows Pikaday inside the given container while open. Weeks start on Monday, like the board.
+ * With no input field Pikaday attaches nowhere, so the calendar element is placed here. A layout
+ * effect, so the calendar paints in the same frame as its popover rather than one later.
  */
 export function usePikadayDatePicker(options: UsePikadayDatePickerOptions): void {
-	const { isOpen, inputRef, containerRef, selectedDate, onSelect, onClose } = options;
-
+	const { isOpen, containerRef, selectedDate, onSelect, onClose } = options;
 	const handleSelect = useEffectEvent(onSelect);
 	const handleClose = useEffectEvent(onClose);
-	const selectedDateKey = selectedDate?.getTime() ?? null;
+	const selectedDateKey = selectedDate.getTime();
 
 	React.useLayoutEffect(() => {
-		if (!isOpen) return;
-		const input = inputRef.current;
 		const container = containerRef.current;
-		if (!input || !container) return;
-
-		const picker = new Pikaday({
-			field: input,
-			container,
-			bound: false,
-			firstDay: 1,
-			format: "YYYY-MM-DD",
-			onSelect: handleSelect,
-			onClose: handleClose,
-		});
-
-		if (selectedDateKey !== null) {
-			picker.setDate(new Date(selectedDateKey), true);
-		}
-
+		if (!isOpen || !container) return;
+		const picker = new Pikaday({ bound: false, firstDay: 1, onSelect: handleSelect, onClose: handleClose });
+		picker.setDate(new Date(selectedDateKey), true);
+		container.append(picker.el);
 		picker.show();
 		return () => picker.destroy();
-	}, [inputRef, containerRef, isOpen, selectedDateKey]);
+	}, [containerRef, isOpen, selectedDateKey]);
 }

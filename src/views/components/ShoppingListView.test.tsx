@@ -17,6 +17,8 @@ const props = {
   onAdd: vi.fn(),
   onRemove: vi.fn(),
   onCopy: vi.fn(),
+  onReset: vi.fn(),
+  onAisle: vi.fn(),
 };
 
 describe("ShoppingListView Markdown presentation", () => {

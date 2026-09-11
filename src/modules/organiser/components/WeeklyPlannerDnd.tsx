@@ -112,7 +112,7 @@ type PlannerLaneProps = {
   resolveCover: (entry: BoardEntry<OrganiserItem>) => string;
   onOpen: (event: React.MouseEvent, path: string) => void;
   onRemove: (path: string, sourceColumnId: string) => void;
-  onNote?: (date: string) => void;
+  onNote: (date: string) => void;
 };
 
 export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, onNote }: PlannerLaneProps): React.JSX.Element {
@@ -124,12 +124,11 @@ export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, o
       ref={setNodeRef}
       className={`kanban-board${densityClass}${column.className ? ` ${column.className}` : ""}`}
       data-id={column.id}
-      style={{ gridRow: column.gridRow, gridColumn: column.gridColumn }}
     >
       <header className="organiser-column-header">
         <span className="organiser-column-title">{column.title}</span>
         {/* An empty day offers "+"; a day with a note shows it in full width, and the note is its own edit control. */}
-        {note === undefined || !onNote ? null : note
+        {note === undefined ? null : note
           ? <button type="button" className="organiser-column-note has-note" data-date={column.id} title={note} onClick={() => onNote(column.id)}>{note}</button>
           : <button type="button" className="organiser-column-note is-empty" data-date={column.id} aria-label={`Add a note for ${column.title}`} onClick={() => onNote(column.id)}>+</button>}
       </header>
@@ -154,7 +153,7 @@ type PlannerEntriesOptions = {
   recipes: readonly Recipe[];
   plan: Plan;
   config: BoardConfig;
-  plannerOrderStore?: PlannerOrderStore;
+  plannerOrderStore: PlannerOrderStore;
 };
 
 type UsePlannerInteractionsOptions = {
@@ -164,7 +163,7 @@ type UsePlannerInteractionsOptions = {
   notify: (message: string) => void;
   onOpenFile: (filePath: string, options: { split: boolean }) => void;
   onUnmarkRecipe: (path: string) => Promise<void>;
-  plannerOrderStore?: PlannerOrderStore;
+  plannerOrderStore: PlannerOrderStore;
   renderedEntriesByColumn: Map<string, BoardEntry<OrganiserItem>[]>;
   refreshOrder: () => void;
 };
@@ -358,13 +357,11 @@ export function usePlannerInteractions(options: UsePlannerInteractionsOptions) {
       if (result?.deleted === true) {
         orders.targetIds = orders.targetIds.filter((id) => id !== orders.targetEntryId);
       }
-      if (options.plannerOrderStore) {
-        const updates = new Map<string, readonly string[]>();
-        updates.set(plannerOrderKey(options.config.id, "weekly", drag.sourceColumnId), orders.sourceIds);
-        updates.set(plannerOrderKey(options.config.id, "weekly", targetColumnId), orders.targetIds);
-        await options.plannerOrderStore.replaceMany(updates);
-        options.refreshOrder();
-      }
+      const updates = new Map<string, readonly string[]>();
+      updates.set(plannerOrderKey(options.config.id, "weekly", drag.sourceColumnId), orders.sourceIds);
+      updates.set(plannerOrderKey(options.config.id, "weekly", targetColumnId), orders.targetIds);
+      await options.plannerOrderStore.replaceMany(updates);
+      options.refreshOrder();
     }).catch((error) => {
       console.error("[WeeklyOrganiser] Failed to move recipe", error);
       options.notify("Could not move recipe. Please try again.");

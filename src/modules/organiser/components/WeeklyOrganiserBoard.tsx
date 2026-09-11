@@ -6,7 +6,8 @@ import type { OrganiserItem } from "../types";
 import { resolveFilePathFromItemId } from "../utils/item-id";
 import type { PlannerOrderStore } from "../utils/planner-order";
 import { selectWeeklyShoppingRecipePaths } from "../utils/weekly-shopping-selection";
-import { OrganiserToolbar, useWeeklyToolbarState } from "./OrganiserToolbar";
+import { OrganiserToolbar } from "./OrganiserToolbar";
+import { addCalendarDays, formatIsoDate, startOfIsoWeek } from "../utils/scheduled-dates";
 import {
   closestCenter,
   DndContext,
@@ -24,11 +25,11 @@ interface WeeklyOrganiserBoardProps {
   notify: (message: string) => void;
   resolveCover: (coverPath: string | null, sourcePath: string) => string | null;
   dayNotes?: Record<string, string>;
-  onSendShoppingList?: (recipePaths: string[]) => void;
-  onSaveDayNote?: (date: string, note: string) => void;
+  onSendShoppingList: (recipePaths: string[]) => void;
+  onSaveDayNote: (date: string, note: string) => void;
   onOpenFile: (filePath: string, options: { split: boolean }) => void;
   onUnmarkRecipe: (path: string) => Promise<void>;
-  plannerOrderStore?: PlannerOrderStore;
+  plannerOrderStore: PlannerOrderStore;
 }
 
 /** Weekly organiser board rendered by React with dnd-kit pointer dragging. */
@@ -45,10 +46,10 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   onUnmarkRecipe,
   plannerOrderStore,
 }: WeeklyOrganiserBoardProps): React.JSX.Element {
-  const toolbar = useWeeklyToolbarState();
+  const [weekOffset, setWeekOffset] = React.useState(0);
   const config = React.useMemo(
-    () => createWeeklyOrganiserConfig(toolbar.weekOffset, dayNotes),
-    [toolbar.weekOffset, dayNotes],
+    () => createWeeklyOrganiserConfig(weekOffset, dayNotes),
+    [weekOffset, dayNotes],
   );
   const resolveKanbanImageSrc = React.useCallback(
     (item: OrganiserItem) => resolveCover(item.coverImage ?? null, item.path) ?? "",
@@ -73,22 +74,18 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   });
 
   const editDayNote = React.useCallback((date: string) => {
-    if (!onSaveDayNote) return;
     const currentNote = dayNotes?.[date] ?? "";
     const newNote = window.prompt("Enter note for this day:", currentNote);
     if (newNote !== null && newNote !== currentNote) onSaveDayNote(date, newNote.trim());
   }, [dayNotes, onSaveDayNote]);
 
   const handleSendShoppingList = React.useCallback(() => {
-    if (!onSendShoppingList) return;
     const { entriesByFile } = buildBoardEntries(recipes, plan, config);
-    const recipePaths = selectWeeklyShoppingRecipePaths(
-      entriesByFile.values(),
-      toolbar.startDateValue,
-      toolbar.endDateValue,
-    );
-    onSendShoppingList(recipePaths);
-  }, [config, onSendShoppingList, plan, recipes, toolbar.endDateValue, toolbar.startDateValue]);
+    const start = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
+    onSendShoppingList(selectWeeklyShoppingRecipePaths(
+      entriesByFile.values(), formatIsoDate(start), formatIsoDate(addCalendarDays(start, 6)),
+    ));
+  }, [config, onSendShoppingList, plan, recipes, weekOffset]);
 
   // ArrowLeft/ArrowRight on a focused card moves it to the neighbouring column.
   const handleKanbanKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -107,10 +104,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 
   return (
     <div className="weekly-organiser-container">
-      <OrganiserToolbar
-        {...toolbar.toolbarProps}
-        onSendShoppingList={onSendShoppingList ? handleSendShoppingList : undefined}
-      />
+      <OrganiserToolbar weekOffset={weekOffset} onWeekOffset={setWeekOffset} onSendShoppingList={handleSendShoppingList} />
       <div
         className="weekly-organiser-kanban"
         role="region"
@@ -138,7 +132,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
                       notify("Could not remove recipe. Please try again."),
                     );
                   }}
-                  onNote={onSaveDayNote ? editDayNote : undefined}
+                  onNote={editDayNote}
                 />
               ))}
             </div>

@@ -34,7 +34,6 @@ describe("PreviewPane split-pane stability", () => {
     baseProps = {
       path: "recipes/soup.md",
       content: "# Soup\n\n## Ingredients\n- water\n",
-      isRecipe: true,
       width: 420,
       recipeRef,
       onClose: vi.fn(),

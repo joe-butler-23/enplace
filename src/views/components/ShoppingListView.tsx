@@ -12,11 +12,11 @@ type ShoppingListViewProps = {
   busy: boolean;
   error: string | null;
   onCheck: (itemIds: string[], checked: boolean) => void;
-  onAdd?: (content: string) => void | Promise<void>;
-  onRemove?: (itemIds: string[]) => void;
-  onCopy?: () => void;
-  onReset?: () => void;
-  onAisle?: (itemId: string, aisle: string) => void;
+  onAdd: (content: string) => void | Promise<void>;
+  onRemove: (itemIds: string[]) => void;
+  onCopy: () => void;
+  onReset: () => void;
+  onAisle: (itemId: string, aisle: string) => void;
 };
 
 export type ShoppingListGrouping = "none" | "section" | "recipe";
@@ -80,7 +80,7 @@ function ShoppingItemRow({
   item: ShoppingRow;
   busy: boolean;
   onCheck: (itemIds: string[], checked: boolean) => void;
-  onRemove?: (itemIds: string[]) => void;
+  onRemove: (itemIds: string[]) => void;
   onAisle?: (itemId: string, aisle: string) => void;
 }): React.JSX.Element {
   return (
@@ -110,18 +110,17 @@ function ShoppingItemRow({
         <option value="">{item.labels[0] ? 'Reset aisle' : item.aisle ?? OTHER_GROUP}</option>
         {[...new Set([...SHOPPING_AISLES, ...item.labels])].map((aisle) => <option key={aisle} value={aisle}>{aisle}</option>)}
       </select> : null}
-      {onRemove ? <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button> : null}
+      <button type="button" className="shopping-item__remove" aria-label={`Remove ${item.content}`} disabled={busy} onClick={() => onRemove(item.memberIds)}>×</button>
 
     </li>
   );
 }
 
 
-function currentRelayState(): string {
+/** Offline only means something for a cookbook that syncs through a relay. */
+function relayOffline(): boolean {
   const connection = currentCookbookConnection();
-  if (!connection?.relayUrl) return "none";
-  const status = typeof navigator !== "undefined" && !navigator.onLine ? "offline" : connection.status();
-  return `${connection.id}:${status}`;
+  return Boolean(connection?.relayUrl) && (!navigator.onLine || connection?.status() === "offline");
 }
 
 function subscribeRelayState(listener: () => void): () => void {
@@ -142,11 +141,6 @@ function subscribeRelayState(listener: () => void): () => void {
   };
 }
 
-function useShoppingSyncMessage(): string | null {
-  const relayState = React.useSyncExternalStore(subscribeRelayState, currentRelayState, () => "none");
-  const status = relayState.slice(relayState.lastIndexOf(":") + 1);
-  return status === "offline" ? "Offline. Your ticks are saved on this phone." : null;
-}
 
 export function ShoppingListView({
   list, busy, error, onCheck, onAdd, onRemove, onCopy, onReset, onAisle
@@ -157,7 +151,7 @@ export function ShoppingListView({
   useDismiss(menuOpen, (target) => Boolean(target.closest(".shopping-menu")), () => setMenuOpen(false));
   const [draft, setDraft] = React.useState("");
   const [composerOpen, setComposerOpen] = React.useState(false);
-  const syncMessage = useShoppingSyncMessage();
+  const offline = React.useSyncExternalStore(subscribeRelayState, relayOffline, () => false);
   const draftRef = React.useRef<HTMLInputElement | null>(null);
   React.useEffect(() => { if (composerOpen) draftRef.current?.focus(); }, [composerOpen]);
 
@@ -168,7 +162,7 @@ export function ShoppingListView({
   const closeComposer = () => { setComposerOpen(false); setDraft(""); };
   const submitDraft = () => {
     const content = draft.trim();
-    if (!content || !onAdd) return;
+    if (!content) return;
     const result = onAdd(content);
     if (result instanceof Promise) result.then(closeComposer, () => undefined);
     else closeComposer();
@@ -184,27 +178,27 @@ export function ShoppingListView({
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" focusable="false"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
       </button>
       <div className="shopping-menu">
-        <button type="button" className="shopping-menu__trigger" aria-label="More actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} />
+        <button type="button" className="mep-icon-button shopping-menu__trigger" aria-label="More actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} />
         {menuOpen ? <div className="mep-menu shopping-menu__panel">
-          {onReset ? <button type="button" className="mep-menu__item" disabled={busy} onClick={() => { setMenuOpen(false); if (window.confirm('Reset shopping list? This removes every item, including checked items, for everyone sharing this cookbook.')) onReset(); }}>Reset shopping list</button> : null}
-          {onCopy ? <button type="button" className="mep-menu__item" onClick={() => { setMenuOpen(false); onCopy(); }}>Copy list</button> : null}
+          <button type="button" className="mep-menu__item" disabled={busy} onClick={() => { setMenuOpen(false); if (window.confirm('Reset shopping list? This removes every item, including checked items, for everyone sharing this cookbook.')) onReset(); }}>Reset shopping list</button>
+          <button type="button" className="mep-menu__item" onClick={() => { setMenuOpen(false); onCopy(); }}>Copy list</button>
         </div> : null}
       </div></> : null}
     </header>
-    {syncMessage ? <p className="shopping-list-view__sync-status" role="status">{syncMessage}</p> : null}
+    {offline ? <p className="shopping-list-view__sync-status" role="status">Offline. Your ticks are saved on this phone.</p> : null}
     {error ? <div className="shopping-list-view__error" role="alert" aria-live="assertive"><span>{shoppingErrorText(error)}</span></div> : null}
     {items.length === 0 ? <p className="shopping-list-view__empty">Your list is empty — add an item below.</p> : null}
     {items.length > 0 ? <div className="shopping-list-view__scroll">
       {groups.map((group) => <section key={group.label || "ungrouped"} className="shopping-group">{group.label ? <div className="shopping-group__label mep-label">{group.label}</div> : null}<ul className="shopping-items">{group.items.map((item) => <ShoppingItemRow key={item.id} item={item} busy={busy} onCheck={onCheck} onRemove={onRemove} onAisle={grouping === "section" ? onAisle : undefined} />)}</ul></section>)}
       {groups.length === 0 ? <p className="shopping-list-view__cleared">Everything is picked up.</p> : null}
     </div> : null}
-    {onAdd ? composerOpen ? (
+    {composerOpen ? (
       <form className="shopping-composer" onSubmit={(event) => { event.preventDefault(); submitDraft(); }} onKeyDown={(event) => { if (event.key === "Escape") closeComposer(); }}>
         <input ref={draftRef} type="text" className="shopping-composer__input" value={draft} disabled={busy} placeholder="Add an item" aria-label="Add a shopping item" onChange={(event) => setDraft(event.currentTarget.value)} />
         <button type="submit" className="shopping-button" disabled={busy || !draft.trim()}>Add</button>
       </form>
     ) : (
       <AddButton label="Add an item" onClick={() => setComposerOpen(true)} />
-    ) : null}
+    )}
   </section>;
 }

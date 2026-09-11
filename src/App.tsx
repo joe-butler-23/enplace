@@ -24,6 +24,7 @@ import { cardCoverUrl } from "./cookbook/covers";
 import { getCookbookSnapshot, useCookbookSlice, useCookbookText, type CookbookFile } from "./cookbook/store";
 import { CommandPalette, HelpDialog, Notices, SettingsDialog, StartupFailure, type Command } from "./views/components/AppOverlays";
 import { PreviewPane } from "./views/components/PreviewPane";
+import { basename, notify } from "./shared/notify";
 
 type ViewId = "planner" | "database" | "shopping" | "recipe";
 type RoutedView = ViewId | "settings";
@@ -39,13 +40,9 @@ function initialRouteState(route: RoutedView): readonly [ViewId, boolean, boolea
   const settingsOpen = route === "settings";
   return [settingsOpen ? DEFAULT_VIEW : route, settingsOpen, false];
 }
-const basename = (path: string): string => path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
 function formatError(error: unknown): string {
   if (error instanceof Error) return error.message?.trim() || "Unknown error";
   return typeof error === "string" ? error : "Unknown error";
-}
-function notify(message: string): void {
-  window.dispatchEvent(new CustomEvent("mep-notice", { detail: { message } }));
 }
 async function flushRecipeSave(ref: React.RefObject<RecipeViewHandle | null>): Promise<boolean> {
   try { await ref.current?.flushSave(); return true; } catch { return false; }
@@ -91,7 +88,7 @@ function DatabaseCookbookView(props: DatabaseCookbookViewProps): React.JSX.Eleme
   const recipes = useCookbookSlice("recipes");
   const plan = useCookbookSlice("plan");
   const { resolveCover } = useCookbookImages();
-  return <div className="mep-database-panel"><CookingDatabase {...props} recipes={recipes} plan={plan} resolveCover={resolveCover} /></div>;
+  return <CookingDatabase {...props} recipes={recipes} plan={plan} resolveCover={resolveCover} />;
 }
 
 type ShoppingCookbookViewProps = Omit<React.ComponentProps<typeof ShoppingListView>, "list">;
@@ -120,9 +117,8 @@ function RecipeCookbookView({ path, recipeRef, onDelete }: {
   />;
 }
 
-function PreviewCookbookView({ file, isRecipe, width, recipeRef, onClose, onWidth }: {
+function PreviewCookbookView({ file, width, recipeRef, onClose, onWidth }: {
   file: CookbookFile;
-  isRecipe: boolean;
   width: number;
   recipeRef: React.RefObject<RecipeViewHandle | null>;
   onClose: () => void;
@@ -133,7 +129,6 @@ function PreviewCookbookView({ file, isRecipe, width, recipeRef, onClose, onWidt
   return <PreviewPane
     path={file.path}
     content={content}
-    isRecipe={isRecipe}
     width={width}
     recipeRef={recipeRef}
     onClose={onClose}
@@ -307,26 +302,20 @@ function App(): React.JSX.Element | null {
   const toggleMarked = React.useCallback((path: string, marked: boolean) => updatePlanning(path, (value) => ({ ...value, marked })), [updatePlanning]);
   const [activeFile, setActiveFile] = React.useState<CookbookFile | null>(null);
   const [previewFile, setPreviewFile] = React.useState<CookbookFile | null>(null);
-  const [previewIsRecipe, setPreviewIsRecipe] = React.useState(false);
   const [previewWidth, setPreviewWidth] = React.useState(420);
   const closePreview = React.useCallback(async () => {
     if (!await flushRecipeSave(previewRecipeRef)) return false;
-    setPreviewFile(null); setPreviewIsRecipe(false); return true;
+    setPreviewFile(null); return true;
   }, []);
-  const openPreview = React.useCallback(async (file: CookbookFile, isRecipe: boolean) => {
+  const openPreview = React.useCallback(async (file: CookbookFile) => {
     if (!await flushRecipeSave(previewRecipeRef)) return;
-    setPreviewFile(file); setPreviewIsRecipe(isRecipe);
+    setPreviewFile(file);
   }, []);
-  const openPath = React.useCallback(async (path: string, options: { split: boolean }) => {
-    const file = getCookbookSnapshot().files.find((candidate) => candidate.path === path); if (!file) return;
-    const recipe = getCookbookSnapshot().recipes.some((candidate) => candidate.path === path);
-    if (options.split) { await openPreview(file, recipe); return; }
-    if (!await closePreview()) return; setActiveFile(file); if (recipe) await setActiveView("recipe");
-  }, [closePreview, openPreview, setActiveView]);
+  // Database and planner cards are always recipes; Ctrl/Cmd opens one beside the current view.
   const openRecipe = React.useCallback(async (path: string, split: boolean) => {
-    if (activeViewRef.current !== "database") return;
+    if (activeViewRef.current !== "database" && activeViewRef.current !== "planner") return;
     const file = getCookbookSnapshot().files.find((candidate) => candidate.path === path); if (!file) return;
-    if (split) { await openPreview(file, true); return; }
+    if (split) { await openPreview(file); return; }
     if (!await closePreview()) return;
     setActiveFile(file); void setActiveView("recipe");
   }, [closePreview, openPreview, setActiveView]);
@@ -375,11 +364,11 @@ function App(): React.JSX.Element | null {
 
   if (!runtime) return startupError ? <StartupFailure error={startupError} onRetry={() => void initialize()} /> : null;
   const { settings } = runtime;
-  return <div className="mep-root"><div className="mep-shell" style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
+  return <div className="mep-shell" style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
     <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} />
     <main className={`mep-main ${activeView === "planner" ? "mep-main--planner" : ""} ${activeView === "database" ? "mep-main--database" : ""} ${activeView === "shopping" ? "mep-main--shopping" : ""}`}>
       <h1 className="mep-sr-only">Enplace</h1>
-      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={openPath} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
+      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={(path, { split }) => { void openRecipe(path, split); }} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
       {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopy={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
         const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content;
@@ -388,10 +377,10 @@ function App(): React.JSX.Element | null {
       {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
       {settingsOpen ? <SettingsDialog routePath={pathnameForView(activeView)} onClose={closeSettings} /> : null}
     </main>
-    {previewFile ? <PreviewCookbookView file={previewFile} isRecipe={previewIsRecipe} width={previewWidth} recipeRef={previewRecipeRef} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
+    {previewFile ? <PreviewCookbookView file={previewFile} width={previewWidth} recipeRef={previewRecipeRef} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
     <Notices notices={notices} />
     {commandOpen ? <CommandPalette commands={filteredCommands} query={commandQuery} onQuery={setCommandQuery} onClose={() => setCommandOpen(false)} /> : null}
     {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}
-  </div></div>;
+  </div>;
 }
 export default App;

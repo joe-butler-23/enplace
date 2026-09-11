@@ -28,15 +28,6 @@ const subscribe = (listener: () => void): (() => void) => {
 };
 const getUnreadable = (): number => unreadable;
 
-const style: React.CSSProperties = {
-  padding: "10px 16px",
-  background: "var(--danger-tint)",
-  color: "var(--danger)",
-  borderBottom: "1px solid var(--danger-line)",
-  textAlign: "center",
-  fontSize: "0.9rem",
-};
-
 /**
  * A record that failed to authenticate is quarantined, not applied, and never deleted — so it
  * stays readable for another device even though this one cannot open it. This banner reports
@@ -47,7 +38,7 @@ export function IntegrityBanner(): React.JSX.Element | null {
   const count = useSyncExternalStore(subscribe, getUnreadable, getUnreadable);
   if (!count) return null;
   return (
-    <div role="alert" style={style}>
+    <div role="alert" className="mep-integrity-banner">
       {count} shared records could not be read and were skipped. Export a copy from Settings.
     </div>
   );

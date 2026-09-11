@@ -13,9 +13,9 @@ describe("weekly board data", () => {
     const plan = parsePlan("## Marked\n- [[Pie]]\n\n## 2026-09-07\n- [[Soup]]\n\n## 2026-09-09\n- [[Soup]]\n");
     const config = createWeeklyOrganiserConfig(0);
     config.columns = [
-      { id: "marked", title: "Marked", fieldValue: undefined, isDefault: true },
-      { id: "2026-09-07", title: "Monday", fieldValue: "2026-09-07" },
-      { id: "2026-09-09", title: "Wednesday", fieldValue: "2026-09-09" },
+      { id: "marked", title: "Marked", isDefault: true },
+      { id: "2026-09-07", title: "Monday" },
+      { id: "2026-09-09", title: "Wednesday" },
     ];
 
     const board = buildBoardEntries(recipes, plan, config);
@@ -40,7 +40,7 @@ describe("weekly board data", () => {
     const date = "2026-09-07";
     const plan = parsePlan(`## ${date}\n- [[Soup]]\n- [[Pie]]\n- [[Old]]\n`);
     const config = createWeeklyOrganiserConfig(0);
-    config.columns = [{ id: date, title: "Monday", fieldValue: date }];
+    config.columns = [{ id: date, title: "Monday" }];
     const order = new PlannerOrderStore();
     await order.replace(config.id, "week", date, [`Recipes/Pie.md::${date}`, `Recipes/Soup.md::${date}`]);
 

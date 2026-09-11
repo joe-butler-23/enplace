@@ -31,7 +31,7 @@ describe("App database residency", () => {
     await act(async () => { root.render(<App />); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     await vi.waitFor(() => expect(container.querySelector('[data-testid="shopping"]')).not.toBeNull());
     await act(async () => { container.querySelector<HTMLButtonElement>("button")!.click(); await Promise.resolve(); });
-    expect(commitStates).toEqual([true]); expect(container.querySelector('.mep-database-panel > [data-testid="database"]')?.textContent).toBe("Database content");
+    expect(commitStates).toEqual([true]); expect(container.querySelector('.mep-view > [data-testid="database"]')?.textContent).toBe("Database content");
   });
   it("keeps Database mounted and hidden after navigating away", async () => {
     await act(async () => { root.render(<App />); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
