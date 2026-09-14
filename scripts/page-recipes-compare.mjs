@@ -28,7 +28,7 @@ export function validateManifest(manifest) {
 }
 
 export function validateCapture(capture) {
-  assert.equal(capture?.format, "enplace-recipe-clipper-replay-v1", "unsupported capture format");
+  assert.equal(capture?.format, "enplace-page-recipes-replay-v1", "unsupported capture format");
   validHash(capture.source?.sha256, "extractor");
   validHash(capture.harness?.replaySHA256, "replay/scorer");
   validHash(capture.harness?.compareSHA256, "validation/comparison");
@@ -112,7 +112,7 @@ export function compareCaptures(before, after) {
 if (import.meta.main) {
   try {
     const paths = process.argv.slice(2);
-    assert.equal(paths.length, 2, "Usage: node scripts/recipe-clipper-compare.mjs before.json after.json");
+    assert.equal(paths.length, 2, "Usage: node scripts/page-recipes-compare.mjs before.json after.json");
     const [before, after] = await Promise.all(paths.map(async path => JSON.parse(await readFile(path, "utf8"))));
     const result = compareCaptures(before, after);
     console.log(JSON.stringify(result, null, 2));

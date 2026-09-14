@@ -227,7 +227,7 @@ describe("plan and shopping operations", () => {
   });
 
   it("builds the real week's shopping, preserves manual and checked items, and exposes every grouped member", async () => {
-    const before = "Remember reusable bags.\n\n## Soup\n- [x] *2* onions, diced\n\n## Other\n- [ ] washing-up liquid\n";
+    const before = "Remember reusable bags.\n\n<!-- enplace-shopping:recipe soup.md | *2* onions, diced -->\n## Soup\n- [x] *2* onions, diced\n\n## Other\n- [ ] washing-up liquid\n";
     const book = context({ "soup.md": soup, "pie.md": pie, "Plan.md": plan, "Shopping.md": before });
     const built = await run(book, "shopping.build", { operationId: "build-week-0001", week: "2026-09-09", expectedRevision: await revision(book, "Shopping.md"), planRevision: await revision(book, "Plan.md") });
     const markdown = readCookbookText(book.doc, "Shopping.md")!;

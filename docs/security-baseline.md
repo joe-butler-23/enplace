@@ -53,7 +53,7 @@ resources. The final sanitised string goes directly to the DOM.
 
 The build fills the CSP relay source from the configured WebSocket URL. It allows
 same-origin application requests and that exact relay origin, not arbitrary
-`wss:` destinations. Scripts are same-origin with no inline script or eval;
+`wss:` destinations. Relay page and image imports accept only public HTTP(S) hostnames on every redirect; the reference relay rejects non-public DNS answers and pins the validated address, while the Worker relies on Cloudflare's private-network egress block. Scripts are same-origin with no inline script or eval;
 objects, framing, forms and base-URL changes are blocked. Images allow same-origin,
 blob and data resources; the manifest is a data: URL only. Inline styles remain necessary for the app's existing
 layout and styles. Responses also set `nosniff` and `Referrer-Policy: no-referrer`.

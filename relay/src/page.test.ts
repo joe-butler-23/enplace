@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { allowedOrigin, fetchPage, MAX_IMAGE_BYTES, MAX_PAGE_BYTES, pageResponse, pageTarget } from "./page";
 
 const html = (body: string, init: ResponseInit = {}) => new Response(body, { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, ...init });
@@ -14,6 +14,48 @@ describe("page targets", () => {
       expect(pageTarget(raw)).toMatchObject({ ok: false, status: 400 });
     }
   });
+});
+
+describe("redirect validation", () => {
+  const target = new URL("https://www.example.com/soup");
+  const responseFor = (kind: "page" | "image") => new Response(kind === "page" ? "<p>hi</p>" : "png", {
+    headers: { "content-type": kind === "page" ? "text/html" : "image/png" },
+  });
+
+  it("rejects local names with a terminal DNS dot", () => {
+    for (const raw of ["http://localhost./", "http://box.local./", "http://svc.internal./"]) {
+      expect(pageTarget(raw)).toMatchObject({ ok: false, status: 400 });
+    }
+  });
+
+  for (const kind of ["page", "image"] as const) {
+    it(`follows validated ${kind} redirects manually`, async () => {
+      const calls: { url: string; redirect?: string }[] = [];
+      const page = await fetchPage(target, async (url, init) => {
+        calls.push({ url: String(url), redirect: init?.redirect });
+        return calls.length === 1
+          ? new Response(null, { status: 302, headers: { location: "/next" } })
+          : responseFor(kind);
+      }, kind);
+      expect(page).toMatchObject({ status: 200, finalUrl: "https://www.example.com/next" });
+      expect(calls).toEqual([
+        { url: target.href, redirect: "manual" },
+        { url: "https://www.example.com/next", redirect: "manual" },
+      ]);
+    });
+
+    it(`rejects ${kind} redirects to private targets before fetching them`, async () => {
+      const fetcher = vi.fn(async () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1/private" } }));
+      await expect(fetchPage(target, fetcher, kind)).resolves.toMatchObject({ status: 400 });
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
+
+    it(`caps ${kind} redirect chains`, async () => {
+      const fetcher = vi.fn(async () => new Response(null, { status: 302, headers: { location: "/again" } }));
+      await expect(fetchPage(target, fetcher, kind)).resolves.toMatchObject({ status: 502, message: "Too many redirects." });
+      expect(fetcher).toHaveBeenCalledTimes(6);
+    });
+  }
 });
 
 describe("allowed origins", () => {

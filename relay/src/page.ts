@@ -7,6 +7,7 @@
 export const MAX_PAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const PAGE_TIMEOUT_MS = 15_000;
+export const MAX_REDIRECTS = 5;
 
 /** What the relay fetches on the app's behalf: a recipe page, or the picture a recipe page names. */
 export type FetchKind = "page" | "image";
@@ -25,11 +26,12 @@ export function pageTarget(raw: string | null): PageTarget {
   try { url = new URL(raw.trim()); } catch { return { ok: false, status: 400, message: "That is not a valid web address." }; }
   if (url.protocol !== "http:" && url.protocol !== "https:") return { ok: false, status: 400, message: "Only http and https pages can be fetched." };
   if (url.username || url.password) return { ok: false, status: 400, message: "Addresses with sign-in details are not fetched." };
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
   const numeric = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.startsWith("[") || host.includes(":");
   if (numeric || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || !host.includes(".")) {
     return { ok: false, status: 400, message: "Only public web sites can be fetched." };
   }
+  url.hostname = host;
   url.hash = "";
   return { ok: true, url };
 }
@@ -51,17 +53,30 @@ export type FetchedPage = { status: number; body?: Uint8Array; contentType?: str
 
 export async function fetchPage(target: URL, fetcher: typeof fetch = fetch, kind: FetchKind = "page"): Promise<FetchedPage> {
   const rules = kinds[kind];
+  const signal = AbortSignal.timeout(PAGE_TIMEOUT_MS);
+  let current = target;
   let response: Response;
-  try {
-    response = await fetcher(target.href, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
-      headers: { accept: rules.accept, "accept-language": "en-GB,en;q=0.8", "user-agent": "Mozilla/5.0 (compatible; Enplace/1.0; +https://github.com/joe-butler-23/enplace)" },
-    });
-  } catch (error) {
-    return { status: 504, message: error instanceof Error && error.name === "TimeoutError" ? rules.slow : rules.unreachable };
+  for (let redirects = 0;; redirects += 1) {
+    try {
+      response = await fetcher(current.href, {
+        redirect: "manual",
+        signal,
+        headers: { accept: rules.accept, "accept-language": "en-GB,en;q=0.8", "user-agent": "Mozilla/5.0 (compatible; Enplace/1.0; +https://github.com/joe-butler-23/enplace)" },
+      });
+    } catch (error) {
+      return { status: 504, message: error instanceof Error && error.name === "TimeoutError" ? rules.slow : rules.unreachable };
+    }
+    const location = response.headers.get("location");
+    if (![301, 302, 303, 307, 308].includes(response.status) || !location) break;
+    let next: PageTarget;
+    try { next = pageTarget(new URL(location, current).href); }
+    catch { return { status: 400, message: "That is not a valid web address." }; }
+    if (!next.ok) return { status: next.status, message: next.message };
+    if (redirects >= MAX_REDIRECTS) return { status: 502, message: "Too many redirects." };
+    await response.body?.cancel();
+    current = next.url;
   }
-  if (!response.ok) return { status: 502, message: `${rules.failed} ${response.status}.` };
+  if (!response!.ok) return { status: 502, message: `${rules.failed} ${response!.status}.` };
   const contentType = response.headers.get("content-type") ?? "";
   if (!rules.type.test(contentType)) return { status: 415, message: rules.wrongType };
   const chunks: Uint8Array[] = [];
@@ -79,7 +94,7 @@ export async function fetchPage(target: URL, fetcher: typeof fetch = fetch, kind
   const body = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
-  return { status: 200, body, contentType, finalUrl: response.url || target.href };
+  return { status: 200, body, contentType, finalUrl: response.url || current.href };
 }
 
 export function pageResponse(page: FetchedPage, origin: string): Response {

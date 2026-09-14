@@ -12,6 +12,36 @@ afterEach(() => {
 });
 
 describe("AppSidebar", () => {
+  it("navigates Settings from clicks, but other items from pointerup", () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onNavigate = vi.fn();
+    flushSync(() => root.render(
+      <AppSidebar
+        activeView="database"
+        canGoBack={false}
+        onBack={vi.fn()}
+        onNavigate={onNavigate}
+      />,
+    ));
+
+    const settingsButton = container.querySelector<HTMLButtonElement>('[title="Settings"]')!;
+    settingsButton.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }));
+    expect(onNavigate).not.toHaveBeenCalled();
+    settingsButton.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(onNavigate).toHaveBeenLastCalledWith("settings");
+    settingsButton.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    expect(onNavigate).toHaveBeenLastCalledWith("settings");
+    expect(onNavigate).toHaveBeenCalledTimes(2);
+
+    const databaseButton = container.querySelector<HTMLButtonElement>('[title="Recipe Database"]')!;
+    databaseButton.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }));
+    expect(onNavigate).toHaveBeenLastCalledWith("database");
+    expect(onNavigate).toHaveBeenCalledTimes(3);
+    flushSync(() => root.unmount());
+  });
+
   it("keeps each nav icon element mounted when the sidebar re-renders during a press", () => {
     container = document.createElement("div");
     document.body.append(container);

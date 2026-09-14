@@ -77,7 +77,7 @@ describe("browser shopping recipe selection", () => {
     expect(updateText).toHaveBeenCalledTimes(1);
     expect(updateText.mock.calls[0]?.[0]).toBe("Shopping.md");
     await expect(readText("Shopping.md")).resolves.toBe(
-      "# Handwritten\r\nKeep this exactly.\r\n\r\n## Manual\r\n- [ ] note\r\n\n## Same\n- [ ] first only\n\n## Same\n- [ ] second only\n",
+      "# Handwritten\r\nKeep this exactly.\r\n\r\n## Same\r\n- [x] SECOND ONLY\r\nOld owned bytes\r\n\r\n## Manual\r\n- [ ] note\r\n\n<!-- enplace-shopping:recipe a%2Ffirst.md | first only -->\n## Same\n- [ ] first only\n\n<!-- enplace-shopping:recipe z%2Fsecond.md | second only -->\n## Same\n- [ ] second only\n",
     );
   });
 
@@ -87,7 +87,7 @@ describe("browser shopping recipe selection", () => {
     await applyShoppingPlan([]);
 
     expect(updateText).toHaveBeenCalledTimes(1);
-    await expect(readText("Shopping.md")).resolves.toBe("# Handwritten\r\nKeep.\r\n\r\n## Manual\r\n- [x] exact\r\n");
+    await expect(readText("Shopping.md")).resolves.toBe("# Handwritten\r\nKeep.\r\n\r\n## Same\r\n- [ ] stale\r\n\r\n## Manual\r\n- [x] exact\r\n");
   });
 
   it("fails closed without writing for every missing or malformed path", async () => {

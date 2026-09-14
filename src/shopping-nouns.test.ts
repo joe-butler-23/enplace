@@ -10,7 +10,7 @@ describe('shopping nouns', () => {
     const recipe = parseRecipe('soup.md', `# Soup\n\n---\n\n${ingredients.map(text => `- ${text}`).join('\n')}\n\n---\n\nCook.\n`)!;
     expect(recipe.ingredients).toEqual(ingredients);
     const built = buildShoppingMarkdown('', [recipe], [recipe]);
-    expect(built).toBe(`## Soup\n${ingredients.map(text => `- [ ] ${text}`).join('\n')}\n`);
+    expect(built).toBe(`<!-- enplace-shopping:recipe soup.md | ${ingredients.map(text => text.toLowerCase()).join('; ')} -->\n## Soup\n${ingredients.map(text => `- [ ] ${text}`).join('\n')}\n`);
     expect(buildShoppingMarkdown(built.replace('[ ]', '[x]'), [recipe], [recipe])).toContain('- [x] *1/2 tsp* salt, fine');
     expect(shoppingPlainText(built)).toBe('## Soup\n1/2 tsp salt, fine\n½ tbsp olive oil\n1 1/2 aubergine, diced\n');
   });

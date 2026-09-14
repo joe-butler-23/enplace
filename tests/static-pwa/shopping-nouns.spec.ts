@@ -98,7 +98,7 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await grouping(page, 'Recipe').click();
     await expect(page.getByRole('checkbox', { name: '1 aubergine, diced', exact: true })).toBeChecked();
     await expect(page.getByRole('checkbox', { name: '1 aubergine, sliced', exact: true })).toBeChecked();
-    expect(await exportedCookbookText(page, 'Shopping.md')).toBe('## Pie\n- [x] *1* aubergine, diced\n- [ ] *1/3 tsp* salt\n\n## Soup\n- [x] *1* aubergine, sliced\n- [ ] *2/3 tsp* salt\n');
+    expect(await exportedCookbookText(page, 'Shopping.md')).toBe('<!-- enplace-shopping:recipe pie.md | *1* aubergine, diced; *1/3 tsp* salt -->\n## Pie\n- [x] *1* aubergine, diced\n- [ ] *1/3 tsp* salt\n\n<!-- enplace-shopping:recipe soup.md | *1* aubergine, sliced; *2/3 tsp* salt -->\n## Soup\n- [x] *1* aubergine, sliced\n- [ ] *2/3 tsp* salt\n');
     const aisles = await exportedCookbookText(page, 'Aisles.md');
     expect(aisles).toContain('## Other\n- aubergine');
     await page.getByLabel('More actions').click();

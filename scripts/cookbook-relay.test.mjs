@@ -5,11 +5,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import * as encoding from "lib0/encoding";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
-import { startRelay } from "./cookbook-relay.mjs";
+import { isPublicAddress, startRelay } from "./cookbook-relay.mjs";
 
 const clients = new Set();
 const relays = new Set();
@@ -181,6 +181,98 @@ afterEach(async () => {
     temporaryDirectories.delete(directory);
     await rm(directory, { recursive: true, force: true });
   }));
+});
+
+describe("relay URL fetch SSRF boundary", () => {
+  const publicAddress = { address: "93.184.216.34", family: 4 };
+  const privateAddress = { address: "127.0.0.1", family: 4 };
+  const origin = { headers: { origin: "http://localhost:4173" } };
+  const endpoint = (relay, route, target) => `${relay.url.replace("ws:", "http:")}/${route}?url=${encodeURIComponent(target)}`;
+
+  function pinnedAgentFactory(observed) {
+    return (options) => ({
+      close: async () => {},
+      lookup: options.connect.lookup,
+    });
+  }
+
+  function upstream(responses, observed) {
+    return async (input, init) => {
+      const hostname = new URL(input).hostname;
+      const agent = init.dispatcher;
+      await new Promise((resolve, reject) => agent.lookup(hostname, {}, (error, address, family) => {
+        if (error) reject(error);
+        else { observed.push({ hostname, address, family, redirect: init.redirect }); resolve(); }
+      }));
+      return responses.shift();
+    };
+  }
+
+  it("classifies private, special-use and mapped addresses as non-public", () => {
+    for (const address of ["127.0.0.1", "10.0.0.1", "100.64.0.1", "169.254.1.1", "172.16.0.1", "192.168.0.1", "224.0.0.1", "::", "::1", "::ffff:127.0.0.1", "100::1", "fe80::1", "fc00::1", "ff02::1", "2001:db8::1"]) {
+      expect(isPublicAddress(address)).toBe(false);
+    }
+    expect(isPublicAddress(publicAddress.address)).toBe(true);
+  });
+
+  for (const route of ["page", "image"]) {
+    const contentType = route === "page" ? "text/html" : "image/png";
+    const body = route === "page" ? "<p>public recipe</p>" : "png";
+
+    it(`fetches a public ${route} through the validated pinned address`, async () => {
+      const observed = [];
+      const relay = await startDirectRelay({
+        resolveHost: async () => [publicAddress],
+        agentFactory: pinnedAgentFactory(observed),
+        fetcher: upstream([new Response(body, { headers: { "content-type": contentType } })], observed),
+      });
+      const response = await fetch(endpoint(relay, route, "https://recipes.example.test/start"), origin);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(body);
+      expect(observed).toEqual([{ hostname: "recipes.example.test", ...publicAddress, redirect: "manual" }]);
+    });
+
+    it(`rejects a ${route} hostname whose DNS includes a private address`, async () => {
+      const fetcher = vi.fn();
+      const relay = await startDirectRelay({
+        resolveHost: async () => [publicAddress, privateAddress],
+        agentFactory: pinnedAgentFactory([]),
+        fetcher,
+      });
+      const response = await fetch(endpoint(relay, route, "https://recipes.example.test/start"), origin);
+      expect(response.status).toBe(400);
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it(`revalidates ${route} redirects before the next request`, async () => {
+      const observed = [];
+      const resolved = [];
+      const relay = await startDirectRelay({
+        resolveHost: async (hostname) => {
+          resolved.push(hostname);
+          return hostname === "private.example.test" ? [privateAddress] : [publicAddress];
+        },
+        agentFactory: pinnedAgentFactory(observed),
+        fetcher: upstream([new Response(null, { status: 302, headers: { location: "https://private.example.test/secret" } })], observed),
+      });
+      const response = await fetch(endpoint(relay, route, "https://recipes.example.test/start"), origin);
+      expect(response.status).toBe(400);
+      expect(resolved).toEqual(["recipes.example.test", "private.example.test"]);
+      expect(observed).toHaveLength(1);
+    });
+
+    it(`caps ${route} redirects`, async () => {
+      const observed = [];
+      const relay = await startDirectRelay({
+        resolveHost: async () => [publicAddress],
+        agentFactory: pinnedAgentFactory(observed),
+        fetcher: upstream(Array.from({ length: 6 }, () => new Response(null, { status: 302, headers: { location: "/again" } })), observed),
+      });
+      const response = await fetch(endpoint(relay, route, "https://recipes.example.test/start"), origin);
+      expect(response.status).toBe(502);
+      expect(observed).toHaveLength(6);
+    });
+  }
 });
 
 describe("cookbook relay hardening", () => {

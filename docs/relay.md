@@ -51,6 +51,10 @@ open connection is never throttled by this.
 
 `GET /image?url=<address>` fetches the picture a recipe page names, under the same origin check and rate limit, so the importer can store it as the recipe's cover: public http(s) addresses only, JPEG, PNG, WebP, GIF or AVIF only, 8 MB cap, 15 s timeout, bytes returned unchanged with their content type. A picture that cannot be fetched leaves the recipe without a cover; it never fails an import.
 
+Both routes validate every redirect (at most five) as a public HTTP(S) hostname; the reference relay resolves all A/AAAA answers, rejects any non-public result, and pins its connection to a validated address to prevent DNS rebinding. The Worker applies the same per-hop hostname rule, and Cloudflare's outbound network does not permit private-address connections.
+
+The Worker keeps observability on with head sampling at 10% so a launch-day surge stays inside the Workers Free log allowance, and version preview URLs are disabled because the app build addresses only the production route.
+
 After the root `npm ci`, deploy with `npm run deploy --workspace=enplace-relay`,
 then build/deploy the app with `scripts/deploy-site.sh`. Both require the configured
 Wrangler account. Only encrypted rooms are accepted; rooms from before

@@ -1,7 +1,7 @@
 import { formatIngredient } from "../recipe-migration";
 import { parseRecipeMD } from "../recipemd";
 import { importPastedRecipe } from "./paste-import";
-import { clipRecipes, type ClippedRecipe } from "./recipe-clipper";
+import { parsePageRecipes, type ParsedPageRecipe } from "./page-recipes";
 
 export type PageRecipe = {
   index: number;
@@ -43,7 +43,7 @@ export function formatYield(value: string): string | null {
   return match ? `${match[1]} ${match[2] || "servings"}`.trim() : null;
 }
 
-export function pageRecipeMarkdown(recipe: ClippedRecipe, pageUrl: string): string {
+export function pageRecipeMarkdown(recipe: ParsedPageRecipe, pageUrl: string): string {
   const title = recipe.title.trim() || "Untitled recipe";
   const description: string[] = [];
   // The picture is not linked from the Markdown: the site shows only images it stores itself, so the importer
@@ -78,7 +78,7 @@ export function readPageRecipes(html: string, pageUrl: string): PageRecipe[] {
   const doc = new DOMParser().parseFromString(html, "text/html");
   // Always pass the address, even empty: the parsed document otherwise inherits this app's own URL,
   // whose fragment is the cookbook secret, and it would become the recipe's source.
-  return clipRecipes(doc, { url }).map((recipe, index) => {
+  return parsePageRecipes(doc, { url }).map((recipe, index) => {
     const base = {
       index, title: recipe.title || "Untitled recipe",
       ingredientCount: recipe.ingredients.filter((line) => !isLabel(line)).length,

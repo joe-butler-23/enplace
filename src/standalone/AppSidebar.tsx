@@ -51,10 +51,10 @@ export function AppSidebar({
               if (item.view === "planner") onPreparePlanner?.();
             }}
             onPointerUp={(event) => {
-              if (event.button === 0) onNavigate(item.view);
+              if (event.button === 0 && item.view !== "settings") onNavigate(item.view);
             }}
             onClick={(event) => {
-              if (event.detail === 0) onNavigate(item.view);
+              if (item.view === "settings" || event.detail === 0) onNavigate(item.view);
             }}
             title={item.label}
           >

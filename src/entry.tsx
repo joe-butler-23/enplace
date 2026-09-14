@@ -9,6 +9,7 @@ import "./styles/shopping.css";
 import type * as Y from "yjs";
 import { openCookbookAttempt } from "./cookbook/opening";
 import { setCurrentCookbookConnection } from "./cookbook/current";
+import { isCookbookUnpublished, setCookbookUnpublished } from "./cookbook/unpublished";
 import {
   cookbookIdFromUrl,
   newCookbookId,
@@ -24,25 +25,6 @@ import { backfillCookbookCovers } from "./cookbook/covers";
 import { preserveCookbookHash } from "./standalone/pwa-route";
 import { installManifest } from "./standalone/manifest";
 
-// Historical kitchens key stays unchanged so unpublished state survives the rename.
-const UNPUBLISHED_COOKBOOKS_KEY = "enplace-unpublished-kitchens";
-
-function unpublishedCookbookIds(): Set<string> {
-  try {
-    const ids = JSON.parse(localStorage.getItem(UNPUBLISHED_COOKBOOKS_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function setCookbookUnpublished(id: string, unpublished: boolean): void {
-  const ids = unpublishedCookbookIds();
-  if (unpublished) ids.add(id);
-  else ids.delete(id);
-  if (ids.size) localStorage.setItem(UNPUBLISHED_COOKBOOKS_KEY, JSON.stringify([...ids]));
-  else localStorage.removeItem(UNPUBLISHED_COOKBOOKS_KEY);
-}
 
 function configuredRelayUrl(): string | null {
   return (import.meta as ImportMeta & {
@@ -83,7 +65,7 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
   const createdHere = linkedId === null && rememberedId === null;
   const id = linkedId ?? rememberedId ?? newCookbookId();
   if (createdHere) setCookbookUnpublished(id, true);
-  const unpublished = unpublishedCookbookIds().has(id);
+  const unpublished = isCookbookUnpublished(id);
   setCurrentCookbookId(id);
   installManifest(window.location.origin, id);
   window.history.replaceState(null, "", withCookbookHash(window.location.href, id));
@@ -101,7 +83,10 @@ async function openSharedCookbook(signal: AbortSignal): Promise<CookbookSession 
       relayUrl: configuredRelayUrl(),
       seed: createdHere ? seedSamplePack : undefined,
       deferRelayUntilLocalWrite: unpublished,
-      onFirstLocalWrite: () => setCookbookUnpublished(id, false),
+      onFirstLocalWrite: () => {
+        setCookbookUnpublished(id, false);
+        window.dispatchEvent(new CustomEvent("mep-local-cookbook-write", { detail: id }));
+      },
     }, signal, (warning) => showGate(warning === "storage" ? {
       title: "Still opening your cookbook",
       detail: "Cookbook storage is taking longer than expected. Close other Enplace tabs or reload.",

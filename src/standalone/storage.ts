@@ -5,8 +5,13 @@ const SETTINGS_KEY = "enplace.preferences";
 const persistedKeys = [
   "databaseSort",
   "databaseMarkedFilter",
-  "databaseScheduledFilter"
+  "databaseScheduledFilter",
+  "acknowledgedCookbookIds",
 ] as const satisfies ReadonlyArray<keyof StandaloneSettings>;
+
+function acknowledgedCookbookIds(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+}
 
 export async function loadSettings(): Promise<StandaloneSettings> {
   const raw = window.localStorage.getItem(SETTINGS_KEY);
@@ -19,10 +24,12 @@ export async function loadSettings(): Promise<StandaloneSettings> {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Invalid browser preferences: ${reason}`);
   }
-  return Object.assign(
-    { ...DEFAULT_STANDALONE_SETTINGS },
-    Object.fromEntries(persistedKeys.map((key) => [key, stored[key] ?? DEFAULT_STANDALONE_SETTINGS[key]]))
-  );
+  return {
+    ...DEFAULT_STANDALONE_SETTINGS,
+    ...Object.fromEntries(persistedKeys.filter((key) => key !== "acknowledgedCookbookIds")
+      .map((key) => [key, stored[key] ?? DEFAULT_STANDALONE_SETTINGS[key]])),
+    acknowledgedCookbookIds: acknowledgedCookbookIds(stored.acknowledgedCookbookIds),
+  };
 }
 
 export async function saveSettings(settings: StandaloneSettings): Promise<void> {

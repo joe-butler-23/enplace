@@ -25,7 +25,7 @@
 .mep-main--planner { padding: 0; height: 100%; min-height: 0; width: 100%; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 .mep-main--database { box-sizing: border-box; display: flex; flex-direction: column; padding: 10px 14px 14px; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
 .mep-main--shopping { padding: 0; }
-.mep-planner { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.mep-planner { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .mep-planner-intent-error { position: absolute; top: 12px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 28px); padding: 10px 12px; border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); color: var(--ink); transform: translateX(-50%); }
 
 .mep-preview { background: var(--surface); border-left: 1px solid var(--line); position: relative; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
@@ -60,4 +60,13 @@
   .mep-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
   .mep-sidebar { position: sticky; top: 0; z-index: 5; width: 100%; min-width: 0; max-width: none; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: space-between; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .mep-nav { flex-direction: row; flex-wrap: wrap; }
+}
+
+/* The first-save reminder floats above the existing surface so it never moves the current view. */
+.mep-first-use-notice { box-sizing: border-box; flex: 0 0 auto; margin: 0 0 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); color: var(--ink); }
+.mep-main--planner > .mep-first-use-notice, .mep-main--shopping > .mep-first-use-notice { margin: 16px 16px 0; }
+.mep-first-use-notice strong { display: block; font-size: 0.95rem; }
+.mep-first-use-notice p { margin: 8px 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+.mep-first-use-notice__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+@media (max-width: 760px) {
 }

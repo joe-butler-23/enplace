@@ -108,7 +108,7 @@ test("page import never swaps ingredient quantities when visible numerals appear
   await expect(dialog).toBeHidden();
   await page.getByText("Quantity-safe soup", { exact: true }).click();
   await expect(page.getByText("2 onions, 400 g", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "test-results/clipper-quantity-safe.png" });
+  await page.screenshot({ path: "test-results/page-recipes-quantity-safe.png" });
   await page.reload();
   const markdown = await exportedCookbookText(page, "quantity-safe-soup.md");
   expect(markdown).toMatch(/\*2(?:\.0)?\* onions, 400 g/);

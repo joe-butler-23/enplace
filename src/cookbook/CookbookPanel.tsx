@@ -32,12 +32,33 @@ function statusMessage(status: CookbookStatus, preparing: boolean): string {
   return "Offline. Changes will sync when the relay reconnects.";
 }
 
-async function copyLink(link: string): Promise<void> {
+export async function copyCookbookLink(link: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(link);
     notify("Cookbook link copied.");
+    return true;
   } catch (error) {
     notify(error instanceof Error ? error.message : "Could not copy the cookbook link.");
+    return false;
+  }
+}
+
+export async function downloadCookbook(connection: NonNullable<ReturnType<typeof currentCookbookConnection>>): Promise<boolean> {
+  try {
+    const files = await connection.adapter.walkFiles();
+    const entries = Object.create(null) as Record<string, Uint8Array>;
+    for (const { path, bytes } of files) entries[path] = bytes;
+    const bytes = (await import("fflate")).zipSync(entries, { level: 6 });
+    const url = URL.createObjectURL(new Blob([blobPart(bytes)], { type: "application/zip" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "enplace-cookbook.zip";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (error) {
+    notify(error instanceof Error ? error.message : "Could not download this cookbook.");
+    return false;
   }
 }
 
@@ -77,7 +98,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
 
   const share = async (): Promise<void> => {
     if (!canShare) {
-      await copyLink(link);
+      await copyCookbookLink(link);
       return;
     }
     try {
@@ -93,6 +114,7 @@ function CookbookLinkSection({ id, routePath }: { id: string; routePath: string 
     <section className="mep-settings__section">
       <h3 className="mep-label">Cookbook link</h3>
       <p className="mep-settings__note">Anyone with this private link can view and change this cookbook.</p>
+      <p className="mep-settings__note">Save this private link somewhere safe: it is the only key, there is no account or recovery, browser storage can be cleared or lost, and the hosted shared copy expires after 180 days without a connection.</p>
       <input className="mep-settings__link" type="url" readOnly aria-label="Cookbook link" value={link} />
       <div className="mep-settings__actions">
         <button className="mep-button" type="button" onClick={() => void share()}>
@@ -123,22 +145,7 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
 
   if (!connection) return null;
 
-  const downloadCookbook = async (): Promise<void> => {
-    try {
-      const files = await connection.adapter.walkFiles();
-      const entries = Object.create(null) as Record<string, Uint8Array>;
-      for (const { path, bytes } of files) entries[path] = bytes;
-      const bytes = (await import("fflate")).zipSync(entries, { level: 6 });
-      const url = URL.createObjectURL(new Blob([blobPart(bytes)], { type: "application/zip" }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "enplace-cookbook.zip";
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Could not download this cookbook.");
-    }
-  };
+
 
   const importFiles = async (files: FileList | null): Promise<void> => {
     if (!files?.length) return;
@@ -252,7 +259,7 @@ export function CookbookPanel({ routePath }: { routePath: string }): React.JSX.E
       <section className="mep-settings__section">
         <h3 className="mep-label">Your files</h3>
         <div className="mep-settings__actions">
-          <button className="mep-button" type="button" disabled={busy} onClick={() => void downloadCookbook()}>
+          <button className="mep-button" type="button" disabled={busy} onClick={() => void downloadCookbook(connection)}>
             Download cookbook (.zip)
           </button>
           <label className="mep-button mep-settings__file-button">

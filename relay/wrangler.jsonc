@@ -21,5 +21,6 @@
       "simple": { "limit": 30, "period": 60 }
     }
   ],
-  "observability": { "enabled": true }
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
 }

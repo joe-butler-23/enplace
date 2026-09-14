@@ -110,9 +110,9 @@ describe("mep CLI", () => {
     await writeFile(path.join(root, "soup.md"), soupMarkdown);
     await writeFile(path.join(root, "pie.md"), pieMarkdown);
     await writeFile(path.join(root, "Plan.md"), "## 2026-09-07\n- [[soup]]\n\n## 2026-09-09\n- [[pie]]\n");
-    const current = "# Shopping\n\n## Soup\n- [x] *2* onions\n";
+    const current = "# Shopping\n\n<!-- enplace-shopping:recipe soup.md | *2* onions -->\n## Soup\n- [x] *2* onions\n";
     await writeFile(path.join(root, "Shopping.md"), current);
-    const expected = "# Shopping\n\n## Soup\n- [x] *2* onions\n- [ ] Salt\n\n## Pie\n- [ ] salt\n- [ ] Flour\n";
+    const expected = "# Shopping\n\n<!-- enplace-shopping:recipe soup.md | *2* onions; salt -->\n## Soup\n- [x] *2* onions\n- [ ] Salt\n\n<!-- enplace-shopping:recipe pie.md | salt; flour -->\n## Pie\n- [ ] salt\n- [ ] Flour\n";
 
     await expect(execute(["shop", "--week", "2026-09-10", "--folder", root])).resolves.toBe(expected);
     await expect(readFile(path.join(root, "Shopping.md"), "utf8")).resolves.toBe(expected);
@@ -136,7 +136,7 @@ describe("mep CLI", () => {
     await writeFile(path.join(root, "b/meal.md"), renderImportedRecipe({ title: "Same", ingredients: ["second"], method: [] }));
     await writeFile(path.join(root, "Plan.md"), "## 2026-09-07\n- [[b/meal]]\n- [[missing]]\n- [[a/meal]]\n- [[b/meal]]\n");
 
-    const expected = "## Same\n- [ ] second\n\n## Same\n- [ ] first\n";
+    const expected = "<!-- enplace-shopping:recipe b%2Fmeal.md | second -->\n## Same\n- [ ] second\n\n<!-- enplace-shopping:recipe a%2Fmeal.md | first -->\n## Same\n- [ ] first\n";
     await expect(execute(["shop", "--week", "2026-09-07", "--folder", root])).resolves.toBe(expected);
     await expect(readFile(path.join(root, "Shopping.md"), "utf8")).resolves.toBe(expected);
   });

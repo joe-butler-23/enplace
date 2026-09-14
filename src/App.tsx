@@ -7,6 +7,8 @@ import { RecipeView, type RecipeViewHandle } from "@/views/components/RecipeView
 import { ShoppingListView } from "@/views/components/ShoppingListView";
 import { AppSidebar } from "./standalone/AppSidebar";
 import { DEFAULT_STANDALONE_SETTINGS, type StandaloneSettings } from "./standalone/settings";
+import { acknowledgeCookbookLink, shouldShowFirstUseNotice } from "./standalone/first-use-notice";
+import { FirstUseNotice } from "./standalone/FirstUseNotice";
 import { loadSettings, prepareStandaloneStartup, saveSettings } from "./standalone/storage";
 import { initialViewForPathname, pathnameForView } from "./standalone/pwa-route";
 import {
@@ -21,6 +23,10 @@ import {
 } from "./cookbook/actions";
 import { setDayNote } from "./cookbook/plan-notes";
 import { cardCoverUrl } from "./cookbook/covers";
+import { cookbookLink } from "./cookbook/doc";
+import { copyCookbookLink, downloadCookbook } from "./cookbook/CookbookPanel";
+import { currentCookbookConnection } from "./cookbook/current";
+import { isCookbookUnpublished } from "./cookbook/unpublished";
 import { getCookbookSnapshot, useCookbookSlice, useCookbookText, type CookbookFile } from "./cookbook/store";
 import { CommandPalette, HelpDialog, Notices, SettingsDialog, StartupFailure, type Command } from "./views/components/AppOverlays";
 import { PreviewPane } from "./views/components/PreviewPane";
@@ -136,6 +142,39 @@ function PreviewCookbookView({ file, width, recipeRef, onClose, onWidth }: {
     onSave={(base, next) => saveRecipe(file.path, base, next)}
     resolveImage={resolveImage}
   />;
+}
+
+function useFirstUseNotice(settings: StandaloneSettings | null, updateSettings: (updates: Partial<StandaloneSettings>) => Promise<void>): {
+  visible: boolean;
+  busy: boolean;
+  acknowledge: (work: () => Promise<boolean>) => void;
+} {
+  const [visible, setVisible] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const check = React.useCallback(() => {
+    const connection = currentCookbookConnection();
+    if (!connection || !settings) return;
+    setVisible(shouldShowFirstUseNotice(connection.id, settings.acknowledgedCookbookIds, isCookbookUnpublished(connection.id)));
+  }, [settings]);
+  React.useEffect(() => {
+    check();
+    const onWrite = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === currentCookbookConnection()?.id) check();
+    };
+    window.addEventListener("mep-local-cookbook-write", onWrite);
+    return () => window.removeEventListener("mep-local-cookbook-write", onWrite);
+  }, [check]);
+  const acknowledge = React.useCallback((work: () => Promise<boolean>) => {
+    const connection = currentCookbookConnection();
+    if (!connection || !settings) return;
+    setBusy(true);
+    void work().then(async (succeeded) => {
+      if (!succeeded) return;
+      await updateSettings({ acknowledgedCookbookIds: acknowledgeCookbookLink(settings.acknowledgedCookbookIds, connection.id) });
+      setVisible(false);
+    }).catch((error) => notify(formatError(error))).finally(() => setBusy(false));
+  }, [settings, updateSettings]);
+  return { visible, busy, acknowledge };
 }
 
 function App(): React.JSX.Element | null {
@@ -273,6 +312,7 @@ function App(): React.JSX.Element | null {
     setRuntime((value) => value ? { ...value, settings } : value);
   }, [runtime]);
 
+  const firstUseNotice = useFirstUseNotice(runtime?.settings ?? null, updateSettings);
   const [shoppingBusy, setShoppingBusy] = React.useState(false);
   const [shoppingError, setShoppingError] = React.useState<string | null>(null);
   const shoppingWork = React.useCallback((work: () => Promise<unknown>) => {
@@ -367,6 +407,15 @@ function App(): React.JSX.Element | null {
   return <div className="mep-shell" style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
     <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} />
     <main className={`mep-main ${activeView === "planner" ? "mep-main--planner" : ""} ${activeView === "database" ? "mep-main--database" : ""} ${activeView === "shopping" ? "mep-main--shopping" : ""}`}>
+      {firstUseNotice.visible ? <FirstUseNotice busy={firstUseNotice.busy}
+        onCopyLink={() => firstUseNotice.acknowledge(async () => {
+        const connection = currentCookbookConnection();
+        return connection ? copyCookbookLink(cookbookLink(window.location.origin, connection.id, pathnameForView(activeViewRef.current))) : false;
+        })}
+        onDownloadBackup={() => firstUseNotice.acknowledge(async () => {
+        const connection = currentCookbookConnection();
+        return connection ? downloadCookbook(connection) : false;
+        })} /> : null}
       <h1 className="mep-sr-only">Enplace</h1>
       {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={(path, { split }) => { void openRecipe(path, split); }} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}

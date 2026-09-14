@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareCaptures, sha256, validateCapture, validateManifest } from "./recipe-clipper-compare.mjs";
+import { compareCaptures, sha256, validateCapture, validateManifest } from "./page-recipes-compare.mjs";
 
 const hash = sha256("fixture");
 const score = { title: true, ingredients: true, instructions: true };
@@ -7,7 +7,7 @@ function fixture() {
   const cases = ["a/one.json", "b/two.json"].map(path => ({ path, domain: path[0] + ".test", split: "development", htmlSHA256: hash, referenceSHA256: hash }));
   const text = JSON.stringify({ repository: "https://example.test/corpus", commit: "a".repeat(40), cases });
   return {
-    format: "enplace-recipe-clipper-replay-v1",
+    format: "enplace-page-recipes-replay-v1",
     source: { path: "/extractor.js", sha256: hash },
     harness: { replaySHA256: hash, compareSHA256: hash },
     environment: { node: "24.19.0", playwright: "1.58.2", chromium: "145" },
@@ -27,7 +27,7 @@ function changeManifest(capture, transform) {
   capture.manifest.sha256 = sha256(capture.manifest.text);
 }
 
-describe("exact RecipeClipper replay comparison", () => {
+describe("exact page-recipe replay comparison", () => {
   it("accepts equal outputs with different extractor hashes/paths and page/object-key order", () => {
     const a = fixture(), b = clone(a);
     b.source = { path: "/ablation.js", sha256: sha256("other source") };

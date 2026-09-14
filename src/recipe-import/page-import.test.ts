@@ -7,9 +7,9 @@ import { openCookbook, type CookbookConnection } from "../host-client/cookbook-s
 import { setCurrentCookbookConnection } from "../cookbook/current";
 import { parseRecipeMD, flattenIngredients } from "../recipemd";
 import { formatDuration, formatYield, importPageRecipes, pageRecipeMarkdown, readPageRecipes } from "./page-import";
-import type { ClippedRecipe } from "./recipe-clipper";
+import type { ParsedPageRecipe } from "./page-recipes";
 
-const clipped = (overrides: Partial<ClippedRecipe> = {}): ClippedRecipe => ({
+const clipped = (overrides: Partial<ParsedPageRecipe> = {}): ParsedPageRecipe => ({
   title: "Watermelon gazpacho", description: "", notes: "", nutritionInfo: "",
   ingredients: ["[For the gazpacho]", "250g watermelon flesh, roughly chopped", "3.0tbsp sherry vinegar", "[For the salsa]", "Fine sea salt"],
   instructions: ["[Step 1]", "Blitz everything.", "Chill for 2 hours."],

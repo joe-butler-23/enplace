@@ -2,10 +2,10 @@
   "repository": "https://github.com/hhursev/recipe-scrapers",
   "commit": "d08ddd0240ee0ff73dd9d705e43077a821944716",
   "baseline": "cd22bf2",
-  "selection": "Frozen before Round 10 edits. All 967 previously observed pages are exposed development/replay data (Round 9 holdouts renamed replay-r9-*). Round 10 has no holdout. Round 9 recorded 139 eligible unused pages at this corpus commit, not zero; these potential known-domain reserve pages were not opened or revalidated for this manifest. Consolidation is judged on the exposed pages only.",
+  "selection": "All 967 previously observed pages are exposed development/replay data. The manifest has no holdout. It records 139 eligible unused pages at this corpus commit; these potential known-domain reserve pages were not opened or revalidated for this manifest. Consolidation is judged on the exposed pages only.",
   "pool": {
-    "unusedEligibleRecordedAfterRound9": 139,
-    "provenance": "Round 9 manifest pool.remainingAfterSelection; recorded eligibility, not revalidated or a fresh-domain holdout."
+    "unusedEligibleRecorded": 139,
+    "provenance": "Recorded eligibility, not revalidated or a fresh-domain holdout."
   },
   "cases": [
     {

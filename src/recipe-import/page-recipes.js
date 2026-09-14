@@ -1,5 +1,4 @@
-// Enplace's network-free RecipeClipper, based on the MIT browser rewrite at e7b9efb
-// (source SHA256 06922da04bab5b1c…). Attribution to Julian Poyourow for the original project.
+// Enplace's network-free page recipe parser.
 // Maintained here; reads a parsed Document synchronously and never fetches.
 
 const array = value => value == null ? [] : Array.isArray(value) ? value : [value];
@@ -104,8 +103,10 @@ function readable(root, sections, listed, exclude) {
     }
     if (exclude && node !== root && node.matches?.(exclude)) return '';
     // A matched tab panel is excluded only when its own tab is unselected.
-    if (node.style?.display === 'none' || node.matches?.('script,style,template,button,input,select,svg,.sharedaddy,.print-share,.mw-editsection,[hidden],[aria-hidden="true"],[role="tablist"],[role="tabpanel"]') &&
+    if (node.style?.display === 'none' || node.matches?.('script,style,template,button,input,select,svg,.sharedaddy,.print-share,.mw-editsection,[hidden],[aria-hidden="true"],[aria-roledescription],[role="tablist"],[role="tabpanel"]') &&
         (node.getAttribute('role') !== 'tabpanel' || unselectedPanel(node))) return '';
+    // A heading immediately followed by an ARIA-described interactive region labels that chrome, not recipe rows.
+    if (/^H[1-6]$/.test(node.tagName) && (node.nextElementSibling?.hasAttribute('aria-roledescription') || node.nextElementSibling?.querySelector?.('[aria-roledescription]'))) return '';
     const body = [...node.childNodes].map(visit).join('');
     // Some definition rows render the linked term and underlined value as adjacent cells.
     if (node.tagName === 'U' && node.parentElement?.tagName === 'DT' &&
@@ -155,7 +156,7 @@ const httpURL = (value, base) => {
 };
 
 /** Extract independent recipe candidates. Reads the current DOM; never fetches or caches. */
-export function clipRecipes(doc = document, { url = doc.URL } = {}) {
+export function parsePageRecipes(doc = document, { url = doc.URL } = {}) {
   const base = httpURL(doc.querySelector('base[href]')?.getAttribute('href'), url) || url;
   const source = httpURL(doc.querySelector('link[rel~="canonical"]')?.getAttribute('href'), base) || httpURL(url);
   const text = value => {
@@ -629,7 +630,7 @@ export function clipRecipes(doc = document, { url = doc.URL } = {}) {
     return changed ? result : null;
   };
 
-  // Retained after the shared prose-reader trial failed field ownership; see docs/recipe-clipper.md.
+  // Retained after the shared prose-reader trial failed field ownership; see docs/page-recipes.md.
   // A paragraph made only of bold lines, most opening with a quantity, is a printed ingredient list.
   const quantityBlock = el => {
     if (el.tagName !== 'P') return false;

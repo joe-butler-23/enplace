@@ -215,83 +215,233 @@ function checklistText(line: string): { text: string; checked: boolean } | null 
   return match ? { text: match[2], checked: /x/i.test(match[1]) } : null;
 }
 
-/** Repairs every tolerated checklist marker while preserving all other Markdown bytes. */
+type MarkdownLine = { text: string; raw: string };
+
+function shoppingMarkdownLines(markdown: string): MarkdownLine[] {
+  const raw = markdown.match(/[^\r\n]*(?:\r\n|[\r\n]|$)/g) ?? [];
+  if (raw[raw.length - 1] === "") raw.pop();
+  return raw.map((line) => ({ text: line.replace(/\r\n|[\r\n]$/, ""), raw: line }));
+}
+
+/**
+ * CommonMark fenced code and block HTML are examples, not shopping content. This deliberately
+ * recognises the block forms used by CommonMark, at any list indentation; it does not try to
+ * interpret inline HTML.
+ */
+function opaqueShoppingLines(lines: readonly MarkdownLine[]): Set<number> {
+  const opaque = new Set<number>();
+  let fence: { character: "`" | "~"; length: number } | null = null;
+  let htmlEnd: RegExp | null = null;
+  let htmlUntilBlank = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].text;
+    if (fence) {
+      opaque.add(index);
+      const close = new RegExp(`^[\\t ]*${fence.character}{${fence.length},}[\\t ]*$`);
+      if (close.test(line)) fence = null;
+      continue;
+    }
+    if (htmlEnd) {
+      opaque.add(index);
+      if (htmlEnd.test(line)) htmlEnd = null;
+      continue;
+    }
+    if (htmlUntilBlank) {
+      opaque.add(index);
+      if (!line.trim()) htmlUntilBlank = false;
+      continue;
+    }
+    const openingFence = /^[\t ]*(`{3,}|~{3,})/.exec(line);
+    if (openingFence) {
+      opaque.add(index);
+      fence = { character: openingFence[1][0] as "`" | "~", length: openingFence[1].length };
+      continue;
+    }
+    const trimmed = line.trimStart();
+    const namedHtml = /^<(script|pre|style|textarea)(?:\s|>|$)/i.exec(trimmed);
+    if (namedHtml) {
+      opaque.add(index);
+      htmlEnd = new RegExp(`</${namedHtml[1]}\\s*>`, "i");
+      if (htmlEnd.test(trimmed)) htmlEnd = null;
+      continue;
+    }
+    if (/^<!--/.test(trimmed)) {
+      opaque.add(index);
+      if (!/-->/.test(trimmed)) htmlEnd = /-->/;
+      continue;
+    }
+    if (/^<\?/.test(trimmed)) {
+      opaque.add(index);
+      if (!/\?>/.test(trimmed)) htmlEnd = /\?>/;
+      continue;
+    }
+    if (/^<!\[CDATA\[/i.test(trimmed)) {
+      opaque.add(index);
+      if (!/\]\]>/.test(trimmed)) htmlEnd = /\]\]>/;
+      continue;
+    }
+    if (/^<![A-Z]/.test(trimmed) || /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|ol|p|pre|script|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|\/?>|$)/i.test(trimmed)) {
+      opaque.add(index);
+      htmlUntilBlank = true;
+    }
+  }
+  return opaque;
+}
+
+function canonicalChecklistLine(line: MarkdownLine): MarkdownLine {
+  return { ...line, raw: line.raw.replace(/^([ \t]*-[ \t]+\[)([ xX]*)(\])(?=[ \t]+)/, (_match, before: string, marks: string, after: string) =>
+    `${before}${/x/i.test(marks) ? "x" : " "}${after}`) };
+}
+
+/** Repairs tolerated live checklist markers while preserving opaque Markdown bytes. */
 export function canonicalShoppingMarkdown(markdown: string): string {
-  return markdown.replace(/^([ \t]*-[ \t]+\[)([ xX]*)(\])(?=[ \t]+)/gm, (_match, before: string, marks: string, after: string) =>
-    `${before}${/x/i.test(marks) ? "x" : " "}${after}`);
+  const lines = shoppingMarkdownLines(markdown);
+  const opaque = opaqueShoppingLines(lines);
+  return lines.map((line, index) => opaque.has(index) ? line.raw : canonicalChecklistLine(line).raw).join("");
 }
 
 export function parseShopping(markdown: string): ShoppingLine[] {
+  const lines = shoppingMarkdownLines(markdown);
+  const opaque = opaqueShoppingLines(lines);
   let heading: string | null = null;
   const result: ShoppingLine[] = [];
-  markdown.split(/\r?\n/).forEach((line, index) => {
-    const nextHeading = /^##\s+(.+?)\s*$/.exec(line);
+  lines.forEach(({ text }, index) => {
+    if (opaque.has(index)) return;
+    const nextHeading = /^##\s+(.+?)\s*$/.exec(text);
     if (nextHeading) heading = nextHeading[1];
-    const item = checklistText(line);
+    const item = checklistText(text);
     if (item) result.push({ line: index, heading, ...item });
   });
   return result;
 }
 
-function removeRecipeBlocks(markdown: string, recipeTitles: ReadonlySet<string>): string {
-  const tokens = markdown.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  let remove = false;
-  return tokens.filter((token) => {
-    const heading = /^##\s+(.+?)\s*(?:\n)?$/.exec(token.replace(/\r\n$/, "\n"));
-    if (heading) remove = recipeTitles.has(heading[1].trim().toLowerCase());
-    return !remove;
-  }).join("");
+const shoppingKey = (text: string) => text.trim().toLowerCase();
+const escapeShoppingKey = (key: string) => key.replace(/%/g, "%25").replace(/;/g, "%3B").replace(/-->/g, "--%3E");
+
+function recipeMarker(path: string, keys: readonly string[]): string {
+  return `<!-- enplace-shopping:recipe ${encodeURIComponent(path)} | ${keys.map(escapeShoppingKey).join("; ")} -->`;
 }
 
+type RecipeMarker = { path: string; keys: Set<string> };
+
+function markedRecipe(line: string): RecipeMarker | null {
+  const match = /^<!-- enplace-shopping:recipe ([^ >]+) \| (.*) -->$/.exec(line);
+  if (!match || match[2].includes("-->")) return null;
+  try {
+    const keys = match[2] ? match[2].split("; ").map((key) => decodeURIComponent(key)) : [];
+    return { path: decodeURIComponent(match[1]), keys: new Set(keys) };
+  } catch {
+    return null;
+  }
+}
+
+function generatedIngredients(recipe: Recipe, checked: ReadonlyMap<string, boolean>): { key: string; line: string }[] {
+  const seenIngredients = new Set<string>();
+  const lines: { key: string; line: string }[] = [];
+  for (const ingredient of recipe.ingredients) {
+    const text = ingredient.trim();
+    const key = shoppingKey(text);
+    if (!text || seenIngredients.has(key) || /^(?:(?:tap|cold|hot|warm|boiling) )?water$|^ice(?: cube)?s?$/.test(shoppingIngredient(text).noun)) continue;
+    seenIngredients.add(key);
+    lines.push({ key, line: `- [${checked.get(key) ? "x" : " "}] ${text}` });
+  }
+  return lines;
+}
+
+type GeneratedRecipe = {
+  path: string;
+  marker: number;
+  heading: number;
+  insertion: number;
+  generatedLines: Set<number>;
+  checked: Map<string, boolean>;
+};
+
+function generatedRecipes(lines: readonly MarkdownLine[], opaque: ReadonlySet<number>): GeneratedRecipe[] {
+  const markers = lines.map(({ text }) => markedRecipe(text));
+  const markerIndexes = markers.flatMap((marker, index) => marker === null ? [] : [index]);
+  const recipes: GeneratedRecipe[] = [];
+  for (let position = 0; position < markerIndexes.length; position += 1) {
+    const marker = markerIndexes[position];
+    const ownership = markers[marker]!;
+    const limit = markerIndexes[position + 1] ?? lines.length;
+    const heading = marker + 1 < limit && /^##\s+/.test(lines[marker + 1].text) ? marker + 1 : null;
+    if (heading === null) continue;
+    const generatedLines = new Set<number>();
+    const checked = new Map<string, boolean>();
+    for (let index = heading + 1; index < limit; index += 1) {
+      if (opaque.has(index)) continue;
+      const item = checklistText(lines[index].text);
+      if (!item) continue;
+      const key = shoppingKey(item.text);
+      if (!ownership.keys.has(key)) continue;
+      generatedLines.add(index);
+      checked.set(key, item.checked || checked.get(key) === true);
+    }
+    recipes.push({ path: ownership.path, marker, heading, insertion: generatedLines.values().next().value ?? heading + 1, generatedLines, checked });
+  }
+  return recipes;
+}
+
+/**
+ * Rebuild only lines tagged by a previous build. Old untagged sections are intentionally kept:
+ * their origin cannot be established, so they may be handwriting rather than stale output.
+ */
 export function buildShoppingMarkdown(
   current: string,
   plannedRecipes: readonly Recipe[],
-  allRecipes: readonly Recipe[],
+  _allRecipes: readonly Recipe[],
 ): string {
   const canonical = canonicalShoppingMarkdown(current);
-  const checked = new Map<string, boolean>();
-  const headingOccurrences = new Map<string, number>();
-  let block = "";
-  for (const line of canonical.split(/\r?\n/)) {
-    const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1]?.trim().toLowerCase();
-    if (heading) {
-      const occurrence = (headingOccurrences.get(heading) ?? 0) + 1;
-      headingOccurrences.set(heading, occurrence);
-      block = `${heading}\0${occurrence}`;
-    }
-    const item = checklistText(line);
-    if (!item || !block) continue;
-    const text = item.text.trim().toLowerCase();
-    const key = `${block}\0${text}`;
-    checked.set(key, item.checked || checked.get(key) === true);
+  const lines = shoppingMarkdownLines(canonical);
+  const opaque = opaqueShoppingLines(lines);
+  const previous = generatedRecipes(lines, opaque);
+  const planned = new Map<string, Recipe>();
+  for (const recipe of plannedRecipes) planned.set(recipe.path, planned.get(recipe.path) ?? recipe);
+  const previousByMarker = new Map(previous.map((recipe) => [recipe.marker, recipe]));
+  const previousByHeading = new Map(previous.flatMap((recipe) => recipe.heading === null ? [] : [[recipe.heading, recipe] as const]));
+  const previousByGeneratedLine = new Map<number, GeneratedRecipe>();
+  const skipped = new Set<number>();
+  for (const recipe of previous) {
+    for (const line of recipe.generatedLines) previousByGeneratedLine.set(line, recipe);
+    skipped.add(recipe.marker);
+    if (recipe.heading !== null) skipped.add(recipe.heading);
+    for (const line of recipe.generatedLines) skipped.add(line);
   }
-  const titles = new Set(allRecipes.map((recipe) => recipe.title.trim().toLowerCase()));
-  const preserved = removeRecipeBlocks(canonical, titles);
-  const prefix = preserved ? `${preserved}${preserved.endsWith("\n") ? "" : "\n"}` : "";
-  const blocks: string[] = [];
-  const recipes = new Map<string, Recipe>();
-  for (const recipe of plannedRecipes) recipes.set(recipe.path, recipes.get(recipe.path) ?? recipe);
-  const outputOccurrences = new Map<string, number>();
-  for (const recipe of recipes.values()) {
-    const heading = recipe.title.trim().toLowerCase();
-    const occurrence = (outputOccurrences.get(heading) ?? 0) + 1;
-    outputOccurrences.set(heading, occurrence);
-    const blockKey = `${heading}\0${occurrence}`;
-    const seenIngredients = new Set<string>();
-    const lines: string[] = [];
-    for (const ingredient of recipe.ingredients) {
-      const text = ingredient.trim();
-      const ingredientKey = text.toLowerCase();
-      if (!text || seenIngredients.has(ingredientKey) || /^(?:(?:tap|cold|hot|warm|boiling) )?water$|^ice(?: cube)?s?$/.test(shoppingIngredient(text).noun)) continue;
-      seenIngredients.add(ingredientKey);
-      const key = `${blockKey}\0${ingredientKey}`;
-      lines.push(`- [${checked.get(key) ? "x" : " "}] ${text}`);
+  const emitted = new Set<string>();
+  const output: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const recipe = previousByMarker.get(index);
+    if (recipe) {
+      const next = planned.get(recipe.path);
+      if (!next) continue;
+      emitted.add(next.path);
+      output.push(`${recipeMarker(next.path, generatedIngredients(next, recipe.checked).map(({ key }) => key))}${lines[index].raw.slice(lines[index].text.length)}`);
+      continue;
     }
-    if (lines.length) blocks.push(`## ${recipe.title}\n${lines.join("\n")}`);
+    const owner = previousByGeneratedLine.get(index);
+    if (owner) {
+      const recipe = planned.get(owner.path);
+      if (recipe && index === owner.insertion) output.push(...generatedIngredients(recipe, owner.checked).map(({ line }) => `${line}\n`));
+      continue;
+    }
+    if (skipped.has(index)) {
+      const owner = previousByHeading.get(index);
+      const recipe = owner && planned.get(owner.path);
+      if (recipe) {
+        output.push(`## ${recipe.title}${lines[index].raw.slice(lines[index].text.length)}`);
+        if (owner.generatedLines.size === 0) output.push(...generatedIngredients(recipe, owner.checked).map(({ line }) => `${line}\n`));
+      }
+      continue;
+    }
+    output.push(lines[index].raw);
   }
-  if (!blocks.length) return prefix;
-  const separator = /(?:^|\n\n)$/.test(prefix) ? "" : "\n";
-  return `${prefix}${separator}${blocks.join("\n\n")}\n`;
+  const blocks = [...planned.values()].filter((recipe) => !emitted.has(recipe.path)).map((recipe) =>
+    [recipeMarker(recipe.path, generatedIngredients(recipe, new Map()).map(({ key }) => key)), `## ${recipe.title}`, ...generatedIngredients(recipe, new Map()).map(({ line }) => line)].join("\n"));
+  const preserved = output.join("");
+  if (!blocks.length) return preserved;
+  const separator = !preserved ? "" : preserved.endsWith("\n\n") ? "" : preserved.endsWith("\n") ? "\n" : "\n\n";
+  return `${preserved}${separator}${blocks.join("\n\n")}\n`;
 }
 
 function resolveShoppingItem(markdown: string, itemLine: number, itemText: string): ShoppingLine {
@@ -306,46 +456,57 @@ function resolveShoppingItem(markdown: string, itemLine: number, itemText: strin
 export function toggleShoppingItem(markdown: string, itemLine: number, itemText: string, checked: boolean): string {
   const canonical = canonicalShoppingMarkdown(markdown);
   const item = resolveShoppingItem(canonical, itemLine, itemText);
-  const trailingNewline = canonical.endsWith("\n");
-  const lines = canonical.split(/\r?\n/);
-  if (trailingNewline) lines.pop();
-  lines[item.line] = lines[item.line].replace(/^(\s*-\s+\[)[ xX]*(\])/, `$1${checked ? "x" : " "}$2`);
-  return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
+  const lines = shoppingMarkdownLines(canonical);
+  lines[item.line] = { ...lines[item.line], raw: lines[item.line].raw.replace(/^(\s*-\s+\[)[ xX]*(\])/, `$1${checked ? "x" : " "}$2`) };
+  return lines.map((line) => line.raw).join("");
 }
 
 export function appendShoppingItem(markdown: string, text: string): string {
   const content = text.trim();
   if (!content || /[\r\n]/.test(content)) throw new Error("Shopping item must be one non-empty line.");
-  const lines = canonicalShoppingMarkdown(markdown).replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
-  const otherHeading = lines.findIndex((line) => /^##\s+Other\s*$/i.test(line));
+  const canonical = canonicalShoppingMarkdown(markdown);
+  const lines = shoppingMarkdownLines(canonical);
+  const opaque = opaqueShoppingLines(lines);
+  const otherHeading = lines.findIndex((line, index) => !opaque.has(index) && /^##\s+Other\s*$/i.test(line.text));
+  const newline = canonical.includes("\r\n") ? "\r\n" : "\n";
   if (otherHeading >= 0) {
-    let insertion = lines.findIndex((line, index) => index > otherHeading && /^##\s+/.test(line));
+    let insertion = lines.findIndex((line, index) => index > otherHeading && !opaque.has(index) && /^##\s+/.test(line.text));
     if (insertion < 0) insertion = lines.length;
-    while (insertion > otherHeading + 1 && lines[insertion - 1].trim() === "") insertion -= 1;
-    lines.splice(insertion, 0, `- [ ] ${content}`);
-    return `${lines.join("\n")}\n`;
+    while (insertion > otherHeading + 1 && lines[insertion - 1].text.trim() === "") insertion -= 1;
+    const offset = lines.slice(0, insertion).reduce((length, line) => length + line.raw.length, 0);
+    const before = canonical.slice(0, offset);
+    const needsNewline = before.length > 0 && !/(?:\r\n|[\r\n])$/.test(before);
+    return `${before}${needsNewline ? newline : ""}- [ ] ${content}${newline}${canonical.slice(offset)}`;
   }
-  const prefix = lines.length === 1 && lines[0] === "" ? "" : `${lines.join("\n")}\n\n`;
-  return `${prefix}## Other\n- [ ] ${content}\n`;
+  const needsNewline = canonical.length > 0 && !/(?:\r\n|[\r\n])$/.test(canonical);
+  const separator = canonical.length === 0 ? "" : `${needsNewline ? newline : ""}${canonical.endsWith(`${newline}${newline}`) ? "" : newline}`;
+  return `${canonical}${separator}## Other${newline}- [ ] ${content}${newline}`;
 }
 
 export function removeShoppingItem(markdown: string, itemLine: number, itemText: string): string {
   const canonical = canonicalShoppingMarkdown(markdown);
   const item = resolveShoppingItem(canonical, itemLine, itemText);
-  const trailingNewline = canonical.endsWith("\n");
-  const lines = canonical.split(/\r?\n/);
-  if (trailingNewline) lines.pop();
+  const lines = shoppingMarkdownLines(canonical);
   lines.splice(item.line, 1);
-  return `${lines.join("\n")}${trailingNewline ? "\n" : ""}`;
+  return lines.map((line) => line.raw).join("");
 }
 
 export function resetShopping(markdown: string): string {
-  return canonicalShoppingMarkdown(markdown).split(/\r?\n/).filter((line) => !checklistText(line)).join('\n');
+  const canonical = canonicalShoppingMarkdown(markdown);
+  const lines = shoppingMarkdownLines(canonical);
+  const opaque = opaqueShoppingLines(lines);
+  return lines.filter((line, index) => opaque.has(index) || !checklistText(line.text)).map((line) => line.raw).join("");
 }
 
 export function shoppingPlainText(markdown: string): string {
-  return markdown.replace(/^([ \t]*)-\s+\[[ xX]*\]\s+(.+)$/gm,
-    (_match, indent: string, text: string) => indent + shoppingIngredient(text).display);
+  const lines = shoppingMarkdownLines(markdown);
+  const opaque = opaqueShoppingLines(lines);
+  return lines.map((line, index) => {
+    if (markedRecipe(line.text)) return "";
+    if (opaque.has(index)) return line.raw;
+    const item = checklistText(line.text);
+    return item ? `${line.text.match(/^(\s*)/)![1]}${shoppingIngredient(item.text).display}${line.raw.slice(line.text.length)}` : line.raw;
+  }).join("");
 }
 
 export function resolveRelativePath(documentPath: string, reference: string): string | null {

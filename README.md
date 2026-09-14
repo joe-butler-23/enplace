@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `b3e944513996`, 2026-09-11.
+> Published snapshot of a private repository, refreshed at each release. Source commit `c759ec921e77`, 2026-09-14.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -25,7 +25,7 @@ Enplace is a local-first meal-planning app for turning the recipes you already o
 
 ## Your cookbook
 
-Opening Enplace makes a cookbook and gives it a private link. The cookbook lives on your device and works offline. To use it on another device or with a partner, share the link from Settings; everyone on the link sees the same recipes, plan, and shopping list, and ticks made in the shop appear on the other phone within a moment. There is no account and no sign-in: the link is the key, so treat it like one.
+Opening Enplace makes a cookbook and gives it a private link. The cookbook lives on your device and works offline. To use it on another device or with a partner, share the link from Settings; everyone on the link sees the same recipes, plan, and shopping list, and ticks made in the shop appear on the other phone within a moment. There is no account and no sign-in: the link is the key, so treat it like one. Browser storage can be cleared or lost, and the hosted shared copy expires after 180 days without a connection, so save the private link and download backups somewhere safe.
 
 ## Your files
 

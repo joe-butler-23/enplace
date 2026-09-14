@@ -8,6 +8,7 @@ import {
   parseShopping,
   removeShoppingItem,
   renderImportedRecipe,
+  resetShopping,
   recipePlanning,
   resolveRecipeReference,
   resolveRelativePath,
@@ -101,25 +102,79 @@ describe("Plan.md", () => {
 });
 
 describe("Shopping.md", () => {
-  it("rebuilds exact Markdown in plan order by distinct recipe identity", () => {
-    const sameA = parseRecipe("a/same.md", "---\ntitle: Same\n---\n## Ingredients\n- Salt\n- apples\n")!;
-    const sameB = parseRecipe("b/same.md", "---\ntitle: Same\n---\n## Ingredients\n- salt\n- pears\n- pears\n")!;
-    const current = "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## Same\r\n- [x] SALT\r\n- [ ] stale\r\n\r\n## AI grouping\r\n- [x] batteries\r\n";
-    const duplicatePath = { ...sameB, title: "Ignored duplicate", ingredients: ["wrong"] };
-    expect(buildShoppingMarkdown(current, [sameB, sameA, duplicatePath], [sameA, sameB])).toBe(
-      "# Shopping\r\n\r\n## Market note\r\nBuy local\r\n- [ ] hand soap\r\n\r\n## AI grouping\r\n- [x] batteries\r\n\n## Same\n- [x] salt\n- [ ] pears\n\n## Same\n- [ ] Salt\n- [ ] apples\n",
-    );
+  it("binds rebuilt checks to recipe paths, not matching headings", () => {
+    const oldRecipe = parseRecipe("old.md", "# Same\n\n## Ingredients\n- salt\n")!;
+    const replacement = parseRecipe("new.md", "# Same\n\n## Ingredients\n- salt\n")!;
+    const first = buildShoppingMarkdown("", [oldRecipe], [oldRecipe]);
+    const checked = toggleShoppingItem(first, parseShopping(first)[0].line, "salt", true);
+    const rebuilt = buildShoppingMarkdown(checked, [replacement], [replacement]);
+    expect(rebuilt).toContain("<!-- enplace-shopping:recipe new.md | salt -->");
+    expect(rebuilt).not.toContain("old.md");
+    expect(parseShopping(rebuilt)).toEqual([{ line: 2, heading: "Same", text: "salt", checked: false }]);
   });
 
-  it("keeps equal ingredient text in each recipe block with independent state", () => {
-    const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- 1 onion\n- salt\n- SALT\n")!;
-    const pie = parseRecipe("pie.md", "# Pie\n\n## Ingredients\n- 1 onion\n")!;
-    const current = "## Pie\n- [x] 1 onion\n\n## Soup\n- [ ] 1 onion\n";
-    expect(buildShoppingMarkdown(current, [pie, soup], [pie, soup])).toBe(
-      "## Pie\n- [x] 1 onion\n\n## Soup\n- [ ] 1 onion\n- [ ] salt\n",
-    );
+  it("stores one escaped source marker with its generated row keys", () => {
+    const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- onion\n")!;
+    const special = { ...soup, ingredients: ["onion; stock", "mustard --> spicy"] };
+    const built = buildShoppingMarkdown("", [special], [special]);
+    expect(built).toContain("<!-- enplace-shopping:recipe soup.md | onion%3B stock; mustard --%3E spicy -->");
+    expect(buildShoppingMarkdown(built, [special], [special])).toBe(built);
   });
 
+  it("leaves legacy and incomplete provenance untouched when their ownership is ambiguous", () => {
+    const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- onion\n")!;
+    const handwritten = "## Soup\n- [x] onion\nPersonal note\n<!-- enplace-shopping:recipe soup.md | -->\n";
+    const rebuilt = buildShoppingMarkdown(handwritten, [soup], [soup]);
+    expect(rebuilt.startsWith(handwritten)).toBe(true);
+    expect(parseShopping(rebuilt).filter(({ text }) => text === "onion").map(({ checked }) => checked)).toEqual([true, false]);
+  });
+
+  it("renames generated headings while preserving handwritten prose", () => {
+    const soup = parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- onion\n")!;
+    const first = buildShoppingMarkdown("", [soup], [soup]);
+    const withNote = `${first}Buy the local ones.\n`;
+    const renamed = buildShoppingMarkdown(withNote, [{ ...soup, title: "Onion soup" }], [soup]);
+    expect(renamed).toContain("## Onion soup");
+    expect(renamed).not.toContain("## Soup");
+    expect(renamed).toContain("Buy the local ones.\n");
+  });
+
+  it("keeps same-title recipe checks stable when their order or multiplicity changes", () => {
+    const first = parseRecipe("a.md", "# Same\n\n## Ingredients\n- salt\n")!;
+    const second = parseRecipe("b.md", "# Same\n\n## Ingredients\n- salt\n")!;
+    const built = buildShoppingMarkdown("", [first, second], [first, second]);
+    const ticked = toggleShoppingItem(built, parseShopping(built)[1].line, "salt", true);
+    const rebuilt = buildShoppingMarkdown(ticked, [second, first], [first, second]);
+    expect(parseShopping(rebuilt).map(({ checked }) => checked)).toEqual([false, true]);
+  });
+
+
+
+
+  it("byte-preserves CommonMark fenced and HTML examples through every shopping operation", () => {
+    const fenced = "  ```md\r\n  ## Other\r\n  - [xx] fenced example\r\n  ```\r\n";
+    const html = "  <div>\r\n  ## Other\r\n  - [x] HTML example\r\n  </div>\r\n\r\n";
+    const markdown = `Handwritten note\r\n- nested example\r\n${fenced}\r\n- nested HTML\r\n${html}## Other\r\n- [ ] live item\r\n`;
+    const live = parseShopping(markdown).find(({ text }) => text === "live item")!;
+    const transforms = [
+      canonicalShoppingMarkdown(markdown),
+      toggleShoppingItem(markdown, live.line, live.text, true),
+      removeShoppingItem(markdown, live.line, live.text),
+      appendShoppingItem(markdown, "added item"),
+      resetShopping(markdown),
+      shoppingPlainText(markdown),
+      buildShoppingMarkdown(markdown, [parseRecipe("soup.md", "# Soup\n\n## Ingredients\n- onion\n")!], []),
+    ];
+    expect(parseShopping(markdown)).toEqual([{ line: live.line, heading: "Other", text: "live item", checked: false }]);
+    for (const transformed of transforms) {
+      expect(transformed).toContain(fenced);
+      expect(transformed).toContain(html);
+    }
+    expect(canonicalShoppingMarkdown(markdown)).toContain("- [xx] fenced example");
+    expect(shoppingPlainText(markdown)).toContain("- [x] HTML example");
+    expect(resetShopping(markdown)).not.toContain("live item");
+    expect(appendShoppingItem(markdown, "added item")).toContain("## Other\r\n- [ ] live item\r\n- [ ] added item");
+  });
   it("canonicalises every checklist marker on each local shopping write", () => {
     const malformed = "## Soup\n- [xx] onion\n- [  ] stock\n";
     expect(canonicalShoppingMarkdown(malformed)).toBe("## Soup\n- [x] onion\n- [ ] stock\n");

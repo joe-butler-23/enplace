@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
+import { lookup } from "node:dns/promises";
 import { mkdir, open, readFile, rename } from "node:fs/promises";
+import { isIP } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { Agent } from "undici";
 import * as awarenessProtocol from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as decoding from "lib0/decoding";
@@ -11,11 +14,128 @@ import * as encoding from "lib0/encoding";
 import { WebSocket, WebSocketServer } from "ws";
 import * as Y from "yjs";
 import { commitFrame, MESSAGE_COMMIT, readCommitFrame } from "../src/cookbook/commit-protocol.ts";
+import { MAX_REDIRECTS, pageTarget } from "../relay/src/page.ts";
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const KEEPALIVE_INTERVAL_MS = 30_000;
 const ROOM_ID_PATTERN = /^e1-[a-f0-9]{64}$/;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function ipv4Number(address) {
+  return address.split(".").reduce((value, octet) => (value << 8) + Number(octet), 0) >>> 0;
+}
+
+function inIpv4Range(address, base, prefix) {
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return (ipv4Number(address) & mask) === (ipv4Number(base) & mask);
+}
+
+function ipv6Parts(address) {
+  const [left, right = ""] = address.toLowerCase().split("::");
+  const parts = (part) => part ? part.split(":").flatMap((value) => {
+    if (!value.includes(".")) return Number.parseInt(value, 16);
+    const bytes = value.split(".").map(Number);
+    return [(bytes[0] << 8) + bytes[1], (bytes[2] << 8) + bytes[3]];
+  }) : [];
+  const before = parts(left);
+  const after = parts(right);
+  return [...before, ...Array(8 - before.length - after.length).fill(0), ...after];
+}
+
+/** True only for addresses which are globally routable, never special-use or local ranges. */
+export function isPublicAddress(address) {
+  const family = isIP(address);
+  if (family === 4) {
+    return ![
+      ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8],
+      ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24],
+      ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
+      ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
+    ].some(([base, prefix]) => inIpv4Range(address, base, prefix));
+  }
+  if (family !== 6) return false;
+  const parts = ipv6Parts(address);
+  const globalUnicast = (parts[0] & 0xe000) === 0x2000;
+  const special2001 = parts[0] === 0x2001 && (
+    parts[1] < 0x0200 || parts[1] === 0x0002 || (parts[1] & 0xfff0) === 0x0010
+    || (parts[1] & 0xfff0) === 0x0020 || parts[1] === 0x0db8
+  );
+  return globalUnicast && !special2001;
+}
+
+export async function resolvePublicHost(host, resolveHost = (name) => lookup(name, { all: true, verbatim: true })) {
+  const addresses = await resolveHost(host);
+  if (!Array.isArray(addresses) || addresses.length === 0 || addresses.some(({ address }) => !isPublicAddress(address))) {
+    throw new Error("host did not resolve exclusively to public addresses");
+  }
+  return addresses;
+}
+
+async function readLimitedBody(response, limit) {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) { await reader.cancel(); return null; }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+  return body;
+}
+
+async function fetchPublic(target, rules, { resolveHost, fetcher, agentFactory }) {
+  const pinned = new Map();
+  const agent = agentFactory({ connect: { lookup(host, _options, callback) {
+    const address = pinned.get(host);
+    if (!address) { callback(new Error("unvalidated host")); return; }
+    callback(null, address.address, address.family);
+  } } });
+  const signal = AbortSignal.timeout(15_000);
+  let current = target;
+  try {
+    for (let redirects = 0;; redirects += 1) {
+      let addresses;
+      try { addresses = await resolvePublicHost(current.hostname, resolveHost); }
+      catch (error) {
+        if (error instanceof Error && error.message === "host did not resolve exclusively to public addresses") {
+          return { status: 400, message: "Only public web sites can be fetched." };
+        }
+        return { status: 504, message: "The page could not be reached." };
+      }
+      pinned.set(current.hostname, addresses[0]);
+      let upstream;
+      try {
+        upstream = await fetcher(current.href, {
+          redirect: "manual", signal, dispatcher: agent,
+          headers: { accept: rules.accept, "accept-language": "en-GB,en;q=0.8", "user-agent": "Mozilla/5.0 (compatible; Enplace/1.0; +https://github.com/joe-butler-23/enplace)" },
+        });
+      } catch { return { status: 504, message: "The page could not be reached." }; }
+      const location = upstream.headers.get("location");
+      if (!REDIRECT_STATUSES.has(upstream.status) || !location) {
+        if (!upstream.ok) return { status: 502, message: `The page answered with status ${upstream.status}.` };
+        const type = upstream.headers.get("content-type") ?? "";
+        if (!rules.type.test(type)) return { status: 415, message: rules.wrongType };
+        const body = await readLimitedBody(upstream, rules.bytes);
+        if (!body) return { status: 413, message: rules.tooLarge };
+        return { status: 200, body, contentType: type, finalUrl: upstream.url || current.href };
+      }
+      let next;
+      try { next = pageTarget(new URL(location, current).href); }
+      catch { return { status: 400, message: "That is not a valid web address." }; }
+      if (!next.ok) return { status: next.status, message: next.message };
+      if (redirects >= MAX_REDIRECTS) return { status: 502, message: "Too many redirects." };
+      await upstream.body?.cancel();
+      current = next.url;
+    }
+  } finally { await agent.close(); }
+}
 
 export const RELAY_DEFAULTS = Object.freeze({
   maxMessageBytes: 32 * 1024 * 1024,
@@ -152,6 +272,9 @@ export async function startRelay({
   maxAwarenessBytes = RELAY_DEFAULTS.maxAwarenessBytes,
   maxRooms = RELAY_DEFAULTS.maxRooms,
   maxConnections = RELAY_DEFAULTS.maxConnections,
+  resolveHost = (name) => lookup(name, { all: true, verbatim: true }),
+  fetcher = fetch,
+  agentFactory = (options) => new Agent(options),
 } = {}) {
   positiveInteger(maxMessageBytes, "maxMessageBytes");
   positiveInteger(maxDocumentBytes, "maxDocumentBytes");
@@ -174,15 +297,6 @@ export async function startRelay({
     page: { bytes: 5 * 1024 * 1024, accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1", type: /^(?:text\/html|application\/xhtml\+xml)\b/i, wrongType: "That address is not a web page.", tooLarge: "That page is too large to read." },
     image: { bytes: 8 * 1024 * 1024, accept: "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1", type: /^image\/(?:jpeg|png|webp|gif|avif)\b/i, wrongType: "That address is not a picture.", tooLarge: "That picture is too large to fetch." },
   };
-  const pageTarget = (raw) => {
-    let url;
-    try { url = new URL(String(raw ?? "").trim()); } catch { return null; }
-    const host = url.hostname.toLowerCase();
-    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
-    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":") || host === "localhost" || /\.(?:localhost|local|internal)$/.test(host) || !host.includes(".")) return null;
-    url.hash = "";
-    return url;
-  };
   const servePage = async (request, response, kind) => {
     const rules = kinds[kind];
     const origin = request.headers.origin ?? "";
@@ -190,17 +304,11 @@ export async function startRelay({
     const cors = { "access-control-allow-origin": origin, vary: "Origin", "cache-control": "no-store" };
     if (!allowed) { response.writeHead(403, cors); response.end("Page fetching is only available to Enplace."); return; }
     const target = pageTarget(new URL(request.url, "http://relay.local").searchParams.get("url"));
-    if (!target) { response.writeHead(400, cors); response.end("Only public web sites can be fetched."); return; }
-    let upstream;
-    try { upstream = await fetch(target.href, { redirect: "follow", signal: AbortSignal.timeout(15_000), headers: { accept: rules.accept } }); }
-    catch { response.writeHead(504, cors); response.end("The page could not be reached."); return; }
-    const type = upstream.headers.get("content-type") ?? "";
-    if (!upstream.ok) { response.writeHead(502, cors); response.end(`The page answered with status ${upstream.status}.`); return; }
-    if (!rules.type.test(type)) { response.writeHead(415, cors); response.end(rules.wrongType); return; }
-    const body = new Uint8Array(await upstream.arrayBuffer());
-    if (body.byteLength > rules.bytes) { response.writeHead(413, cors); response.end(rules.tooLarge); return; }
-    response.writeHead(200, { ...cors, "content-type": type, "x-final-url": upstream.url || target.href, "access-control-expose-headers": "x-final-url" });
-    response.end(body);
+    if (!target.ok) { response.writeHead(target.status, cors); response.end(target.message); return; }
+    const page = await fetchPublic(target.url, rules, { resolveHost, fetcher, agentFactory });
+    if (page.status !== 200) { response.writeHead(page.status, cors); response.end(page.message); return; }
+    response.writeHead(200, { ...cors, "content-type": page.contentType, "x-final-url": page.finalUrl, "access-control-expose-headers": "x-final-url" });
+    response.end(page.body);
   };
   const httpServer = createServer((request, response) => {
     if (request.url?.startsWith("/page")) { void servePage(request, response, "page"); return; }

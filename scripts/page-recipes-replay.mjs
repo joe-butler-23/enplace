@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Run from the repository root. Corpus is external; only manifest-selected pages are read.
-// Usage: node scripts/recipe-clipper-replay.mjs --output=/tmp/current.json
+// Usage: node scripts/page-recipes-replay.mjs --output=/tmp/current.json
 //   [--source=/tmp/baseline.js] [--corpus=/path/to/tests/test_data] [--manifest=/path/to/manifest.json]
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { sha256, validateManifest, summarizeAgreement } from "./recipe-clipper-compare.mjs";
+import { sha256, validateManifest, summarizeAgreement } from "./page-recipes-compare.mjs";
 
-// Keep this legacy normalized-reference agreement unchanged from RecipeClipper test/corpus.js.
+// Keep this legacy normalized-reference agreement unchanged from Page recipes test/corpus.js.
 // It is NOT semantic accuracy: it flattens rows, folds case and permits omitted instruction labels.
 export function extractAndScore({ html, reference, domain }) {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -27,7 +27,7 @@ export function extractAndScore({ html, reference, domain }) {
     return variants.some(value => normalize(value) === target);
   };
   const url = new URL(reference.canonical_url, `https://${domain}`).href;
-  const candidates = globalThis.recipeClipper.clipRecipes(doc, { url });
+  const candidates = globalThis.pageRecipes.parsePageRecipes(doc, { url });
   const scores = candidates.map(recipe => Object.fromEntries(["title", "ingredients", "instructions"].map(field => [field, compare(recipe, field)])));
   const count = score => Object.values(score).filter(Boolean).length;
   // Stable tie-breaking, as in the original stable Array.sort: first candidate wins ties.
@@ -39,12 +39,12 @@ export function extractAndScore({ html, reference, domain }) {
 
 export async function replay(options) {
   assert(options.output, "--output is required (a new capture file; never overwrites)");
-  const manifestPath = resolve(options.manifest ?? "tests/recipe-clipper-corpus/round10-manifest.json");
-  const sourcePath = resolve(options.source ?? "src/recipe-import/recipe-clipper.js");
-  const corpusPath = resolve(options.corpus ?? process.env.RECIPE_CORPUS ?? "/tmp/recipeclipper-corpus/tests/test_data");
+  const manifestPath = resolve(options.manifest ?? "tests/page-recipes-corpus/corpus-manifest.json");
+  const sourcePath = resolve(options.source ?? "src/recipe-import/page-recipes.js");
+  const corpusPath = resolve(options.corpus ?? process.env.RECIPE_CORPUS ?? "/tmp/page-recipes-corpus/tests/test_data");
   const [manifestText, source, replayBytes, compareBytes] = await Promise.all([
     readFile(manifestPath, "utf8"), readFile(sourcePath), readFile(new URL(import.meta.url)),
-    readFile(new URL("./recipe-clipper-compare.mjs", import.meta.url)),
+    readFile(new URL("./page-recipes-compare.mjs", import.meta.url)),
   ]);
   const manifest = validateManifest(JSON.parse(manifestText));
   // Reuse the project's exact Node, installed Playwright and Nix-browser contract.
@@ -58,10 +58,10 @@ export async function replay(options) {
     const page = await context.newPage();
     // A single self-contained ES module: import exactly the bytes whose hash is recorded.
     // Relative imports fail instead of silently adding untracked source dependencies.
-    await page.evaluate(async sourceURL => { globalThis.recipeClipper = await import(sourceURL); },
+    await page.evaluate(async sourceURL => { globalThis.pageRecipes = await import(sourceURL); },
       `data:text/javascript;base64,${source.toString("base64")}`);
     const capture = {
-      format: "enplace-recipe-clipper-replay-v1",
+      format: "enplace-page-recipes-replay-v1",
       source: { path: sourcePath, sha256: sha256(source) },
       manifest: { path: manifestPath, sha256: sha256(manifestText), text: manifestText },
       harness: { replaySHA256: sha256(replayBytes), compareSHA256: sha256(compareBytes) },

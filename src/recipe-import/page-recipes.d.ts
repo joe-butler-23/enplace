@@ -1,4 +1,4 @@
-export type ClippedRecipe = {
+export type ParsedPageRecipe = {
   title: string;
   description: string;
   notes: string;
@@ -18,4 +18,4 @@ export type ClippedRecipe = {
 };
 
 /** Every distinct recipe a parsed document publishes. Synchronous, deterministic, no network. */
-export function clipRecipes(doc: Document, options?: { url?: string }): ClippedRecipe[];
+export function parsePageRecipes(doc: Document, options?: { url?: string }): ParsedPageRecipe[];
