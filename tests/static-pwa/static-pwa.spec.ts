@@ -1,6 +1,6 @@
 import { cpSync, rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { createEmptyCookbookConnection, addShoppingItem, openFreshCookbook, openShopping, persistedDatabaseName, persistedUpdateCount } from "./helpers";
+import { createEmptyCookbookConnection, addShoppingItem, openFreshCookbook, openShopping, persistedDatabaseName, persistedUpdateCount, newAppContext } from "./helpers";
 
 const OFFLINE_RELOAD_TITLES = new Set(["the cookbook app shell reloads offline after its first visit"]);
 test.beforeEach(async ({ browserName }, testInfo) => {
@@ -159,7 +159,7 @@ test("two separate browser contexts converge through the relay in both direction
   await addShoppingItem(page, "oat milk");
   await addShoppingItem(page, "eggs");
 
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   const second = await secondContext.newPage();
   try {
     await second.goto(page.url());

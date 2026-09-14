@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { addShoppingItem, openFreshCookbook, openShopping } from "./helpers";
+import { addShoppingItem, openFreshCookbook, openShopping, newAppContext } from "./helpers";
 
 test("returning to the foreground replaces a dead connection instead of waiting out the silence timeout", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await openShopping(page);
   await addShoppingItem(page, "foreground proof");
 
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   // Each socket gets its own valve. A closed valve is a half-open connection: frames vanish
   // in both directions and no close event ever arrives.

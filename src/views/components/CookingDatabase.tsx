@@ -181,9 +181,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
 
   const handleClearMarked = async () => {
     if (clearPending || markedCount === 0) return;
-    const message = `Clear marked status from ${markedCount} recipe${
-      markedCount === 1 ? "" : "s"
-    }?`;
+    const message = `Clear ${markedCount} recipe${markedCount === 1 ? "" : "s"} from the planner queue?`;
     if (!confirm(message)) return;
     setClearPending(true);
     try {
@@ -355,16 +353,16 @@ export const CookingDatabase = React.memo(function CookingDatabase({
           {openMenu === "filter" && (
             <div className="mep-menu cooking-db__popover-menu cooking-db__filter-menu">
               <div className="cooking-db__filter-row">
-                <span aria-hidden="true">Marked</span>
+                <span aria-hidden="true">In planner</span>
                 <select
                   className="cooking-db__select"
-                  aria-label="Marked filter"
+                  aria-label="In planner filter"
                   value={state.marked}
                   onChange={(e) => updateState({ marked: e.target.value as MarkedFilter })}
                 >
                   <option value="all">Any</option>
-                  <option value="marked">Only marked</option>
-                  <option value="unmarked">Only unmarked</option>
+                  <option value="marked">In planner</option>
+                  <option value="unmarked">Not in planner</option>
                 </select>
               </div>
 
@@ -414,7 +412,7 @@ export const CookingDatabase = React.memo(function CookingDatabase({
                 onClick={handleClearMarked}
                 disabled={markedCount === 0 || clearPending}
               >
-                {clearPending ? "Clearing…" : "Clear marked"}
+                {clearPending ? "Clearing…" : "Clear planner queue"}
               </button>
             </div>
           )}

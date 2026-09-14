@@ -10,6 +10,7 @@ import { AppSidebar } from "./standalone/AppSidebar";
 import { DEFAULT_STANDALONE_SETTINGS, type StandaloneSettings } from "./standalone/settings";
 import { acknowledgeCookbookLink, shouldShowFirstUseNotice } from "./standalone/first-use-notice";
 import { FirstUseNotice } from "./standalone/FirstUseNotice";
+import { shouldShowFirstVisitHelp } from "./standalone/first-visit-help";
 import { loadSettings, prepareStandaloneStartup, saveSettings } from "./standalone/storage";
 import { initialViewForPathname, pathnameForView } from "./standalone/pwa-route";
 import {
@@ -395,6 +396,13 @@ function App(): React.JSX.Element | null {
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [commandQuery, setCommandQuery] = React.useState("");
+  const firstVisitHelpOpened = React.useRef(false);
+  React.useEffect(() => {
+    if (!runtime || firstVisitHelpOpened.current || !shouldShowFirstVisitHelp(runtime.settings.helpAcknowledged, firstUseNotice.visible)) return;
+    firstVisitHelpOpened.current = true;
+    setHelpOpen(true);
+    void updateSettings({ helpAcknowledged: true });
+  }, [firstUseNotice.visible, runtime, updateSettings]);
   React.useLayoutEffect(() => {
     const key = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -417,7 +425,7 @@ function App(): React.JSX.Element | null {
   if (!runtime) return startupError ? <StartupFailure error={startupError} onRetry={() => void initialize()} /> : null;
   const { settings } = runtime;
   return <div className="mep-shell" style={{ "--mep-preview-width": previewFile ? `${previewWidth}px` : "0px" } as React.CSSProperties}>
-    <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} />
+    <AppSidebar activeView={settingsOpen ? "settings" : activeView} canGoBack={history.length > 1} onBack={goBack} onNavigate={navigate} onPreparePlanner={preparePlannerNavigation} onHelp={() => { setCommandOpen(false); setHelpOpen(true); }} />
     <main className={`mep-main ${activeView === "planner" ? "mep-main--planner" : ""} ${activeView === "database" ? "mep-main--database" : ""} ${activeView === "shopping" ? "mep-main--shopping" : ""}`}>
       {firstUseNotice.visible ? <FirstUseNotice busy={firstUseNotice.busy}
         onCopyLink={() => firstUseNotice.acknowledge(async () => {

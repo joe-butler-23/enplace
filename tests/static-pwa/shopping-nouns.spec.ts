@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook, openShopping } from './helpers';
+import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook, openShopping, newAppContext } from './helpers';
 
 const grouping = (page: Page, name: string) => page.getByRole('group', { name: 'Group shopping list' }).getByRole('button', { name, exact: true });
 
@@ -77,9 +77,9 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
   await expect(page.getByLabel('Aisle for 1 tsp salt', { exact: true })).toHaveValue('Herbs, spices & oils');
   await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('');
   await expect(page.locator('.shopping-item').filter({ has: aubergine }).locator('.shopping-item__sources')).toHaveText('Pie, Soup');
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   const second = await secondContext.newPage();
-  const restoredContext = await browser.newContext();
+  const restoredContext = await newAppContext(browser);
   const fixture = await createEmptyCookbookConnection();
   try {
     await second.goto(page.url());

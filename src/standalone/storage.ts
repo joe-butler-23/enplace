@@ -7,6 +7,7 @@ const persistedKeys = [
   "databaseMarkedFilter",
   "databaseScheduledFilter",
   "acknowledgedCookbookIds",
+  "helpAcknowledged",
 ] as const satisfies ReadonlyArray<keyof StandaloneSettings>;
 
 function acknowledgedCookbookIds(value: unknown): string[] {

@@ -9,7 +9,7 @@ export function generateWeekColumns(
 	const today = formatIsoDate(new Date());
 	const markedColumn: ColumnDefinition = {
 		id: "marked",
-		title: "Marked",
+		title: "To plan",
 		isDefault: true,
 	};
 

@@ -116,11 +116,15 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
             onDragCancel={planner.cancelDrag}
           >
             <div className="kanban-container">
-              {config.columns.map((column) => (
-                <PlannerLane
+              {config.columns.map((column) => {
+                const entries = plannerEntries.renderedEntriesByColumn.get(column.id) ?? [];
+                const hasScheduledRecipe = config.columns.some((day) => day.id !== "marked"
+                  && (plannerEntries.renderedEntriesByColumn.get(day.id) ?? []).length > 0);
+                return <PlannerLane
                   key={column.id}
                   column={column}
-                  entries={plannerEntries.renderedEntriesByColumn.get(column.id) ?? []}
+                  entries={entries}
+                  showPlannerHint={column.id === "marked" && entries.length === 0 && !hasScheduledRecipe}
                   resolveCover={resolveEntryCover}
                   onOpen={planner.handleCardClick}
                   onRemove={(path, sourceColumnId) => {
@@ -129,8 +133,8 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
                     );
                   }}
                   onNote={editDayNote}
-                />
-              ))}
+                />;
+              })}
             </div>
             <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
               {planner.overlayEntry ? (

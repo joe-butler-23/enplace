@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { addShoppingItem, openFreshCookbook, openShopping } from "./helpers";
+import { addShoppingItem, openFreshCookbook, openShopping, newAppContext } from "./helpers";
 
 test("browser sharing sends only ciphertext and a derived room id", async ({ page, browser }) => {
   const frames: Buffer[] = [];
@@ -13,7 +13,7 @@ test("browser sharing sends only ciphertext and a derived room id", async ({ pag
   await openShopping(page);
   const item = "Confidential persimmons 983712";
   await addShoppingItem(page, item);
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   try {
     await partner.goto(`/shopping#k=${id}`);

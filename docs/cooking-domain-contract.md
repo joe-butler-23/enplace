@@ -25,7 +25,7 @@ The browser stores every imported cover as two WebP files. The recipe `cover` pa
 
 `Plan.md` at the cookbook root is the only planner document. It contains `## Marked` and sorted `## YYYY-MM-DD` sections. Every entry is one `- [[recipe-link]]` line. A unique filename stem is the link; duplicate stems use the folder-relative path without `.md`. Empty day sections are omitted. The planner displays Monday through Sunday. Marking adds a link under `## Marked`; unmarking removes it. A recipe may occur on several dates but only once per section; entries retain their plan order. Marking and scheduling write only `Plan.md`, never recipe files or unrelated content.
 
-The planner grid has five tracks: marked plus four day lanes per row. All share `--col-min-width`, distribute extra width equally with `1fr`, and scroll horizontally when the viewport cannot fit that minimum. Dragging the marked-column divider changes the shared minimum width only.
+The planner grid has five tracks: the TO PLAN queue plus four day lanes per row. All share `--col-min-width`, distribute extra width equally with `1fr`, and scroll horizontally when the viewport cannot fit that minimum. Dragging the queue-column divider changes the shared minimum width only.
 
 ## Shopping
 

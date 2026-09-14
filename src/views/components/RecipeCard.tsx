@@ -70,7 +70,7 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, coverPath, o
             onChange={handleToggle}
             disabled={toggleDisabled}
           />
-          <span>Marked</span>
+          <span>{optimisticMarked ? "In planner" : "Add to planner"}</span>
         </label>
       </div>
     </article>

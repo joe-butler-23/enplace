@@ -17,12 +17,14 @@ describe("AppSidebar", () => {
     document.body.append(container);
     const root = createRoot(container);
     const onNavigate = vi.fn();
+    const onHelp = vi.fn();
     flushSync(() => root.render(
       <AppSidebar
         activeView="database"
         canGoBack={false}
         onBack={vi.fn()}
         onNavigate={onNavigate}
+        onHelp={onHelp}
       />,
     ));
 
@@ -42,6 +44,17 @@ describe("AppSidebar", () => {
     flushSync(() => root.unmount());
   });
 
+  it("opens Help from a click", () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onHelp = vi.fn();
+    flushSync(() => root.render(<AppSidebar activeView="database" canGoBack={false} onBack={vi.fn()} onNavigate={vi.fn()} onHelp={onHelp} />));
+    container.querySelector<HTMLButtonElement>('[title="Help"]')?.click();
+    expect(onHelp).toHaveBeenCalledOnce();
+    flushSync(() => root.unmount());
+  });
+
   it("keeps each nav icon element mounted when the sidebar re-renders during a press", () => {
     container = document.createElement("div");
     document.body.append(container);
@@ -52,6 +65,7 @@ describe("AppSidebar", () => {
         canGoBack={false}
         onBack={vi.fn()}
         onNavigate={vi.fn()}
+        onHelp={vi.fn()}
       />
     );
 

@@ -1,4 +1,4 @@
-import { createEmptyCookbookConnection, persistedUpdateCount } from "./helpers";
+import { createEmptyCookbookConnection, persistedUpdateCount, newAppContext } from "./helpers";
 import { randomBytes } from "node:crypto";
 import { type CookbookConnection } from "../../src/host-client/cookbook-storage";
 import { expect, test, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
@@ -83,7 +83,7 @@ test("partner join waits for first sync without showing a false empty cookbook",
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
 
-  const partnerContext = await browser.newContext();
+  const partnerContext = await newAppContext(browser);
   const partner = await partnerContext.newPage();
   try {
     await recordFalseEmpty(partner);
@@ -143,7 +143,7 @@ test("a linked device persists successful first sync for offline reopen", async 
   const id = await openFreshCookbook(page);
   await addShoppingItem(page, "linked sync proof");
 
-  const linkedContext = await browser.newContext();
+  const linkedContext = await newAppContext(browser);
   let linked = await linkedContext.newPage();
   try {
     await linked.goto(`/shopping#k=${id}`);
@@ -169,7 +169,7 @@ test("fresh sample cookbook publishes when its link section is shown", async ({ 
   const id = await openFreshCookbook(page);
   await page.reload();
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();
-  const partnerContext = await browser.newContext();
+  const partnerContext = await newAppContext(browser);
   const partner = await partnerContext.newPage();
   try {
     await partner.goto(`/#k=${id}`);
@@ -202,7 +202,7 @@ function delaySocket(socket: WebSocketRoute): () => void {
 test("a join recovers after its deadline without reload and mounts only once", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await addShoppingItem(page, "deadline recovery");
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   let release!: () => void;
   let reconnect = (): void => {};
@@ -243,7 +243,7 @@ test("a join recovers after its deadline without reload and mounts only once", a
 test("a disconnected first join recovers through the provider reconnect", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await addShoppingItem(page, "reconnect recovery");
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   let available = false;
   await context.routeWebSocket(/.*/, (socket) => {
@@ -260,7 +260,7 @@ test("a disconnected first join recovers through the provider reconnect", async 
 test("a cancelled opening cannot mount when the delayed relay responds", async ({ page, browser }) => {
   const id = await openFreshCookbook(page);
   await addShoppingItem(page, "cancelled recovery");
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   let release!: () => void;
   await context.routeWebSocket(/.*/, (socket) => { release = delaySocket(socket); });

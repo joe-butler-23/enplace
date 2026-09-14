@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addShoppingItem, exportedCookbookText, openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
+import { addShoppingItem, exportedCookbookText, openFreshCookbook, openShopping, persistedUpdateCount, newAppContext } from "./helpers";
 
 test.skip(({ browserName }) => browserName === "webkit", "Playwright WebKit cannot reload while offline (internal error); Safari offline behaviour is verified on a device");
 
@@ -45,7 +45,7 @@ test("two shoppers edit offline, reload, reconnect in either order, and retain t
   await addShoppingItem(page, "market bread");
   await ensureServiceWorkerControl(page);
 
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   let second = await secondContext.newPage();
   try {
     await second.goto(page.url());
@@ -106,7 +106,7 @@ test("two offline ticks of one item reconnect to canonical Shopping.md on both d
   await openShopping(page);
   await addShoppingItem(page, "shared onion");
 
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   const second = await secondContext.newPage();
   try {
     await second.goto(page.url());

@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import { newAppContext } from "./helpers";
 
 const recipeSuffix = "\n\n## Ingredients\n- onion\n\n## Method\n1. Simmer.\n";
 
@@ -30,7 +31,7 @@ async function joinCookbook(browser: Browser, url: string, owner: Page): Promise
   await owner.getByRole("button", { name: "Settings", exact: true }).dispatchEvent("click");
   await expect(owner.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
   await owner.getByTitle("Close settings").click();
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const page = await context.newPage();
   await page.goto(url);
   await expect(page.getByText("Merge Soup", { exact: true })).toBeVisible();

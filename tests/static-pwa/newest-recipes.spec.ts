@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { writeCookbookText } from "../../src/cookbook/doc";
-import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook, openShopping } from "./helpers";
+import { createEmptyCookbookConnection, exportedCookbookText, openFreshCookbook, openShopping, newAppContext } from "./helpers";
 
 // Page/image fixtures stay local and must not be swallowed by the app-shell worker.
 test.use({ serviceWorkers: "block" });
@@ -70,7 +70,7 @@ for (const mode of ["Web page", "Markdown", "File"] as const) {
     const second = `Zulu ${mode} lentils`;
     await addRecipe(page, mode, first);
     await expect(page.locator(".cooking-db__title").first()).toHaveText(first);
-    const partnerContext = await browser.newContext({ serviceWorkers: "block" });
+    const partnerContext = await newAppContext(browser, { serviceWorkers: "block" });
     const partner = await partnerContext.newPage();
     partner.on("pageerror", (error) => errors.push(error.message));
     try {

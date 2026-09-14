@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openFreshCookbook } from "./helpers";
+import { openFreshCookbook, newAppContext } from "./helpers";
 
 async function openSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -84,7 +84,7 @@ A quick supper.
   await expect(page.getByText("Relay Lentils", { exact: true })).toBeVisible();
   await expect(page.getByText("12 recipes", { exact: true })).toBeVisible();
 
-  const partnerContext = await browser.newContext();
+  const partnerContext = await newAppContext(browser);
   const partner = await partnerContext.newPage();
   try {
     await partner.goto(`/#k=${id}`);

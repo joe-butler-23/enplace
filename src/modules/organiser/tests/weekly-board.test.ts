@@ -22,6 +22,7 @@ describe("weekly board dates and columns", () => {
 
 		expect(day?.note).toBe(note);
 		expect(day?.title).toBe(formatPlannerDay(startOfIsoWeek()));
+		expect(columns.find((column) => column.id === "marked")).toMatchObject({ title: "To plan" });
 		expect(columns.find((column) => column.id === "marked")?.note).toBeUndefined();
 		expect(columns.filter((column) => column.className === "is-today").map((column) => column.id))
 			.toEqual([formatIsoDate(new Date())]);

@@ -25,9 +25,18 @@ const SHORTCUTS: ReadonlyArray<readonly [React.ReactNode, string]> = [
   [<><kbd>←</kbd> <kbd>→</kbd></>, "Move the focused planner card to the neighbouring column"],
   [<><kbd>Shift</kbd> drag</>, "Copy a planner card to another day instead of moving it"],
 ];
+const HELP_FRAMES = [
+  ["/help/add-to-planner.webp", "Add recipes to the planner"],
+  ["/help/drag-onto-days.webp", "Drag them onto days"],
+  ["/help/shopping-list.webp", "Your shopping list builds itself"],
+] as const;
 export function HelpDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
-  return <Dialog title="Keyboard shortcuts" onClose={onClose}>
+  return <Dialog title="How the weekly loop works" onClose={onClose}>
+    <section className="mep-help-overview" aria-label="Weekly planning loop">
+      {HELP_FRAMES.map(([src, caption]) => <figure key={src}><img src={src} alt="" width={480} height={300} /><figcaption>{caption}</figcaption></figure>)}
+    </section>
     <dl className="mep-help">{SHORTCUTS.map(([keys, action], index) => <React.Fragment key={index}><dt>{keys}</dt><dd>{action}</dd></React.Fragment>)}</dl>
+    <button type="button" className="mep-button" onClick={onClose}>Got it</button>
   </Dialog>;
 }
 type SettingsProps = { routePath: string; onClose: () => void };

@@ -9,6 +9,7 @@ type AppSidebarProps = {
   onBack: () => void;
   onNavigate: (view: Exclude<SidebarView, "recipe">) => void;
   onPreparePlanner?: () => void;
+  onHelp: () => void;
 };
 
 function iconRef(icon: string): React.RefCallback<HTMLSpanElement> {
@@ -29,6 +30,7 @@ export function AppSidebar({
   onBack,
   onNavigate,
   onPreparePlanner,
+  onHelp,
 }: AppSidebarProps): React.JSX.Element {
   return (
     <aside className="mep-sidebar">
@@ -68,6 +70,10 @@ export function AppSidebar({
           </button>
         ))}
       </nav>
+      <button type="button" className="mep-nav__item" onClick={onHelp} title="Help">
+        <span className="mep-nav__icon" aria-hidden="true" ref={iconRef("circle-help")} />
+        <span className="mep-sr-only">Help</span>
+      </button>
       {/* Decorative: the app is already named by the page h1, so this adds no second label. */}
       <img className="mep-sidebar__mark" src="/enplace-mark.png" alt="" width={128} height={100} />
     </aside>

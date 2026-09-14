@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { openCookingSession } from "../../src/agent/session";
-import { addShoppingItem, exportedCookbookText, openFreshCookbook, openShopping } from "./helpers";
+import { addShoppingItem, exportedCookbookText, openFreshCookbook, openShopping, newAppContext } from "./helpers";
 
 test("agent recipe images use stored cookbook files without making recipe-controlled requests", async ({ browser }) => {
-  const context = await browser.newContext({ serviceWorkers: "block" });
+  const context = await newAppContext(browser, { serviceWorkers: "block" });
   const page = await context.newPage();
   const requested: string[] = [];
   await page.route("**/*enplace-image-probe*", async route => {
@@ -51,7 +51,7 @@ test("agent recipes, meal planning and shopping converge with a partner and surv
   await page.getByTitle("Close settings").click();
   const relayUrl = `ws://127.0.0.1:${process.env.PLAYWRIGHT_RELAY_PORT}`;
   const session = await openCookingSession({ id, relayUrl });
-  const partner = await browser.newContext();
+  const partner = await newAppContext(browser);
   const phone = await partner.newPage();
   const call = async (name: string, args: Record<string, unknown> = {}) => await session.execute(name, args) as Record<string, any>;
   const markdown = "# Agent lentils\n\n---\n\n- *200 g* lentils\n- *500 ml* stock\n\n---\n\n1. Simmer until tender.\n";

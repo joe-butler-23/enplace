@@ -113,9 +113,10 @@ type PlannerLaneProps = {
   onOpen: (event: React.MouseEvent, path: string) => void;
   onRemove: (path: string, sourceColumnId: string) => void;
   onNote: (date: string) => void;
+  showPlannerHint?: boolean;
 };
 
-export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, onNote }: PlannerLaneProps): React.JSX.Element {
+export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, onNote, showPlannerHint = false }: PlannerLaneProps): React.JSX.Element {
   const { setNodeRef } = useDroppable({ id: column.id, data: { type: "lane", laneId: column.id } });
   const densityClass = column.id !== "marked" && entries.length > 1 ? " kanban-board--multi-recipe" : "";
   const note = column.note;
@@ -134,6 +135,7 @@ export function PlannerLane({ column, entries, resolveCover, onOpen, onRemove, o
       </header>
       <SortableContext items={entries.map((entry) => entry.entryId)} strategy={verticalListSortingStrategy}>
         <div className="kanban-drag">
+          {showPlannerHint ? <p className="kanban-planner-hint">Recipes you add from the Database appear here. Drag one onto a day.</p> : null}
           {entries.map((entry) => (
             <PlannerCard
               key={entry.filePath}

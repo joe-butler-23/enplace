@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addShoppingItem, openFreshCookbook, openShopping } from "./helpers";
+import { addShoppingItem, openFreshCookbook, openShopping, newAppContext } from "./helpers";
 
 /**
  * Sync cost is measured in bytes, which are deterministic, not in milliseconds. Before the wire
@@ -15,7 +15,7 @@ test("a reopen exchanges only what the relay lacks and a hundred ticks never re-
   await expect(page.getByText("Connected. Changes sync through the relay.", { exact: true })).toBeVisible();
   await page.getByTitle("Close settings").click();
 
-  const context = await browser.newContext();
+  const context = await newAppContext(browser);
   const partner = await context.newPage();
   let joinReceived = 0;
   partner.on("websocket", (socket) => {

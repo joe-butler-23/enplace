@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
-import { openFreshCookbook, openShopping, persistedUpdateCount } from "./helpers";
+import { openFreshCookbook, openShopping, persistedUpdateCount, newAppContext } from "./helpers";
 
 async function openPlanner(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Planner" }).click();
@@ -29,7 +29,7 @@ test("a planner day note syncs to another device and exports in Plan.md", async 
   await noteButton.click();
   await expect(page.locator(`.organiser-column-note[data-date="${date}"]`)).toHaveText(note);
 
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   const second = await secondContext.newPage();
   try {
     await second.goto(page.url());
@@ -84,12 +84,18 @@ test("duplicate shopping items keep independent line identity", async ({ page })
 test("planner keyboard movement persists the card in the adjacent date lane", async ({ page }) => {
   const id = await openFreshCookbook(page);
   const title = "Banana oat loaf";
-  const marked = page.locator(".cooking-db__card", { hasText: title }).getByRole("checkbox", { name: "Marked" });
+  await openPlanner(page);
+  await expect(page.locator('.kanban-board[data-id="marked"]')).toContainText("To plan");
+  await expect(page.getByText("Recipes you add from the Database appear here. Drag one onto a day.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Recipe Database" }).click();
+  const marked = page.locator(".cooking-db__card", { hasText: title }).getByRole("checkbox", { name: "Add to planner" });
   await marked.check();
-  await expect(marked).toBeChecked();
-  await expect(marked).toBeEnabled();
+  const inPlanner = page.locator(".cooking-db__card", { hasText: title }).getByRole("checkbox", { name: "In planner" });
+  await expect(inPlanner).toBeChecked();
+  await expect(inPlanner).toBeEnabled();
 
   await openPlanner(page);
+  await expect(page.getByText("Recipes you add from the Database appear here. Drag one onto a day.", { exact: true })).toHaveCount(0);
   const sourceLane = page.locator('.kanban-board[data-id="marked"]');
   const targetLane = page.locator(".kanban-board").nth(1);
   const targetDate = await targetLane.getAttribute("data-id");

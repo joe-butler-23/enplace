@@ -2,10 +2,19 @@ import { newCookbookId } from "../../src/cookbook/doc";
 import { cookbookCipher } from "../../src/cookbook/crypto";
 import { cookbookDatabaseName, openCookbook, type CookbookConnection } from "../../src/host-client/cookbook-storage";
 import { readFile } from "node:fs/promises";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
+
+/** A deterministic device preference for contexts that do not use Playwright's page fixture. */
+export async function newAppContext(browser: Browser, options?: BrowserContextOptions): Promise<BrowserContext> {
+  const context = await browser.newContext(options);
+  await context.addInitScript(() => localStorage.setItem("enplace.preferences", JSON.stringify({ helpAcknowledged: true })));
+  return context;
+}
+
 export async function openFreshCookbook(page: Page): Promise<string> {
+  await page.addInitScript(() => localStorage.setItem("enplace.preferences", JSON.stringify({ helpAcknowledged: true })));
   await page.goto("/");
   await expect(page).toHaveURL(/#k=e1_[a-z2-7]{52}$/);
   await expect(page.getByText("11 recipes", { exact: true })).toBeVisible();

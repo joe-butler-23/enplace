@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { newAppContext } from "./helpers";
 
 test("Settings stays open after a trusted touch tap", async ({ browser, browserName }) => {
   test.skip(browserName === "firefox", "Firefox has no mobile emulation; the trailing-click defect is a touch-event path Chromium and WebKit exercise");
-  const context = await browser.newContext({
+  const context = await newAppContext(browser, {
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,

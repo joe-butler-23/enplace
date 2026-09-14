@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `ef106760280d`, 2026-09-14.
+> Published snapshot of a private repository, refreshed at each release. Source commit `77cbbf6250dc`, 2026-09-14.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -10,8 +10,10 @@ Enplace is a local-first meal-planning app for turning the recipes you already o
 
 **[Open Enplace](https://enplace-trial.pages.dev/)**
 
+[Watch the weekly loop demo (WebM)](docs/enplace-weekly-loop-readme.webm) · [MP4](docs/enplace-weekly-loop-first-cut.mp4)
+
 <p align="center">
-  <img src="docs/screenshot-database.png" alt="The Recipe Database, showing a grid of recipe covers with a search box and marked checkbox on each card" width="32%">
+  <img src="docs/screenshot-database.png" alt="The Recipe Database, showing a grid of recipe covers with a search box and Add to planner checkbox on each card" width="32%">
   <img src="docs/screenshot-planner.png" alt="The weekly Planner, with two recipes dragged onto day lanes" width="32%">
   <img src="docs/screenshot-shopping.png" alt="The shopping list, built from the planned recipes and grouped by recipe" width="32%">
 </p>

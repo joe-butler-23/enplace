@@ -36,8 +36,8 @@ describe("CookingDatabase owner wiring", () => {
   it("reprojects for marked, added, scheduled tri-state and same-marked plan.days changes", () => {
     const marked = ["Soup"]; const days = new Map([["2026-09-02", ["Soup"]], ["2026-09-01", ["Salad"]]]);
     render(baseRecipes, plan(marked, days));
-    filter("Marked", "marked"); expect(paths()).toEqual(["recipes/soup.md"]);
-    filter("Marked", "all"); filter("Added date", "last-7-days"); expect(paths()).toEqual(["recipes/soup.md", "recipes/salad.md"]);
+    filter("In planner", "marked"); expect(paths()).toEqual(["recipes/soup.md"]);
+    filter("In planner", "all"); filter("Added date", "last-7-days"); expect(paths()).toEqual(["recipes/soup.md", "recipes/salad.md"]);
     filter("Added date", "all"); sort("Scheduled (latest)"); expect(paths()).toEqual(["recipes/soup.md", "recipes/salad.md", "recipes/stew.md"]);
     render(baseRecipes, plan(marked, new Map([["2026-09-01", ["Soup"]], ["2026-09-02", ["Salad"]]])));
     expect(paths()).toEqual(["recipes/salad.md", "recipes/soup.md", "recipes/stew.md"]);

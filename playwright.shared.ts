@@ -86,6 +86,15 @@ export function browserSuiteConfig(options: BrowserSuiteOptions): PlaywrightTest
     ] : undefined,
     use: {
       baseURL: resolvePlaywrightBaseURL(port),
+      // Every fixture context starts with the first-visit Help already acknowledged, so the
+      // dialog cannot intercept a spec's first click; explicit contexts use newAppContext().
+      storageState: {
+        cookies: [],
+        origins: [{
+          origin: resolvePlaywrightBaseURL(port),
+          localStorage: [{ name: "enplace.preferences", value: JSON.stringify({ helpAcknowledged: true }) }],
+        }],
+      },
       trace: options.trace ?? "on-first-retry"
     }
   });

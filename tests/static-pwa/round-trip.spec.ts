@@ -1,4 +1,4 @@
-import { createEmptyCookbookConnection } from "./helpers";
+import { createEmptyCookbookConnection, newAppContext } from "./helpers";
 import { readFile } from "node:fs/promises";
 import { expect, test, type FilePayload, type Page } from "@playwright/test";
 import { unzipSync, zipSync } from "fflate";
@@ -140,7 +140,7 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     { item: "pastry", checked: false }, { item: "3 apples", checked: false },
   ]);
 
-  const rightContext = await browser.newContext();
+  const rightContext = await newAppContext(browser);
   const right = await rightContext.newPage();
   try {
     await right.goto(`/#k=${id}`);
@@ -234,7 +234,7 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     expect(exported["images/recipes.webp"]).not.toEqual(COVER_PNG);
     expect(exported["images/recipes.card.webp"].byteLength).toBeGreaterThan(0);
 
-    const targetContext = await browser.newContext();
+    const targetContext = await newAppContext(browser);
     const target = await targetContext.newPage();
     try {
       await openEmptyCookbook(target);

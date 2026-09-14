@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { unzipSync, strFromU8 } from 'fflate';
-import { exportedCookbookText, openFreshCookbook, openShopping } from './helpers';
+import { exportedCookbookText, openFreshCookbook, openShopping, newAppContext } from './helpers';
 
 test('RecipeMD imports, renders groups and provenance, edits and exports without format loss', async ({ page }) => {
   await openFreshCookbook(page);
@@ -45,7 +45,7 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
   });
   await page.getByTitle('Close settings').click();
   await openShopping(page);
-  const secondContext = await browser.newContext();
+  const secondContext = await newAppContext(browser);
   const second = await secondContext.newPage();
   try {
     await second.goto(page.url());
