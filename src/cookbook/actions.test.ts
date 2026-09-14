@@ -4,6 +4,7 @@ import { openCookbook, type CookbookConnection } from "../host-client/cookbook-s
 import { readText } from "../host-client/browser-storage";
 import { parsePlan, parseRecipe } from "../core";
 import { writeCookbookText } from "./doc";
+import { getCookbookSnapshot } from "./store";
 import { currentCookbookConnection, setCurrentCookbookConnection } from "./current";
 import { applyShoppingPlan, deleteRecipe, saveRecipe, toggleShopping, updatePlanRecipe } from "./actions";
 
@@ -88,6 +89,55 @@ describe("browser shopping recipe selection", () => {
 
     expect(updateText).toHaveBeenCalledTimes(1);
     await expect(readText("Shopping.md")).resolves.toBe("# Handwritten\r\nKeep.\r\n\r\n## Same\r\n- [ ] stale\r\n\r\n## Manual\r\n- [x] exact\r\n");
+  });
+
+
+  it("derives only the displayed week after schedule writes and removes stale generated rows", async () => {
+    await selectCookbook("soup.md", "# Soup\n\n## Ingredients\n- onion\n");
+    const connection = currentCookbookConnection()!;
+    writeCookbookText(connection.doc, "future.md", "# Future\n\n## Ingredients\n- flour\n");
+    writeCookbookText(connection.doc, "Shopping.md", "## Other\n- [ ] bags\n");
+    const soup = getCookbookSnapshot().recipes.find((recipe) => recipe.path === "soup.md")!;
+    const update = vi.spyOn(connection.adapter, "updateText");
+    const week = { start: "2026-09-14", end: "2026-09-20" };
+
+    await updatePlanRecipe(soup, (planning) => ({ ...planning, scheduledDates: [week.start] }), week);
+    expect(update.mock.calls.filter(([path]) => path === "Shopping.md")).toHaveLength(1);
+    expect(await readText("Shopping.md")).toContain("- [ ] onion");
+    expect(await readText("Shopping.md")).toContain("- [ ] bags");
+
+    update.mockClear();
+    await updatePlanRecipe(soup, (planning) => ({ ...planning, scheduledDates: [] }), week);
+    expect(update.mock.calls.filter(([path]) => path === "Shopping.md")).toHaveLength(1);
+    expect(await readText("Shopping.md")).not.toContain("onion");
+    expect(await readText("Shopping.md")).toContain("- [ ] bags");
+  });
+
+  it("rebuilds a displayed week's scheduled recipe after its ingredients change", async () => {
+    const original = "# Soup\n\n## Ingredients\n- onion\n";
+    await selectCookbook("soup.md", original);
+    const connection = currentCookbookConnection()!;
+    const soup = getCookbookSnapshot().recipes.find((recipe) => recipe.path === "soup.md")!;
+    const week = { start: "2026-09-14", end: "2026-09-20" };
+    await updatePlanRecipe(soup, (planning) => ({ ...planning, scheduledDates: [week.start] }), week);
+    const update = vi.spyOn(connection.adapter, "updateText");
+
+    await saveRecipe("soup.md", original, "# Soup\n\n## Ingredients\n- leeks\n", week);
+    expect(update.mock.calls.filter(([path]) => path === "Shopping.md")).toHaveLength(1);
+    await expect(readText("Shopping.md")).resolves.toContain("- [ ] leeks");
+    await expect(readText("Shopping.md")).resolves.not.toContain("- [ ] onion");
+  });
+
+
+  it("converges to identical bytes when the same weekly rebuild arrives in different orders", async () => {
+    await selectCookbook("soup.md", "# Soup\n\n## Ingredients\n- onion\n");
+    const connection = currentCookbookConnection()!;
+    writeCookbookText(connection.doc, "pie.md", "# Pie\n\n## Ingredients\n- flour\n");
+
+    await applyShoppingPlan(["soup.md", "pie.md"]);
+    const first = await readText("Shopping.md");
+    await applyShoppingPlan(["pie.md", "soup.md"]);
+    await expect(readText("Shopping.md")).resolves.toBe(first);
   });
 
   it("fails closed without writing for every missing or malformed path", async () => {

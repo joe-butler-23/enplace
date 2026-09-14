@@ -131,7 +131,8 @@ test("offline paste and a disconnected path collision survive visible ZIP round-
     ],
   });
   await page.getByRole("button", { name: "Planner", exact: true }).click();
-  await page.getByRole("button", { name: "Build shopping list" }).click();
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await page.getByRole("button", { name: "Shopping List", exact: true }).click();
   await expect(page).toHaveURL(/\/shopping#k=/);
   const beforeOffline = await collectVisibleCookbookState(page);
   expect(beforeOffline.shopping).toEqual([

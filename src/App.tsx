@@ -1,5 +1,6 @@
 import * as React from "react";
 import { PlannerOrderStore } from "@/modules/organiser/utils/planner-order";
+import { addCalendarDays, formatIsoDate, startOfIsoWeek } from "@/modules/organiser/utils/scheduled-dates";
 import { WeeklyOrganiserBoard } from "@/modules/organiser/components/WeeklyOrganiserBoard";
 import { resolveDatabaseCoverPath } from "@/modules/cooking/utils/databaseCover";
 import { CookingDatabase } from "@/views/components/CookingDatabase";
@@ -18,8 +19,8 @@ import {
 } from "./standalone/planner-navigation-intent";
 import type { RecipePlanning } from "./core";
 import {
-  addShoppingItem, applyShoppingPlan, clearMarkedRecipes, copyShoppingList, deleteRecipe, removeShopping,
-  resetShoppingList, updateShoppingAisle, saveRecipe, toggleShopping, updatePlanRecipe,
+  addShoppingItem, clearMarkedRecipes, copyShoppingList, deleteRecipe, rebuildShoppingForWeek, removeShopping,
+  resetShoppingList, updateShoppingAisle, saveRecipe, toggleShopping, updatePlanRecipe, type ShoppingWeek,
 } from "./cookbook/actions";
 import { setDayNote } from "./cookbook/plan-notes";
 import { cardCoverUrl } from "./cookbook/covers";
@@ -103,10 +104,11 @@ function ShoppingCookbookView(props: ShoppingCookbookViewProps): React.JSX.Eleme
   return <ShoppingListView {...props} list={list} />;
 }
 
-function RecipeCookbookView({ path, recipeRef, onDelete }: {
+function RecipeCookbookView({ path, recipeRef, onDelete, onSave }: {
   path: string;
   recipeRef: React.RefObject<RecipeViewHandle | null>;
   onDelete: () => Promise<void>;
+  onSave: (base: string, draft: string) => ReturnType<typeof saveRecipe>;
 }): React.JSX.Element {
   const content = useCookbookText(path) ?? FAILED_LOAD_MESSAGE;
   const { resolveImage } = useCookbookImages();
@@ -117,18 +119,19 @@ function RecipeCookbookView({ path, recipeRef, onDelete }: {
     title={basename(path)}
     content={content}
     mode="full"
-    onSave={(base, next) => saveRecipe(path, base, next)}
+    onSave={onSave}
     onDelete={onDelete}
     resolveImage={resolveImage}
   />;
 }
 
-function PreviewCookbookView({ file, width, recipeRef, onClose, onWidth }: {
+function PreviewCookbookView({ file, width, recipeRef, onClose, onWidth, onSave }: {
   file: CookbookFile;
   width: number;
   recipeRef: React.RefObject<RecipeViewHandle | null>;
   onClose: () => void;
   onWidth: (width: number) => void;
+  onSave: (base: string, draft: string) => ReturnType<typeof saveRecipe>;
 }): React.JSX.Element {
   const content = useCookbookText(file.path) ?? FAILED_LOAD_MESSAGE;
   const { resolveImage } = useCookbookImages();
@@ -139,7 +142,7 @@ function PreviewCookbookView({ file, width, recipeRef, onClose, onWidth }: {
     recipeRef={recipeRef}
     onClose={onClose}
     onWidth={onWidth}
-    onSave={(base, next) => saveRecipe(file.path, base, next)}
+    onSave={onSave}
     resolveImage={resolveImage}
   />;
 }
@@ -196,6 +199,7 @@ function App(): React.JSX.Element | null {
 
   const [initialView, initialSettingsOpen, initialRecipeFallback] = React.useRef(initialRouteState(initialViewForPathname(window.location.pathname))).current;
   const [activeView, setActiveViewState] = React.useState<ViewId>(initialView);
+  const [weekOffset, setWeekOffset] = React.useState(0);
   const activeViewRef = React.useRef(activeView); activeViewRef.current = activeView;
   const [settingsOpen, setSettingsOpen] = React.useState(initialSettingsOpen);
   const [history, setHistory] = React.useState<ViewId[]>([activeView]);
@@ -319,11 +323,14 @@ function App(): React.JSX.Element | null {
     setShoppingBusy(true); setShoppingError(null);
     return work().catch((error) => { setShoppingError(formatError(error)); throw error; }).finally(() => setShoppingBusy(false));
   }, []);
-  const handleSendShopping = React.useCallback((recipePaths: string[]) => {
-    void shoppingWork(() => applyShoppingPlan(recipePaths))
-      .catch(() => undefined)
-      .then(() => { void setActiveView("shopping"); });
-  }, [setActiveView, shoppingWork]);
+  const shoppingWeek = React.useCallback((offset = weekOffset): ShoppingWeek => {
+    const start = addCalendarDays(startOfIsoWeek(), offset * 7);
+    return { start: formatIsoDate(start), end: formatIsoDate(addCalendarDays(start, 6)) };
+  }, [weekOffset]);
+  const selectShoppingWeek = React.useCallback((offset: number) => {
+    setWeekOffset(offset);
+    void shoppingWork(() => rebuildShoppingForWeek(shoppingWeek(offset))).catch(() => undefined);
+  }, [shoppingWeek, shoppingWork]);
   const handleCheckShopping = React.useCallback((ids: string[], checked: boolean) => {
     const items = getCookbookSnapshot().shopping.items.filter((item) => ids.includes(item.id));
     void shoppingWork(() => toggleShopping(items, checked)).catch(() => undefined);
@@ -334,14 +341,19 @@ function App(): React.JSX.Element | null {
   }, [shoppingWork]);
   const handleCopyShopping = React.useCallback(() => { void copyShoppingList().then(() => notify("Shopping list copied."), () => notify("Could not copy the shopping list.")); }, []);
 
-  const updatePlanning = React.useCallback(async (path: string, update: (value: RecipePlanning) => RecipePlanning) => {
+  const updatePlanning = React.useCallback(async (path: string, update: (value: RecipePlanning) => RecipePlanning, selectedWeek?: ShoppingWeek) => {
     const recipe = getCookbookSnapshot().recipes.find((candidate) => candidate.path === path);
     if (!recipe) throw new Error(`Recipe not found: ${path}`);
-    await updatePlanRecipe(recipe, update);
+    await updatePlanRecipe(recipe, update, selectedWeek);
   }, []);
   const toggleMarked = React.useCallback((path: string, marked: boolean) => updatePlanning(path, (value) => ({ ...value, marked })), [updatePlanning]);
   const [activeFile, setActiveFile] = React.useState<CookbookFile | null>(null);
   const [previewFile, setPreviewFile] = React.useState<CookbookFile | null>(null);
+  // Stable save callbacks: RecipeView's autosave effect keys on onSave identity.
+  const activeFilePath = activeFile?.path ?? null;
+  const previewFilePath = previewFile?.path ?? null;
+  const saveActiveRecipe = React.useCallback((base: string, draft: string) => saveRecipe(activeFilePath ?? "", base, draft), [activeFilePath, shoppingWeek]);
+  const savePreviewRecipe = React.useCallback((base: string, draft: string) => saveRecipe(previewFilePath ?? "", base, draft, shoppingWeek()), [previewFilePath, shoppingWeek]);
   const [previewWidth, setPreviewWidth] = React.useState(420);
   const closePreview = React.useCallback(async () => {
     if (!await flushRecipeSave(previewRecipeRef)) return false;
@@ -417,16 +429,16 @@ function App(): React.JSX.Element | null {
         return connection ? downloadCookbook(connection) : false;
         })} /> : null}
       <h1 className="mep-sr-only">Enplace</h1>
-      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={(path, { split }) => { void openRecipe(path, split); }} onSendShoppingList={handleSendShopping} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
+      {activeView === "planner" || plannerCapability.status === "error" ? <PlannerCookbookView active={activeView === "planner"} capability={plannerCapability} onRetry={retryPlanner} updatePlanning={updatePlanning} notify={notify} onOpenFile={(path, { split }) => { void openRecipe(path, split); }} weekOffset={weekOffset} onWeekOffset={selectShoppingWeek} onSaveDayNote={setDayNote} onUnmarkRecipe={(path) => toggleMarked(path, false)} plannerOrderStore={runtime.plannerOrderStore} /> : null}
       {databaseSeen.current ? <div className="mep-view" hidden={activeView !== "database"}><DatabaseCookbookView settings={settings} onOpenRecipe={openRecipe} onPointerDownRecipe={prepareRecipe} onToggleMarked={toggleMarked} onClearMarked={() => clearMarkedRecipes().catch(() => notify("Failed to clear all marked items. The view will resync."))} onPreferencesChange={updateSettings} /></div> : null}
-      {activeView === "shopping" ? <ShoppingCookbookView busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopy={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
+      {activeView === "shopping" ? <ShoppingCookbookView weekStart={shoppingWeek().start} busy={shoppingBusy} error={shoppingError} onCheck={handleCheckShopping} onAdd={(content) => shoppingWork(() => addShoppingItem(content)).then(() => undefined)} onRemove={handleRemoveShopping} onCopy={handleCopyShopping} onReset={() => { void shoppingWork(resetShoppingList).catch(() => undefined); }} onAisle={(id, aisle) => {
         const text = getCookbookSnapshot().shopping.items.find((item) => item.id === id)?.content;
         if (text) void shoppingWork(() => updateShoppingAisle(text, aisle)).catch(() => undefined);
       }} /> : null}
-      {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
+      {activeView === "recipe" && activeFile ? <RecipeCookbookView path={activeFile.path} recipeRef={activeRecipeRef} onSave={saveActiveRecipe} onDelete={async () => { const path = activeFile.path; if (!await setActiveView("database")) return; await deleteRecipe(path); setActiveFile(null); }} /> : null}
       {settingsOpen ? <SettingsDialog routePath={pathnameForView(activeView)} onClose={closeSettings} /> : null}
     </main>
-    {previewFile ? <PreviewCookbookView file={previewFile} width={previewWidth} recipeRef={previewRecipeRef} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
+    {previewFile ? <PreviewCookbookView file={previewFile} width={previewWidth} recipeRef={previewRecipeRef} onSave={savePreviewRecipe} onClose={() => { void closePreview(); }} onWidth={setPreviewWidth} /> : null}
     <Notices notices={notices} />
     {commandOpen ? <CommandPalette commands={filteredCommands} query={commandQuery} onQuery={setCommandQuery} onClose={() => setCommandOpen(false)} /> : null}
     {helpOpen ? <HelpDialog onClose={() => setHelpOpen(false)} /> : null}

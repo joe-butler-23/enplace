@@ -277,6 +277,9 @@ export const RecipeView = React.forwardRef<RecipeViewHandle, RecipeViewProps>(fu
       }
       return;
     }
+    // The echo of our own completed save: nothing changed, so keep "saved" rather than
+    // resetting to clean, whichever order the store notification and the save promise land in.
+    if (content === lastSavedDraftRef.current) return;
     setDraft(content);
     draftRef.current = content;
     // Ticks are keyed by index: only reset when the incoming content genuinely adds, removes,

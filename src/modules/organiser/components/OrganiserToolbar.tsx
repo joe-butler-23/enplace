@@ -6,15 +6,14 @@ import { addCalendarDays, calendarWeekOffset, formatPlannerDate, startOfIsoWeek 
 type OrganiserToolbarProps = {
   weekOffset: number;
   onWeekOffset: (offset: number) => void;
-  onSendShoppingList: () => void;
 };
 
 const Icon = ({ size = 14, children }: { size?: number; children: React.ReactNode }): React.JSX.Element => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 );
 
-/** One row: which week the board is showing, and the one action that acts on that week. */
-export function OrganiserToolbar({ weekOffset, onWeekOffset, onSendShoppingList }: OrganiserToolbarProps): React.JSX.Element {
+/** One row showing the planner week. */
+export function OrganiserToolbar({ weekOffset, onWeekOffset }: OrganiserToolbarProps): React.JSX.Element {
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const popoverRef = React.useRef<HTMLDivElement>(null);
   const startDate = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
@@ -49,9 +48,6 @@ export function OrganiserToolbar({ weekOffset, onWeekOffset, onSendShoppingList 
         </button>
         <span className="week-range">{`${formatPlannerDate(startDate, false, false)} – ${formatPlannerDate(endDate, false, true)}`}</span>
       </div>
-      <button type="button" className="mep-icon-button" title="Build shopping list" aria-label="Build shopping list" onClick={onSendShoppingList}>
-        <Icon size={16}><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></Icon>
-      </button>
     </div>
   );
 }

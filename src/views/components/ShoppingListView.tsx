@@ -3,12 +3,14 @@ import { SegmentedControl } from "./SegmentedControl";
 import { AddButton } from "./AddButton";
 import { currentCookbookConnection, onCurrentCookbookConnection } from "../../cookbook/current";
 import { useDismiss } from "../../shared/use-dismiss";
+import { dateFromIso, formatPlannerDate } from "../../modules/organiser/utils/scheduled-dates";
 
 import { SHOPPING_AISLES, mergeShoppingItems, shoppingIngredient, type ShoppingItem, type ShoppingRow } from "../../core";
 
 export type ShoppingList = { items: ShoppingItem[] };
 type ShoppingListViewProps = {
   list: ShoppingList;
+  weekStart: string;
   busy: boolean;
   error: string | null;
   onCheck: (itemIds: string[], checked: boolean) => void;
@@ -143,7 +145,7 @@ function subscribeRelayState(listener: () => void): () => void {
 
 
 export function ShoppingListView({
-  list, busy, error, onCheck, onAdd, onRemove, onCopy, onReset, onAisle
+  list, weekStart, busy, error, onCheck, onAdd, onRemove, onCopy, onReset, onAisle
 }: ShoppingListViewProps): React.JSX.Element {
   const [grouping, setGrouping] = React.useState<ShoppingListGrouping>(savedGrouping);
   const [hideDone, setHideDone] = React.useState(false);
@@ -172,7 +174,7 @@ export function ShoppingListView({
 
   return <section className="shopping-list-view">
     <header className="shopping-list-view__header">
-      <h2>Shopping list</h2>
+      <div><h2>Shopping list</h2><p className="shopping-list-view__week">Week of {formatPlannerDate(dateFromIso(weekStart), false, false)}</p></div>
       {items.length > 0 ? <><SegmentedControl label="Group shopping list" options={GROUPINGS} value={grouping} onChange={chooseGrouping} />
       <button type="button" className={`shopping-icon-toggle ${hideDone ? "is-active" : ""}`} aria-pressed={hideDone} title={hideDone ? "Show done items" : "Hide done items"} aria-label={hideDone ? "Show done items" : "Hide done items"} onClick={() => setHideDone((value) => !value)}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" focusable="false"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -187,7 +189,7 @@ export function ShoppingListView({
     </header>
     {offline ? <p className="shopping-list-view__sync-status" role="status">Offline. Your ticks are saved on this phone.</p> : null}
     {error ? <div className="shopping-list-view__error" role="alert" aria-live="assertive"><span>{shoppingErrorText(error)}</span></div> : null}
-    {items.length === 0 ? <p className="shopping-list-view__empty">Your list is empty — add an item below.</p> : null}
+    {items.length === 0 ? <p className="shopping-list-view__empty">Plan meals for this week and their ingredients appear here, or add an item below.</p> : null}
     {items.length > 0 ? <div className="shopping-list-view__scroll">
       {groups.map((group) => <section key={group.label || "ungrouped"} className="shopping-group">{group.label ? <div className="shopping-group__label mep-label">{group.label}</div> : null}<ul className="shopping-items">{group.items.map((item) => <ShoppingItemRow key={item.id} item={item} busy={busy} onCheck={onCheck} onRemove={onRemove} onAisle={grouping === "section" ? onAisle : undefined} />)}</ul></section>)}
       {groups.length === 0 ? <p className="shopping-list-view__cleared">Everything is picked up.</p> : null}

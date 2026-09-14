@@ -1,4 +1,4 @@
-> Published snapshot of a private repository, refreshed at each release. Source commit `c759ec921e77`, 2026-09-14.
+> Published snapshot of a private repository, refreshed at each release. Source commit `ef106760280d`, 2026-09-14.
 
 <p align="center">
   <img src="docs/enplace-logo.png" alt="" width="260">
@@ -21,7 +21,7 @@ Enplace is a local-first meal-planning app for turning the recipes you already o
 1. Browse or filter your recipes.
 2. Mark what you want to cook this week.
 3. Drag each recipe onto a day in the planner.
-4. Build the shopping list and check items off as you shop.
+4. Tick items off as you shop.
 
 ## Your cookbook
 

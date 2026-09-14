@@ -1,5 +1,5 @@
 import {
-  appendShoppingItem, buildShoppingMarkdown, parsePlan, recipePlanning, removeShoppingItem,
+  appendShoppingItem, buildShoppingMarkdown, parsePlan, parseRecipe, recipePlanning, removeShoppingItem,
   resetShopping, setAisle, shoppingIngredient, serializePlan, shoppingPlainText, toggleShoppingItem, withRecipePlanning,
   type Recipe, type RecipePlanning,
 } from "../core";
@@ -7,11 +7,28 @@ import { readText, remove, updateText } from "../host-client/browser-storage";
 import { mergeText, type MergeResult } from "./merge";
 import { getCookbookSnapshot } from "./store";
 
-export async function updatePlanRecipe(recipe: Recipe, update: (value: RecipePlanning) => RecipePlanning): Promise<void> {
+export type ShoppingWeek = { start: string; end: string };
+
+function shoppingRecipePaths({ start, end }: ShoppingWeek): string[] {
+  const { plan, recipes } = getCookbookSnapshot();
+  return recipes.filter((recipe) => recipePlanning(plan, recipe.link).scheduledDates
+    .some((date) => date >= start && date <= end)).map((recipe) => recipe.path);
+}
+
+export async function rebuildShoppingForWeek(week: ShoppingWeek): Promise<void> {
+  await applyShoppingPlan(shoppingRecipePaths(week));
+}
+
+export async function updatePlanRecipe(
+  recipe: Recipe,
+  update: (value: RecipePlanning) => RecipePlanning,
+  shoppingWeek?: ShoppingWeek,
+): Promise<void> {
   await updateText("Plan.md", (text) => {
     const plan = parsePlan(text);
     return serializePlan(withRecipePlanning(plan, recipe.link, update(recipePlanning(plan, recipe.link))));
   });
+  if (shoppingWeek) await rebuildShoppingForWeek(shoppingWeek);
 }
 export async function clearMarkedRecipes(): Promise<void> {
   await updateText("Plan.md", (text) => serializePlan({ ...parsePlan(text), marked: [] }));
@@ -49,13 +66,17 @@ export async function toggleShopping(items: readonly { id: string; content: stri
 export async function copyShoppingList(): Promise<void> {
   await navigator.clipboard.writeText(shoppingPlainText(await readText("Shopping.md")));
 }
-export async function saveRecipe(path: string, base: string, draft: string): Promise<MergeResult> {
+export async function saveRecipe(path: string, base: string, draft: string, shoppingWeek?: ShoppingWeek): Promise<MergeResult> {
   let merged: MergeResult | null = null;
+  let ingredientsChanged = false;
   await updateText(path, (current) => {
+    const before = parseRecipe(path, current)?.ingredients ?? [];
     merged = mergeText(base, draft, current);
+    ingredientsChanged = before.join("\0") !== (parseRecipe(path, merged.text)?.ingredients ?? []).join("\0");
     return merged.text;
   });
   if (!merged) throw new Error("Recipe update did not run.");
+  if (ingredientsChanged && shoppingWeek && shoppingRecipePaths(shoppingWeek).includes(path)) await rebuildShoppingForWeek(shoppingWeek);
   return merged;
 }
 export const deleteRecipe = (path: string): Promise<void> => remove(path);

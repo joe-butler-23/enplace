@@ -23,7 +23,8 @@ test('preparation-heavy planned recipes produce clean purchase rows without extr
   await expect(page.locator('.mep-notices')).toContainText('3 recipes recognised.');
   await page.getByTitle('Close settings').click();
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
-  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Shopping List', exact: true }).click();
   await grouping(page, 'Aisle').click();
   const names = ['2 green or red peppers', '130 ml olive oil', '≈8 g salt', '10 g fresh dill leaves', '12 g granulated sugar', '250 g plain flour', '150 g frozen spinach', '25 g spinach'];
   await expect(page.getByRole('checkbox')).toHaveCount(names.length);
@@ -65,7 +66,8 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
   await expect(page.locator('.mep-notices')).toContainText('Imported 4 files; skipped 0 existing files. 2 recipes recognised.');
   await page.getByTitle('Close settings').click();
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
-  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Shopping List', exact: true }).click();
   await expect(page.getByRole('checkbox')).toHaveCount(4);
   await page.getByText('1 aubergine, diced', { exact: true }).click();
   await grouping(page, 'Aisle').click();
@@ -108,7 +110,8 @@ test('merged shopping rows retain raw recipe blocks and synced aisle memory thro
     await expect(second.getByRole('checkbox')).toHaveCount(0);
     expect(await exportedCookbookText(page, 'Aisles.md')).toBe(aisles);
     await page.getByRole('button', { name: 'Planner', exact: true }).click();
-    await page.getByRole('button', { name: 'Build shopping list' }).click();
+    await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Shopping List', exact: true }).click();
     await grouping(page, 'Aisle').click();
     await expect(page.getByLabel('Aisle for 2 aubergine', { exact: true })).toHaveValue('Other');
     await page.reload();
@@ -158,7 +161,8 @@ test('independent recipe corpus keeps expected purchase counts and aisles throug
   await expect(page.locator('.mep-notices')).toContainText('8 recipes recognised.');
   await page.getByTitle('Close settings').click();
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
-  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Shopping List', exact: true }).click();
   const included = corpus.flatMap(recipe => recipe.ingredients).filter(x => x.include);
   await expect(page.getByRole('checkbox')).toHaveCount(included.length);
   await grouping(page, 'Aisle').click();

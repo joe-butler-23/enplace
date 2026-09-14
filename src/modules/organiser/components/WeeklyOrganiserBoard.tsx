@@ -1,11 +1,10 @@
 import * as React from "react";
 import type { Plan, Recipe, RecipePlanning } from "@/core";
 import { createWeeklyOrganiserConfig } from "../boards/weeklyOrganiserConfig";
-import { buildBoardEntries, type BoardEntry } from "../kanban/buildBoardsData";
+import { type BoardEntry } from "../kanban/buildBoardsData";
 import type { OrganiserItem } from "../types";
 import { resolveFilePathFromItemId } from "../utils/item-id";
 import type { PlannerOrderStore } from "../utils/planner-order";
-import { selectWeeklyShoppingRecipePaths } from "../utils/weekly-shopping-selection";
 import { OrganiserToolbar } from "./OrganiserToolbar";
 import { addCalendarDays, formatIsoDate, startOfIsoWeek } from "../utils/scheduled-dates";
 import {
@@ -21,11 +20,12 @@ import {
 interface WeeklyOrganiserBoardProps {
   recipes: readonly Recipe[];
   plan: Plan;
-  updatePlanning: (path: string, update: (planning: RecipePlanning) => RecipePlanning) => Promise<void>;
+  updatePlanning: (path: string, update: (planning: RecipePlanning) => RecipePlanning, shoppingWeek?: { start: string; end: string }) => Promise<void>;
   notify: (message: string) => void;
   resolveCover: (coverPath: string | null, sourcePath: string) => string | null;
   dayNotes?: Record<string, string>;
-  onSendShoppingList: (recipePaths: string[]) => void;
+  weekOffset: number;
+  onWeekOffset: (offset: number) => void;
   onSaveDayNote: (date: string, note: string) => void;
   onOpenFile: (filePath: string, options: { split: boolean }) => void;
   onUnmarkRecipe: (path: string) => Promise<void>;
@@ -40,17 +40,21 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   notify,
   resolveCover,
   dayNotes,
-  onSendShoppingList,
+  weekOffset,
+  onWeekOffset,
   onSaveDayNote,
   onOpenFile,
   onUnmarkRecipe,
   plannerOrderStore,
 }: WeeklyOrganiserBoardProps): React.JSX.Element {
-  const [weekOffset, setWeekOffset] = React.useState(0);
   const config = React.useMemo(
     () => createWeeklyOrganiserConfig(weekOffset, dayNotes),
     [weekOffset, dayNotes],
   );
+  const shoppingWeek = React.useMemo(() => {
+    const start = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
+    return { start: formatIsoDate(start), end: formatIsoDate(addCalendarDays(start, 6)) };
+  }, [weekOffset]);
   const resolveKanbanImageSrc = React.useCallback(
     (item: OrganiserItem) => resolveCover(item.coverImage ?? null, item.path) ?? "",
     [resolveCover],
@@ -64,7 +68,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
   const planner = usePlannerInteractions({
     recipes,
     config,
-    updatePlanning,
+    updatePlanning: (path, update) => updatePlanning(path, update, shoppingWeek),
     notify,
     onOpenFile,
     onUnmarkRecipe,
@@ -78,14 +82,6 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
     const newNote = window.prompt("Enter note for this day:", currentNote);
     if (newNote !== null && newNote !== currentNote) onSaveDayNote(date, newNote.trim());
   }, [dayNotes, onSaveDayNote]);
-
-  const handleSendShoppingList = React.useCallback(() => {
-    const { entriesByFile } = buildBoardEntries(recipes, plan, config);
-    const start = addCalendarDays(startOfIsoWeek(), weekOffset * 7);
-    onSendShoppingList(selectWeeklyShoppingRecipePaths(
-      entriesByFile.values(), formatIsoDate(start), formatIsoDate(addCalendarDays(start, 6)),
-    ));
-  }, [config, onSendShoppingList, plan, recipes, weekOffset]);
 
   // ArrowLeft/ArrowRight on a focused card moves it to the neighbouring column.
   const handleKanbanKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -104,7 +100,7 @@ export const WeeklyOrganiserBoard = React.memo(function WeeklyOrganiserBoard({
 
   return (
     <div className="weekly-organiser-container">
-      <OrganiserToolbar weekOffset={weekOffset} onWeekOffset={setWeekOffset} onSendShoppingList={handleSendShoppingList} />
+      <OrganiserToolbar weekOffset={weekOffset} onWeekOffset={onWeekOffset} />
       <div
         className="weekly-organiser-kanban"
         role="region"

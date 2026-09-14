@@ -11,6 +11,7 @@ const list: ShoppingList = { items: [
 
 const props = {
   list,
+  weekStart: "2026-09-14",
   busy: false,
   error: null,
   onCheck: vi.fn(),
@@ -31,6 +32,7 @@ describe("ShoppingListView Markdown presentation", () => {
   it("renders recipe groups with Markdown add/remove controls and a closed actions menu", () => {
     const html = renderToStaticMarkup(<ShoppingListView {...props} />);
     expect(html).toContain("Shopping list");
+    expect(html).toContain("Week of Sep 14th");
     expect(html).toContain("Soup");
     expect(html).toContain("Bread");
     expect(html).toContain('aria-label="More actions"');

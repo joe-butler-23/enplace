@@ -80,7 +80,7 @@ test('shopping grouping, aisle assignment and reset survive reload and reach ano
     await expect(page.getByRole('checkbox')).toHaveCount(0);
     await expect(second.getByRole('checkbox')).toHaveCount(0);
     await page.reload();
-    await expect(page.getByText('Your list is empty — add an item below.')).toBeVisible();
+    await expect(page.getByText('Plan meals for this week and their ingredients appear here, or add an item below.')).toBeVisible();
   } finally { await secondContext.close(); }
 });
 
@@ -114,7 +114,8 @@ test('shopping build keeps the same ingredient in each planned recipe block', as
   await expect(page.locator('.mep-notices')).toContainText('Imported 3 files');
   await page.getByTitle('Close settings').click();
   await page.getByRole('button', { name: 'Planner', exact: true }).click();
-  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Shopping List', exact: true }).click();
 
   const onions = page.getByRole('checkbox', { name: '1 onion', exact: true });
   await expect(onions).toHaveCount(2);
